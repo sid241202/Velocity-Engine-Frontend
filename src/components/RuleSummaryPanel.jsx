@@ -1,0 +1,416 @@
+import React from 'react';
+import { Send, PlayCircle, PauseCircle, Trash2, Shield, Clock, Filter, Layers, BarChart3, AlertTriangle, Zap } from 'lucide-react';
+
+export default function RuleSummaryPanel({ rule, fetchRules }) {
+
+  const publishRule = async (id) => {
+    try {
+      const res = await fetch(`/api/rules/${id}/prod`, { method: 'POST' });
+      if (res.ok) { alert('Published to Kafka (Move to Prod)!'); fetchRules(); }
+      else { alert('Failed to publish. Check backend logs.'); }
+    } catch (e) { console.error(e); alert('Network error.'); }
+  };
+
+  const updateStatus = async (id, status) => {
+    try {
+      const res = await fetch(`/api/rules/${id}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      if (res.ok) { alert(`Rule is now ${status}`); fetchRules(); }
+      else { alert('Failed to update status. Check backend logs.'); }
+    } catch (e) { console.error(e); alert('Network error.'); }
+  };
+
+  const deleteRule = async (id) => {
+    if (!window.confirm('Remove this rule from Flink and move it back to DRAFT?')) return;
+    try {
+      const res = await fetch(`/api/rules/${id}`, { method: 'DELETE' });
+      if (res.ok) { alert('Rule removed from Flink and moved back to DRAFT.'); fetchRules(); }
+      else { alert('Failed to delete. Check backend logs.'); }
+    } catch (e) { console.error(e); alert('Network error.'); }
+  };
+
+  if (!rule) {
+    return (
+      <div className="glass-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '400px', color: 'var(--text-muted)', fontSize: '1.1rem' }}>
+        <div style={{ textAlign: 'center' }}>
+          <Shield size={48} color="var(--text-muted)" style={{ marginBottom: '1rem', opacity: 0.5 }} />
+          <p>Select a rule from the sidebar to view its summary</p>
+        </div>
+      </div>
+    );
+  }
+
+  const meta = rule.rule_metadata || {};
+  const routing = rule.execution_routing || {};
+  const grouping = rule.grouping || {};
+  const windowing = rule.windowing || {};
+  const aggregations = rule.aggregations || [];
+  const thresholds = rule.having_thresholds || {};
+  const filters = rule.filters;
+
+  const statusColor = meta.status === 'ACTIVE' ? 'var(--success)' : meta.status === 'PAUSED' ? 'var(--warning)' : '#475569';
+
+  const formatMs = (ms) => {
+    if (!ms && ms !== 0) return 'N/A';
+    if (ms < 1000) return `${ms} ms`;
+    const totalSeconds = ms / 1000;
+    if (totalSeconds < 60) {
+      return Number.isInteger(totalSeconds) ? `${totalSeconds} seconds` : `${totalSeconds.toFixed(1)} seconds`;
+    }
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = Math.round(totalSeconds % 60);
+    if (minutes < 60) return seconds > 0 ? `${minutes} min ${seconds} sec` : `${minutes} minutes`;
+    const hours = Math.floor(minutes / 60);
+    const remainMinutes = minutes % 60;
+    return `${hours}h ${remainMinutes}m`;
+  };
+
+  const formatAlignment = (ms) => {
+    if (!ms && ms !== 0) return '00:00:00';
+    const totalSeconds = Math.floor(ms / 1000);
+    const hh = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+    const mm = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+    const ss = String(totalSeconds % 60).padStart(2, '0');
+    return `${hh}:${mm}:${ss}`;
+  };
+
+  const severityColorMap = {
+    CRITICAL: { bg: 'rgba(239,68,68,0.2)', color: '#fca5a5' },
+    HIGH: { bg: 'rgba(245,158,11,0.2)', color: '#fcd34d' },
+    MEDIUM: { bg: 'rgba(59,130,246,0.2)', color: '#93c5fd' },
+    LOW: { bg: 'rgba(16,185,129,0.2)', color: '#6ee7b7' }
+  };
+  const sevStyle = severityColorMap[meta.severity_level] || severityColorMap.MEDIUM;
+
+  const sectionStyle = {
+    marginBottom: '1.5rem',
+    paddingBottom: '1rem',
+    borderBottom: '1px solid var(--glass-border)'
+  };
+
+  const sectionHeaderStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    color: 'white',
+    fontSize: '1rem',
+    fontWeight: 600,
+    marginBottom: '0.75rem'
+  };
+
+  const readOnlyInputStyle = {
+    width: '100%',
+    padding: '0.5rem',
+    borderRadius: '6px',
+    border: '1px solid var(--glass-border)',
+    background: 'rgba(59,130,246,0.05)',
+    color: 'var(--text-main)',
+    fontFamily: "'Inter', sans-serif",
+    marginTop: '0.25rem',
+    cursor: 'default'
+  };
+
+  const readOnlyMonoInputStyle = {
+    ...readOnlyInputStyle,
+    fontFamily: 'monospace',
+    fontSize: '0.85rem'
+  };
+
+  const fieldRowStyle = {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '0.35rem 0',
+    fontSize: '0.9rem'
+  };
+
+  const fieldLabelStyle = { color: 'var(--text-muted)', fontSize: '0.85rem' };
+  const fieldValueStyle = { color: 'var(--text-main)', fontWeight: 500 };
+
+  const chipStyle = {
+    display: 'inline-block',
+    padding: '0.2rem 0.6rem',
+    borderRadius: '12px',
+    background: 'rgba(59, 130, 246, 0.2)',
+    border: '1px solid rgba(59, 130, 246, 0.3)',
+    color: '#93c5fd',
+    fontSize: '0.8rem',
+    marginRight: '0.4rem',
+    marginBottom: '0.3rem'
+  };
+
+  const renderFilterTree = (node, depth = 0) => {
+    if (!node) return null;
+    if (node.type === 'group') {
+      return (
+        <div style={{ borderLeft: '2px solid var(--primary)', marginLeft: depth > 0 ? '1rem' : '0', paddingLeft: '0.75rem', marginTop: '0.3rem', marginBottom: '0.3rem' }}>
+          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#93c5fd', textTransform: 'uppercase' }}>{node.logic || 'AND'}</span>
+          {node.conditions && node.conditions.map((child, i) => (
+            <div key={i}>{renderFilterTree(child, depth + 1)}</div>
+          ))}
+        </div>
+      );
+    }
+    return (
+      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '0.35rem 0.6rem', borderRadius: '4px', marginTop: '0.25rem', fontSize: '0.85rem' }}>
+        <span style={{ color: '#93c5fd', fontFamily: 'monospace' }}>{node.field}</span>
+        <span style={{ color: 'var(--warning)', fontWeight: 600 }}>{node.operator}</span>
+        <span style={{ color: 'var(--text-main)', fontFamily: 'monospace' }}>{Array.isArray(node.value) ? node.value.join(', ') : String(node.value ?? '')}</span>
+      </div>
+    );
+  };
+
+  const generateSummary = (rule) => {
+    const meta = rule.rule_metadata;
+    const grouping = rule.grouping;
+    const windowing = rule.windowing;
+    const aggs = rule.aggregations;
+    const having = rule.having_thresholds;
+    const filters = rule.filters;
+
+    const isGlobal = grouping.keys.length === 1 && grouping.keys[0] === '__GLOBAL__';
+    const groupDesc = isGlobal ? 'all events globally (no grouping)' : `events grouped by ${grouping.keys.map(k => k).join(' + ')}`;
+
+    const windowDesc = windowing.size_ms >= 315360000000
+      ? 'a continuous (never-resetting) counter'
+      : `a ${windowing.type} window of ${formatMs(windowing.size_ms)}${windowing.type === 'SLIDING' ? `, emitting every ${formatMs(windowing.slide_ms)}` : ''}`;
+
+    const timeDesc = windowing.time_type === 'EVENT_TIME'
+      ? (windowing.use_kafka_timestamp ? 'Kafka arrival timestamps' : `event timestamps from ${windowing.timestamp_field}`)
+      : 'processing time (wall clock)';
+
+    const aggDescs = aggs.map(a => {
+      const funcName = a.function === 'COUNT_DISTINCT' ? `distinct count (${a.cardinality_hint} cardinality)` : a.function.toLowerCase();
+      return `${funcName} of ${a.field} as "${a.alias}"`;
+    });
+
+    let filterDesc = '';
+    if (filters && filters.conditions && filters.conditions.length > 0) {
+      filterDesc = ' Only events passing the defined filters are included.';
+    }
+
+    const thresholdDesc = having?.expression
+      ? `An alert fires when: ${having.expression.replace(/&&/g, 'AND').replace(/\|\|/g, 'OR')}.`
+      : 'No alert threshold is defined (data-only rule).';
+
+    return `This rule monitors ${groupDesc} on the ${rule.execution_routing?.target_cluster || 'auth-cluster'} cluster. Using ${windowDesc} based on ${timeDesc}, it computes: ${aggDescs.join('; ')}.${filterDesc} ${thresholdDesc} Severity: ${meta.severity_level}. Alerts are suppressed for ${meta.penalty_ttl_seconds} seconds after each breach.`;
+  };
+
+  return (
+    <div className="glass-panel" style={{ maxHeight: 'calc(100vh - 100px)', overflowY: 'auto' }}>
+      {/* Top Section — Header */}
+      <div style={{ ...sectionStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h2 style={{ color: 'white', margin: 0, marginBottom: '0.75rem', fontSize: '1.4rem' }}>{meta.rule_name || 'Unnamed Rule'}</h2>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.8rem', padding: '0.25rem 0.6rem', borderRadius: '4px', background: statusColor, color: 'white', fontWeight: 600 }}>
+              {meta.status || 'UNKNOWN'}
+            </span>
+            <span style={{ fontSize: '0.8rem', padding: '0.25rem 0.6rem', borderRadius: '4px', background: sevStyle.bg, color: sevStyle.color, fontWeight: 600 }}>
+              {meta.severity_level}
+            </span>
+          </div>
+        </div>
+        <Shield size={28} color="var(--primary)" />
+      </div>
+
+      {/* Section 1 — Rule Configuration */}
+      <div style={sectionStyle}>
+        <div style={sectionHeaderStyle}>
+          <AlertTriangle size={16} color="var(--warning)" /> Metadata
+        </div>
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.75rem' }}>
+          <div style={{ flex: 1.5 }}>
+            <label style={fieldLabelStyle}>Rule ID</label>
+            <input style={readOnlyMonoInputStyle} value={meta.rule_id || ''} disabled />
+          </div>
+          <div style={{ flex: 2 }}>
+            <label style={fieldLabelStyle}>Rule Name</label>
+            <input style={readOnlyInputStyle} value={meta.rule_name || ''} disabled />
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <div style={{ flex: 1 }}>
+            <label style={fieldLabelStyle}>Severity</label>
+            <input style={{ ...readOnlyInputStyle, color: sevStyle.color }} value={meta.severity_level || ''} disabled />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={fieldLabelStyle}>Penalty TTL</label>
+            <input style={readOnlyInputStyle} value={meta.penalty_ttl_seconds ? `${meta.penalty_ttl_seconds} seconds` : 'N/A'} disabled />
+          </div>
+        </div>
+      </div>
+
+      {/* Routing */}
+      <div style={sectionStyle}>
+        <div style={sectionHeaderStyle}>
+          <Send size={16} color="var(--accent)" /> Routing
+        </div>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <div style={{ flex: 1 }}>
+            <label style={fieldLabelStyle}>Target Cluster</label>
+            <input style={readOnlyInputStyle} value={routing.target_cluster || routing.source_cluster || 'Default'} disabled />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={fieldLabelStyle}>Target Source Topic</label>
+            <input style={readOnlyMonoInputStyle} value={routing.target_source_topic || routing.source_topic || 'Default'} disabled />
+          </div>
+        </div>
+      </div>
+
+      {/* Grouping */}
+      <div style={sectionStyle}>
+        <div style={sectionHeaderStyle}>
+          <Layers size={16} color="var(--success)" /> Grouping Keys
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+          {grouping.keys && grouping.keys.length > 0 ? grouping.keys.map((k, i) => (
+            <span key={i} style={chipStyle}>{k}</span>
+          )) : (
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>No grouping keys</p>
+          )}
+        </div>
+      </div>
+
+      {/* Windowing */}
+      <div style={sectionStyle}>
+        <div style={sectionHeaderStyle}>
+          <Clock size={16} color="var(--warning)" /> Windowing
+        </div>
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: '120px' }}>
+            <label style={fieldLabelStyle}>Type</label>
+            <input style={readOnlyInputStyle} value={windowing.type || 'N/A'} disabled />
+          </div>
+          <div style={{ flex: 1, minWidth: '120px' }}>
+            <label style={fieldLabelStyle}>Size</label>
+            <input style={readOnlyInputStyle} value={formatMs(windowing.size_ms)} disabled />
+          </div>
+          <div style={{ flex: 1, minWidth: '120px' }}>
+            <label style={fieldLabelStyle}>Slide</label>
+            <input style={readOnlyInputStyle} value={formatMs(windowing.slide_ms)} disabled />
+          </div>
+          <div style={{ flex: 1, minWidth: '120px' }}>
+            <label style={fieldLabelStyle}>Lateness</label>
+            <input style={readOnlyInputStyle} value={formatMs(windowing.allowed_lateness_ms)} disabled />
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: '140px' }}>
+            <label style={fieldLabelStyle}>Time Type</label>
+            <input style={readOnlyInputStyle} value={windowing.time_type || 'N/A'} disabled />
+          </div>
+          <div style={{ flex: 1, minWidth: '140px' }}>
+            <label style={fieldLabelStyle}>Timestamp Field</label>
+            <input style={readOnlyMonoInputStyle} value={windowing.timestamp_field || 'N/A'} disabled />
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: '140px' }}>
+            <label style={fieldLabelStyle}>Use Kafka Timestamp</label>
+            <input style={readOnlyInputStyle} value={windowing.use_kafka_timestamp ? 'Yes' : 'No'} disabled />
+          </div>
+          <div style={{ flex: 1, minWidth: '140px' }}>
+            <label style={fieldLabelStyle}>Alignment (IST)</label>
+            <input style={{ ...readOnlyMonoInputStyle }} value={formatAlignment(windowing.alignment_offset_ms)} disabled />
+          </div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div style={sectionStyle}>
+        <div style={sectionHeaderStyle}>
+          <Filter size={16} color="var(--primary)" /> Filters
+        </div>
+        {filters && (filters.type === 'group' ? (
+          renderFilterTree(filters)
+        ) : Array.isArray(filters) && filters.length > 0 ? (
+          filters.map((f, i) => (
+            <div key={i}>{renderFilterTree(f)}</div>
+          ))
+        ) : (
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>No filters applied</p>
+        ))}
+        {!filters && <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>No filters applied</p>}
+      </div>
+
+      {/* Aggregations */}
+      <div style={sectionStyle}>
+        <div style={sectionHeaderStyle}>
+          <BarChart3 size={16} color="var(--accent)" /> Aggregations
+        </div>
+        {aggregations.length > 0 ? (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                  <th style={{ textAlign: 'left', padding: '0.4rem 0.5rem', color: 'var(--text-muted)', fontWeight: 500 }}>Alias</th>
+                  <th style={{ textAlign: 'left', padding: '0.4rem 0.5rem', color: 'var(--text-muted)', fontWeight: 500 }}>Field</th>
+                  <th style={{ textAlign: 'left', padding: '0.4rem 0.5rem', color: 'var(--text-muted)', fontWeight: 500 }}>Function</th>
+                  <th style={{ textAlign: 'left', padding: '0.4rem 0.5rem', color: 'var(--text-muted)', fontWeight: 500 }}>Cardinality</th>
+                </tr>
+              </thead>
+              <tbody>
+                {aggregations.map((a, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                    <td style={{ padding: '0.4rem 0.5rem', fontFamily: 'monospace', color: '#93c5fd' }}>{a.alias}</td>
+                    <td style={{ padding: '0.4rem 0.5rem', fontFamily: 'monospace' }}>{a.field}</td>
+                    <td style={{ padding: '0.4rem 0.5rem' }}>{a.function}</td>
+                    <td style={{ padding: '0.4rem 0.5rem' }}>{a.cardinality_hint || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>No aggregations defined</p>
+        )}
+      </div>
+
+      {/* Thresholds */}
+      <div style={sectionStyle}>
+        <div style={sectionHeaderStyle}>
+          <AlertTriangle size={16} color="var(--danger)" /> Thresholds
+        </div>
+        <div style={{ padding: '0.6rem', background: 'rgba(0,0,0,0.4)', borderRadius: '4px', fontFamily: 'monospace', color: '#a78bfa', fontSize: '0.85rem' }}>
+          {thresholds.expression || 'No threshold expression'}
+        </div>
+      </div>
+
+      {/* Section 2 — Plain English Summary */}
+      <div style={sectionStyle}>
+        <div style={sectionHeaderStyle}>
+          <Zap size={16} color="var(--success)" /> What This Rule Does
+        </div>
+        <div style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '8px', padding: '1rem', fontSize: '0.84rem', color: 'var(--text-main)', lineHeight: 1.7 }}>
+          {generateSummary(rule)}
+        </div>
+      </div>
+
+      {/* Section 3 — Actions */}
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', paddingTop: '0.5rem' }}>
+        {meta.status === 'DRAFT' && (
+          <button className="btn btn-accent" style={{ flex: 1, justifyContent: 'center', fontSize: '0.9rem' }} onClick={() => publishRule(meta.rule_id)}>
+            <Send size={16} /> Move to Prod
+          </button>
+        )}
+        {meta.status === 'ACTIVE' && (
+          <button className="btn" style={{ background: 'var(--warning)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }} onClick={() => updateStatus(meta.rule_id, 'PAUSED')}>
+            <PauseCircle size={16} /> Pause
+          </button>
+        )}
+        {meta.status === 'PAUSED' && (
+          <button className="btn" style={{ background: 'var(--success)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }} onClick={() => updateStatus(meta.rule_id, 'ACTIVE')}>
+            <PlayCircle size={16} /> Resume
+          </button>
+        )}
+        <button className="btn" style={{ background: 'var(--danger)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }} onClick={() => deleteRule(meta.rule_id)}>
+          <Trash2 size={16} /> Delete
+        </button>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: velocity-frontend-svc
+  namespace: velocity-namespace
+  labels:
+    app: velocity-engine
+    component: frontend
+spec:
+  type: ClusterIP
+  selector:
+    app: velocity-engine
+    component: frontend
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    protocol: TCP
