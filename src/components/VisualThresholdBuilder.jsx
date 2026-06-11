@@ -35,7 +35,9 @@ export default function VisualThresholdBuilder({ expression, setExpression, aggr
     const compileNode = (node) => {
       if (node.type === 'RULE') {
         if (!node.alias || !node.value) return '';
-        return `(${node.alias} ${node.operator} ${node.value})`;
+        const numVal = parseFloat(node.value);
+        if (isNaN(numVal)) return '';
+        return `(${node.alias} ${node.operator} ${numVal})`;
       }
       if (node.type === 'GROUP') {
         const childExprs = node.children.map(compileNode).filter(e => e !== '');

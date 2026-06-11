@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
-import { Activity, PlusSquare, History, Shield, BarChart3 } from 'lucide-react';
+import { Activity, PlusSquare, History, Shield, BarChart3, AlertTriangle, RefreshCw } from 'lucide-react';
 import RuleBuilderPage from './components/RuleBuilderPage';
 import SavedRulesSidebar from './components/SavedRulesSidebar';
 import RuleSummaryPanel from './components/RuleSummaryPanel';
@@ -13,21 +13,25 @@ function App() {
   const [rules, setRules] = useState([]);
   const [selectedRuleIds, setSelectedRuleIds] = useState(new Set());
   const [summaryRuleId, setSummaryRuleId] = useState(null);
-  const [fetchError, setFetchError] = useState(null);
+  const [backendStatus, setBackendStatus] = useState('connecting'); // 'connecting' | 'up' | 'down'
 
   const fetchRules = useCallback(async () => {
     try {
-      setFetchError(null);
       const res = await fetch('/api/rules');
-      if (res.ok) {
-        const data = await res.json();
-        setRules(data);
-      } else {
-        setFetchError('Failed to load rules from server.');
+      if (!res.ok) {
+        setBackendStatus('down');
+        return;
       }
-    } catch (e) {
-      console.error(e);
-      setFetchError('Network error loading rules.');
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        setBackendStatus('down');
+        return;
+      }
+      const data = await res.json();
+      setRules(data);
+      setBackendStatus('up');
+    } catch {
+      setBackendStatus('down');
     }
   }, []);
 
@@ -67,7 +71,7 @@ function App() {
       case 'summary':
         return (
           <RuleSummaryPanel
-            rule={rules.find(r => r.rule_metadata.rule_id === summaryRuleId)}
+            rule={rules.find(r => r.rule_metadata?.rule_id === summaryRuleId)}
             fetchRules={fetchRules}
           />
         );
@@ -89,33 +93,39 @@ function App() {
         <h1>Velocity Engine Control Plane</h1>
       </header>
 
-      {fetchError && (
+      {backendStatus === 'down' && (
         <div style={{
-          background: 'rgba(239,68,68,0.1)',
-          border: '1px solid rgba(239,68,68,0.3)',
+          background: 'rgba(245,158,11,0.1)',
+          border: '1px solid rgba(245,158,11,0.3)',
           borderRadius: '8px',
-          padding: '0.5rem 1rem',
+          padding: '0.6rem 1rem',
           margin: '0 1.5rem',
-          color: '#fca5a5',
-          fontSize: '0.8rem',
+          color: '#fcd34d',
+          fontSize: '0.85rem',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
         }}>
-          <span>{fetchError}</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <AlertTriangle size={16} />
+            Backend service is unavailable. The UI is in read-only mode. Actions requiring the backend will not work.
+          </span>
           <button
             onClick={fetchRules}
             style={{
-              background: 'rgba(239,68,68,0.2)',
-              border: '1px solid rgba(239,68,68,0.4)',
+              background: 'rgba(245,158,11,0.2)',
+              border: '1px solid rgba(245,158,11,0.4)',
               borderRadius: '4px',
-              color: '#fca5a5',
-              padding: '0.2rem 0.6rem',
+              color: '#fcd34d',
+              padding: '0.25rem 0.7rem',
               cursor: 'pointer',
               fontSize: '0.75rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.3rem',
             }}
           >
-            Retry
+            <RefreshCw size={12} /> Retry
           </button>
         </div>
       )}
