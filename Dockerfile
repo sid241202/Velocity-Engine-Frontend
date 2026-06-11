@@ -4,7 +4,6 @@ COPY package*.json ./
 RUN npm config set registry http://10.10.206.59:8080/repository/npm-proxy/
 RUN npm install -g @cyclonedx/cyclonedx-npm@1.15.0
 RUN npm install
-RUN npm install -g @cyclonedx/cyclonedx-npm@1.15.0
 COPY . .
 RUN cyclonedx-npm --spec-version 1.6 --ignore-npm-errors --output-file /app/SCA-bom.json
 RUN npm run build
