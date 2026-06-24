@@ -30,6 +30,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
   // Grouping
   const [keys, setKeys] = useState(['_data.aua']);
   const [isGlobal, setIsGlobal] = useState(false);
+  const [entityName, setEntityName] = useState('');
 
   // Timestamp Source
   const [useCustomTs, setUseCustomTs] = useState(false);
@@ -65,6 +66,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
     setAlignSecond(0);
     setKeys(['_data.aua']);
     setIsGlobal(false);
+    setEntityName('');
     setUseCustomTs(false);
     setCustomTsField('');
     setCustomTsFormat('EPOCH_MILLIS');
@@ -107,7 +109,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
       rule_metadata: { rule_id: ruleId, rule_name: name, status: "DRAFT", severity_level: severity, penalty_ttl_seconds: penaltyTtl },
       execution_routing,
       filters: processedFilters,
-      grouping: { keys: isGlobal ? ["__GLOBAL__"] : keys.filter(k => k.trim() !== '') },
+      grouping: { keys: isGlobal ? ["__GLOBAL__"] : keys.filter(k => k.trim() !== ''), entity_name: entityName.trim() || undefined },
       windowing: {
         type: windowType,
         time_type: timeType,
@@ -190,6 +192,17 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
               </div>
             ))}
             {!isGlobal && <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Separate Flink state by these fields. No comma separation needed, add keys dynamically.</p>}
+            <div style={{ marginTop: '0.75rem' }}>
+              <label style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '0.4rem' }}>Entity Display Name (optional)</label>
+              <input
+                value={entityName}
+                onChange={e => setEntityName(e.target.value)}
+                placeholder={isGlobal ? 'e.g. Global' : 'e.g. Reference ID, AUA Code, User ID'}
+                style={{ width: '100%' }}
+                onFocus={() => onFieldFocus?.('entity_name')}
+              />
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>A human-readable label for the grouping entity. Shown in analysis dashboards. If left empty, the field name is used.</p>
+            </div>
           </div>
 
           {/* Windowing */}

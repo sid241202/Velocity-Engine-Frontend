@@ -473,6 +473,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds }) {
       if (!groupMap[key]) {
         groupMap[key] = {
           groupKey: gk,
+          entityName: row.entityName || '',
           ruleId: row.ruleId,
           totalEvents: 0,
           breaches: 0,
@@ -815,7 +816,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds }) {
               <tr>
                 <th style={thStyle}>#</th>
                 <th style={thStyle} onClick={() => handleSort('groupKey')}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Group Key <ArrowUpDown size={12} /></span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Entity <ArrowUpDown size={12} /></span>
                 </th>
                 <th style={thStyle} onClick={() => handleSort('ruleId')}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Rule <ArrowUpDown size={12} /></span>
@@ -871,7 +872,10 @@ export default function LiveAnalysis({ rules, selectedRuleIds }) {
                             }}
                           />
                         )}
-                        {g.groupKey}
+                        <span>
+                          {g.entityName && g.entityName !== 'group' && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>{g.entityName}</span>}
+                          {g.groupKey}
+                        </span>
                       </span>
                     </td>
                     <td style={tdStyle}>{getRuleName(g.ruleId)}</td>
