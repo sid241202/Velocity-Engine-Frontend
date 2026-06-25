@@ -123,7 +123,7 @@ function ttlToSeconds(amount, unit) {
 export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
   // ── Core ───────────────────────────────────────────────────────
   const [ruleId, setRuleId]       = useState(crypto.randomUUID());
-  const [ruleName, setRuleName]   = useState('');
+
   const [severity, setSeverity]   = useState('HIGH');
 
   // TTL with unit picker
@@ -169,7 +169,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
 
   const resetForm = () => {
     setRuleId(crypto.randomUUID());
-    setRuleName('');
+
     setSeverity('HIGH');
     setTtlAmount(1); setTtlUnit('hr');
     setWindowType('SLIDING'); setTimeType('EVENT_TIME');
@@ -211,7 +211,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
     const payload = {
       rule_metadata: {
         rule_id:            ruleId,
-        rule_name:          ruleName.trim() || ruleId,
+
         status:             'DRAFT',
         severity_level:     severity,
         penalty_ttl_seconds: penaltyTtlSeconds,
@@ -294,14 +294,6 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
         {/* ── Section 1: Basics ───────────────────────────────── */}
         <Section icon={Zap} iconColor="var(--violet-light)" title="Identification">
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-            <div>
-              <FieldLabel label="Rule Name" tip="A human-readable name shown in dashboards and alerts." required />
-              <input
-                value={ruleName}
-                onChange={e => setRuleName(e.target.value)}
-                placeholder="e.g. OTP Bypass Ring Detector"
-              />
-            </div>
             <div>
               <FieldLabel label="Alert Severity" tip="Priority level assigned when this rule fires an alert." required />
               <select value={severity} onChange={e => setSeverity(e.target.value)}>
