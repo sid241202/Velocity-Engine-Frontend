@@ -196,7 +196,7 @@ export default function RuleSummaryPanel({ rule, fetchRules }) {
       ? `An alert fires when: ${having.expression.replace(/&&/g, 'AND').replace(/\|\|/g, 'OR')}.`
       : 'No alert threshold is defined (data-only rule).';
 
-    return `This rule monitors ${groupDesc} on the ${rule.execution_routing?.target_cluster || 'auth-cluster'} cluster. Using ${windowDesc} based on ${timeDesc}, it computes: ${aggDescs.join('; ')}.${filterDesc} ${thresholdDesc} Severity: ${meta.severity_level}. Alerts are suppressed for ${meta.penalty_ttl_seconds} seconds after each breach.`;
+    return `This rule monitors ${groupDesc}. Using ${windowDesc} based on ${timeDesc}, it computes: ${aggDescs.join('; ')}.${filterDesc} ${thresholdDesc} Severity: ${meta.severity_level}. Alerts are suppressed for ${meta.penalty_ttl_seconds} seconds after each breach.`;
   };
 
   return (
@@ -247,15 +247,11 @@ export default function RuleSummaryPanel({ rule, fetchRules }) {
       {/* Routing */}
       <div style={sectionStyle}>
         <div style={sectionHeaderStyle}>
-          <Send size={16} color="var(--accent)" /> Routing
+          <Send size={16} color="var(--accent)" /> Event Source
         </div>
         <div style={{ display: 'flex', gap: '1rem' }}>
           <div style={{ flex: 1 }}>
-            <label style={fieldLabelStyle}>Target Cluster</label>
-            <input style={readOnlyInputStyle} value={routing.target_cluster || routing.source_cluster || 'Default'} disabled />
-          </div>
-          <div style={{ flex: 1 }}>
-            <label style={fieldLabelStyle}>Target Source Topic</label>
+            <label style={fieldLabelStyle}>Source Topic</label>
             <input style={readOnlyMonoInputStyle} value={routing.target_source_topic || routing.source_topic || 'Default'} disabled />
           </div>
         </div>
