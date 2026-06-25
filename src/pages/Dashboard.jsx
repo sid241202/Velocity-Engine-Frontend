@@ -1,51 +1,41 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './Dashboard.css';
-import { Activity, PlusSquare, History, Shield, BarChart3, AlertTriangle, RefreshCw } from 'lucide-react';
-import RuleBuilderPage from '../components/RuleBuilderPage'
+import { Zap, History, PlusSquare, Activity, BarChart3, Shield, AlertTriangle, RefreshCw } from 'lucide-react';
+import RuleBuilderPage from '../components/RuleBuilderPage';
 import SavedRulesSidebar from '../components/SavedRulesSidebar';
 import RuleSummaryPanel from '../components/RuleSummaryPanel';
 import LiveAnalysis from '../components/LiveAnalysis';
 import AggregatedAnalysis from '../components/AggregatedAnalysis';
 import HistoricalAnalysis from '../components/HistoricalAnalysis';
-function Dashboard() {
+import { API_BASE } from '../config/appConfig';
+
+export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('live');
   const [rules, setRules] = useState([]);
   const [selectedRuleIds, setSelectedRuleIds] = useState(new Set());
   const [summaryRuleId, setSummaryRuleId] = useState(null);
-  const [backendStatus, setBackendStatus] = useState('connecting'); // 'connecting' | 'up' | 'down'
+  const [backendStatus, setBackendStatus] = useState('connecting');
 
   const fetchRules = useCallback(async () => {
     try {
-      const res = await fetch('/api/rules');
-      if (!res.ok) {
-        setBackendStatus('down');
-        return;
-      }
-      const contentType = res.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        setBackendStatus('down');
-        return;
-      }
+      const res = await fetch(`${API_BASE}/rules`);
+      if (!res.ok) { setBackendStatus('down'); return; }
+      const ct = res.headers.get('content-type');
+      if (!ct || !ct.includes('application/json')) { setBackendStatus('down'); return; }
       const data = await res.json();
-      setRules(data);
+      setRules(Array.isArray(data) ? data : []);
       setBackendStatus('up');
     } catch {
       setBackendStatus('down');
     }
   }, []);
 
-  useEffect(() => {
-    fetchRules();
-  }, [fetchRules]);
+  useEffect(() => { fetchRules(); }, [fetchRules]);
 
   const toggleRuleSelection = (ruleId) => {
     setSelectedRuleIds(prev => {
       const next = new Set(prev);
-      if (next.has(ruleId)) {
-        next.delete(ruleId);
-      } else {
-        next.add(ruleId);
-      }
+      if (next.has(ruleId)) next.delete(ruleId); else next.add(ruleId);
       return next;
     });
   };
@@ -56,95 +46,87 @@ function Dashboard() {
   };
 
   const navItems = [
-    { key: 'historical', label: 'Historical Analysis', icon: History },
-    { key: 'build', label: 'Rule Builder', icon: PlusSquare },
-    { key: 'live', label: 'Live Analysis', icon: Activity },
-    { key: 'agg', label: 'Aggregated Analysis', icon: BarChart3 },
-    { key: 'summary', label: 'Rule Summary', icon: Shield },
+    { key: 'live',       label: 'Live Monitor',      icon: Activity },
+    { key: 'agg',        label: 'Aggregated',        icon: BarChart3 },
+    { key: 'historical', label: 'Historical',        icon: History },
+    { key: 'build',      label: 'New Rule',          icon: PlusSquare },
+    { key: 'summary',    label: 'Rule Details',      icon: Shield },
   ];
 
   const renderPage = () => {
     switch (activeTab) {
-      case 'live':
-        return <LiveAnalysis rules={rules} selectedRuleIds={selectedRuleIds} />;
-      case 'summary':
-        return (
-          <RuleSummaryPanel
-            rule={rules.find(r => r.rule_metadata?.rule_id === summaryRuleId)}
-            fetchRules={fetchRules}
-          />
-        );
-      case 'build':
-        return <RuleBuilderPage rules={rules} fetchRules={fetchRules} />;
-      case 'agg':
-        return <AggregatedAnalysis rules={rules} selectedRuleIds={selectedRuleIds} />;
-      case 'historical':
-        return <HistoricalAnalysis rules={rules} selectedRuleIds={selectedRuleIds} />;
-      default:
-        return null;
+      case 'live':       return <LiveAnalysis rules={rules} selectedRuleIds={selectedRuleIds} />;
+      case 'agg':        return <AggregatedAnalysis rules={rules} selectedRuleIds={selectedRuleIds} />;
+      case 'historical': return <HistoricalAnalysis rules={rules} selectedRuleIds={selectedRuleIds} />;
+      case 'build':      return <RuleBuilderPage rules={rules} fetchRules={fetchRules} />;
+      case 'summary':    return (
+        <RuleSummaryPanel
+          rule={rules.find(r => r.rule_metadata?.rule_id === summaryRuleId)}
+          fetchRules={fetchRules}
+        />
+      );
+      default: return null;
     }
   };
 
   return (
     <div className="app-container">
+      {/* Header */}
       <header className="header">
-        <Activity size={32} color="#60a5fa" />
-        <h1>Velocity Engine Control Plane</h1>
+        <div className="header-logo">
+          <Zap size={15} color="#fff" strokeWidth={2.5} />
+        </div>
+        <h1>Velocity Engine</h1>
+        <div className="header-right">
+          <span style={{ fontSize: '0.68rem', color: 'var(--text-3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>UIDAI Auth Analytics</span>
+          <span
+            className={`conn-pill ${
+              backendStatus === 'up' ? 'connected' :
+              backendStatus === 'connecting' ? 'reconnecting' : 'disconnected'
+            }`}
+          >
+            <span className="status-dot" style={{
+              background: backendStatus === 'up' ? 'var(--success)' :
+                           backendStatus === 'connecting' ? 'var(--warning)' : 'var(--danger)',
+              width: 6, height: 6
+            }} />
+            {backendStatus === 'up' ? 'Connected' : backendStatus === 'connecting' ? 'Connecting' : 'Offline'}
+          </span>
+        </div>
       </header>
 
+      {/* Offline banner */}
       {backendStatus === 'down' && (
-        <div style={{
-          background: 'rgba(245,158,11,0.1)',
-          border: '1px solid rgba(245,158,11,0.3)',
-          borderRadius: '8px',
-          padding: '0.6rem 1rem',
-          margin: '0 1.5rem',
-          color: '#fcd34d',
-          fontSize: '0.85rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <AlertTriangle size={16} />
-            Backend service is unavailable. The UI is in read-only mode. Actions requiring the backend will not work.
+        <div className="backend-banner">
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <AlertTriangle size={14} />
+            Backend is unreachable — the interface is in read-only mode.
           </span>
           <button
+            className="btn btn-ghost"
+            style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem', color: 'var(--amber)' }}
             onClick={fetchRules}
-            style={{
-              background: 'rgba(245,158,11,0.2)',
-              border: '1px solid rgba(245,158,11,0.4)',
-              borderRadius: '4px',
-              color: '#fcd34d',
-              padding: '0.25rem 0.7rem',
-              cursor: 'pointer',
-              fontSize: '0.75rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.3rem',
-            }}
           >
-            <RefreshCw size={12} /> Retry
+            <RefreshCw size={11} /> Retry
           </button>
         </div>
       )}
 
-      <div className="nav-bar">
-        {navItems.map(item => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.key}
-              className={`nav-btn ${activeTab === item.key ? 'active' : ''}`}
-              onClick={() => setActiveTab(item.key)}
-            >
-              <Icon size={18} />
-              {item.label}
-            </button>
-          );
-        })}
-      </div>
+      {/* Nav */}
+      <nav className="nav-bar">
+        {navItems.map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            className={`nav-btn ${activeTab === key ? 'active' : ''}`}
+            onClick={() => setActiveTab(key)}
+          >
+            <Icon size={15} />
+            {label}
+          </button>
+        ))}
+      </nav>
 
+      {/* Main layout */}
       <div className="app-layout">
         <aside>
           <SavedRulesSidebar
@@ -156,7 +138,6 @@ function Dashboard() {
             navigateToSummary={navigateToSummary}
           />
         </aside>
-
         <main className="content-area animate-fade-in">
           {renderPage()}
         </main>
@@ -164,5 +145,3 @@ function Dashboard() {
     </div>
   );
 }
-
-export default Dashboard;

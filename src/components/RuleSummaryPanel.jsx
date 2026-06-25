@@ -68,6 +68,20 @@ export default function RuleSummaryPanel({ rule, fetchRules }) {
     return `${hours}h ${remainMinutes}m`;
   };
 
+  const formatTtl = (seconds) => {
+    if (!seconds) return 'N/A';
+    if (seconds < 60)   return `${seconds}s`;
+    if (seconds < 3600) return `${Math.round(seconds / 60)} minutes`;
+    if (seconds < 86400) {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.round((seconds % 3600) / 60);
+      return m > 0 ? `${h}h ${m}m` : `${h} hour${h > 1 ? 's' : ''}`;
+    }
+    const d = Math.floor(seconds / 86400);
+    const h = Math.round((seconds % 86400) / 3600);
+    return h > 0 ? `${d}d ${h}h` : `${d} day${d > 1 ? 's' : ''}`;
+  };
+
   const formatAlignment = (ms) => {
     if (!ms && ms !== 0) return '00:00:00';
     const totalSeconds = Math.floor(ms / 1000);
@@ -238,8 +252,8 @@ export default function RuleSummaryPanel({ rule, fetchRules }) {
             <input style={{ ...readOnlyInputStyle, color: sevStyle.color }} value={meta.severity_level || ''} disabled />
           </div>
           <div style={{ flex: 1 }}>
-            <label style={fieldLabelStyle}>Penalty TTL</label>
-            <input style={readOnlyInputStyle} value={meta.penalty_ttl_seconds ? `${meta.penalty_ttl_seconds} seconds` : 'N/A'} disabled />
+            <label style={fieldLabelStyle}>Redis Key TTL</label>
+            <input style={readOnlyInputStyle} value={meta.penalty_ttl_seconds ? formatTtl(meta.penalty_ttl_seconds) : 'N/A'} disabled />
           </div>
         </div>
       </div>

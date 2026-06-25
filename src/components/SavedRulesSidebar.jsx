@@ -1,133 +1,138 @@
 import React from 'react';
-import { ShieldAlert, Info } from 'lucide-react';
+import { ShieldCheck, Info, TrendingUp } from 'lucide-react';
 import { getRuleColor } from '../constants';
 
-export default function SavedRulesSidebar({ rules, fetchRules, selectedRuleIds, toggleRuleSelection, activeTab, navigateToSummary }) {
+const SEV_COLORS = {
+  CRITICAL: 'var(--danger)',
+  HIGH:     '#f87171',
+  MEDIUM:   'var(--amber)',
+  LOW:      'var(--teal)',
+};
 
-  const isAnalysisPage = activeTab === 'live' || activeTab === 'agg' || activeTab === 'historical';
+const STATUS_MAP = {
+  ACTIVE:  { dot: 'active',  badge: 'badge-success', label: 'Active' },
+  PAUSED:  { dot: 'paused',  badge: 'badge-warning', label: 'Paused' },
+  DRAFT:   { dot: 'draft',   badge: 'badge-draft',   label: 'Draft'  },
+  DELETED: { dot: 'deleted', badge: 'badge-danger',  label: 'Deleted'},
+};
 
-  const handleCardClick = (ruleId) => {
-    if (isAnalysisPage) {
-      toggleRuleSelection(ruleId);
-    }
-  };
-
-  const getStatusColor = (status) => {
-    if (status === 'ACTIVE') return 'var(--success)';
-    if (status === 'PAUSED') return 'var(--warning)';
-    return '#475569';
-  };
+export default function SavedRulesSidebar({
+  rules, fetchRules, selectedRuleIds, toggleRuleSelection, activeTab, navigateToSummary
+}) {
+  const isAnalysisPage = ['live', 'agg', 'historical'].includes(activeTab);
 
   return (
-    <div className="glass-panel" style={{ height: 'calc(100vh - 180px)', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '1rem' }}>
-        <ShieldAlert size={20} color="#60a5fa" />
-        <h2 style={{ color: 'white', margin: 0, fontSize: '1.15rem' }}>Saved Rules Portfolio</h2>
+    <div
+      className="glass-panel"
+      style={{ height: 'calc(100vh - 162px)', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 0 }}
+    >
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', paddingBottom: '0.875rem', borderBottom: '1px solid var(--border)' }}>
+        <ShieldCheck size={17} color="var(--violet-light)" strokeWidth={2} />
+        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-1)', letterSpacing: '-0.02em' }}>Detection Rules</span>
+        {rules.length > 0 && (
+          <span className="badge badge-violet" style={{ marginLeft: 'auto' }}>{rules.length}</span>
+        )}
       </div>
 
-      {isAnalysisPage && (
-        <div style={{
-          fontSize: '0.7rem',
-          color: 'var(--text-muted)',
-          marginBottom: '1rem',
-          padding: '0.4rem 0.6rem',
-          background: 'rgba(59, 130, 246, 0.08)',
-          borderRadius: '6px',
-          border: '1px solid rgba(59, 130, 246, 0.15)',
-          textAlign: 'center'
-        }}>
-          Click to select for analysis
+      {/* Selection hint */}
+      {isAnalysisPage && rules.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.75rem', padding: '0.35rem 0.6rem', background: 'var(--violet-subtle)', borderRadius: '6px', border: '1px solid rgba(124,58,237,0.15)' }}>
+          <TrendingUp size={11} color="var(--violet-light)" />
+          <span style={{ fontSize: '0.68rem', color: 'var(--violet-light)', fontWeight: 500 }}>Click a rule to include in analysis</span>
         </div>
       )}
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+      {/* Rule list */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.45rem', minHeight: 0 }}>
         {rules.map(r => {
-          const ruleId = r.rule_metadata.rule_id;
+          const ruleId    = r.rule_metadata.rule_id;
           const isSelected = selectedRuleIds.has(ruleId);
-          const color = getRuleColor(rules, ruleId);
+          const color     = getRuleColor(rules, ruleId);
+          const meta      = r.rule_metadata;
+          const statusInfo = STATUS_MAP[meta.status] || STATUS_MAP.DRAFT;
+          const sevColor  = SEV_COLORS[meta.severity_level] || 'var(--text-3)';
 
           return (
             <div
               key={ruleId}
-              className="rule-card"
-              onClick={() => handleCardClick(ruleId)}
+              onClick={() => isAnalysisPage && toggleRuleSelection(ruleId)}
               style={{
-                background: isSelected ? `${color}15` : 'rgba(15, 23, 42, 0.6)',
-                padding: '0.75rem',
+                background: isSelected ? `${color}12` : 'var(--surface-2)',
                 borderRadius: '8px',
-                border: '1px solid transparent',
-                borderLeft: isSelected ? `3px solid ${color}` : '3px solid transparent',
+                border: `1px solid ${isSelected ? `${color}35` : 'var(--border)'}`,
+                borderLeft: `3px solid ${isSelected ? color : 'transparent'}`,
+                padding: '0.6rem 0.75rem',
                 cursor: isAnalysisPage ? 'pointer' : 'default',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.6rem',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={e => {
+                if (!isSelected) e.currentTarget.style.background = 'var(--surface-3)';
+              }}
+              onMouseLeave={e => {
+                if (!isSelected) e.currentTarget.style.background = 'var(--surface-2)';
               }}
             >
-              <div
-                className="rule-color-dot"
-                style={{
-                  backgroundColor: color,
-                  opacity: isSelected ? 1 : 0.3,
-                }}
-              />
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                {/* Color dot */}
+                <div
+                  style={{
+                    width: 7, height: 7, borderRadius: '50%',
+                    background: color, marginTop: 5, flexShrink: 0,
+                    opacity: isSelected ? 1 : 0.4,
+                    boxShadow: isSelected ? `0 0 5px ${color}` : 'none',
+                  }}
+                />
 
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
-                  <h3 style={{
-                    fontSize: '0.85rem',
-                    color: isSelected ? color : '#60a5fa',
-                    margin: 0,
-                    wordBreak: 'break-word',
-                    paddingRight: '0.3rem',
-                    lineHeight: 1.3,
-                  }}>
-                    {r.rule_metadata.rule_name}
-                  </h3>
-                  <span style={{
-                    fontSize: '0.6rem',
-                    padding: '0.15rem 0.35rem',
-                    borderRadius: '4px',
-                    background: getStatusColor(r.rule_metadata.status),
-                    color: 'white',
-                    flexShrink: 0,
-                    fontWeight: 600,
-                    letterSpacing: '0.02em',
-                  }}>
-                    {r.rule_metadata.status}
-                  </span>
+                {/* Content */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
+                    <span style={{
+                      fontSize: '0.78rem', fontWeight: 600,
+                      color: isSelected ? color : 'var(--text-1)',
+                      letterSpacing: '-0.01em',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      maxWidth: '130px',
+                      transition: 'color 0.15s',
+                    }}>
+                      {meta.rule_name || ruleId}
+                    </span>
+                    <span className={`badge ${statusInfo.badge}`} style={{ fontSize: '0.58rem' }}>
+                      {statusInfo.label}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '0.68rem', color: sevColor, fontWeight: 500 }}>
+                      {meta.severity_level}
+                    </span>
+                    <button
+                      onClick={e => { e.stopPropagation(); navigateToSummary(ruleId); }}
+                      className="btn-ghost"
+                      style={{
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        padding: '2px', borderRadius: '4px',
+                        display: 'flex', alignItems: 'center',
+                        color: 'var(--text-3)', transition: 'color 0.15s',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.color = 'var(--text-2)'}
+                      onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}
+                      title="View rule details"
+                    >
+                      <Info size={12} />
+                    </button>
+                  </div>
                 </div>
-                <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: 0 }}>
-                  {r.rule_metadata.severity_level}
-                </p>
               </div>
-
-              <button
-                onClick={(e) => { e.stopPropagation(); navigateToSummary(ruleId); }}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '4px',
-                  borderRadius: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                  transition: 'background 0.15s ease',
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                title="View rule summary"
-              >
-                <Info size={16} color="var(--text-muted)" />
-              </button>
             </div>
           );
         })}
 
         {rules.length === 0 && (
-          <div style={{ textAlign: 'center', color: 'var(--text-muted)', marginTop: '2rem', fontSize: '0.85rem' }}>
-            No rules saved. Build one to see it here.
+          <div className="empty-state" style={{ padding: '2rem 1rem' }}>
+            <ShieldCheck size={32} className="empty-state-icon" />
+            <p className="empty-state-title">No rules yet</p>
+            <p className="empty-state-sub">Create your first detection rule using the New Rule tab.</p>
           </div>
         )}
       </div>
