@@ -78,6 +78,31 @@ function isBreached(row) {
     || row.thresholdBreached === true || row.thresholdBreached === 1;
 }
 
+/**
+ * Normalize a row from either the old Flink schema or the new multi-sink schema.
+ * Old: { ruleId, groupKey, aggregationResults:{...}, thresholdBreached, evaluatedAt }
+ * New: { id, entityValue, aggResult:{...}, producedAt, event_type:'agg' }
+ */
+function normalizeRow(row) {
+  if (!row) return row;
+  const r = { ...row };
+  // ruleId: new schema uses 'id'
+  if (!r.ruleId && r.id) r.ruleId = r.id;
+  // groupKey: new schema uses 'entityValue'
+  if (!r.groupKey && r.entityValue) r.groupKey = r.entityValue;
+  // aggregationResults: new schema uses 'aggResult' (may already be parsed by backend)
+  if (!r.aggregationResults && r.aggResult) {
+    r.aggregationResults = typeof r.aggResult === 'string'
+      ? (() => { try { return JSON.parse(r.aggResult); } catch { return {}; } })()
+      : r.aggResult;
+  }
+  // evaluatedAt: new schema uses 'producedAt'
+  if (!r.evaluatedAt && r.producedAt) r.evaluatedAt = r.producedAt;
+  return r;
+}
+
+
+
 function getEventCount(row) {
   if (row.eventCount != null && row.eventCount !== undefined) return Number(row.eventCount) || 0;
   const mv = parseMetricValues(row.metricValues);
@@ -86,6 +111,7 @@ function getEventCount(row) {
   if (mv.count != null) return Number(mv.count) || 0;
   return 0;
 }
+
 
 export default function LiveAnalysis({ rules, selectedRuleIds }) {
   const [data, setData] = useState({});
@@ -105,15 +131,17 @@ export default function LiveAnalysis({ rules, selectedRuleIds }) {
   );
 
   const handleDelta = useCallback((ruleId, row) => {
+    const normRow = normalizeRow(row);
     setData(prev => {
       const next = { ...prev };
       if (!next[ruleId]) next[ruleId] = [];
-      next[ruleId] = [...next[ruleId], row];
+      next[ruleId] = [...next[ruleId], normRow];
       const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       next[ruleId] = next[ruleId].filter(r => (r.windowStart || '') >= cutoff.replace('T', ' '));
       return next;
     });
   }, []);
+
 
   const fetchDataHttp = useCallback(async () => {
     if (selectedRuleIds.size === 0) return;
