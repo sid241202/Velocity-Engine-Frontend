@@ -6,7 +6,7 @@ export default function RuleSummaryPanel({ rule, fetchRules }) {
   const publishRule = async (id) => {
     try {
       const res = await fetch(`/api/rules/${id}/prod`, { method: 'POST' });
-      if (res.ok) { alert('Published to Kafka (Move to Prod)!'); fetchRules(); }
+      if (res.ok) { alert('Rule published successfully!'); fetchRules(); }
       else { alert('Failed to publish. Check backend logs.'); }
     } catch (e) { console.error(e); alert('Network error.'); }
   };
@@ -24,10 +24,10 @@ export default function RuleSummaryPanel({ rule, fetchRules }) {
   };
 
   const deleteRule = async (id) => {
-    if (!window.confirm('Remove this rule from Flink and move it back to DRAFT?')) return;
+    if (!window.confirm('Deactivate this rule and move it back to draft?')) return;
     try {
       const res = await fetch(`/api/rules/${id}`, { method: 'DELETE' });
-      if (res.ok) { alert('Rule removed from Flink and moved back to DRAFT.'); fetchRules(); }
+      if (res.ok) { alert('Rule deactivated and moved to draft.'); fetchRules(); }
       else { alert('Failed to delete. Check backend logs.'); }
     } catch (e) { console.error(e); alert('Network error.'); }
   };
@@ -190,11 +190,11 @@ export default function RuleSummaryPanel({ rule, fetchRules }) {
 
     const windowDesc = windowing.size_ms >= 315360000000
       ? 'a continuous (never-resetting) counter'
-      : `a ${windowing.type} window of ${formatMs(windowing.size_ms)}${windowing.type === 'SLIDING' ? `, emitting every ${formatMs(windowing.slide_ms)}` : ''}`;
+      : `a ${windowing.type === 'SLIDING' ? 'rolling' : 'fixed'} window of ${formatMs(windowing.size_ms)}${windowing.type === 'SLIDING' ? `, sliding by ${formatMs(windowing.slide_ms)}` : ''}`;
 
     const timeDesc = windowing.time_type === 'EVENT_TIME'
-      ? (windowing.use_kafka_timestamp ? 'Kafka arrival timestamps' : `event timestamps from ${windowing.timestamp_field}`)
-      : 'processing time (wall clock)';
+      ? (windowing.use_kafka_timestamp ? 'message arrival timestamps' : `event timestamps from ${windowing.timestamp_field}`)
+      : 'system time';
 
     const aggDescs = aggs.map(a => {
       const funcName = a.function === 'COUNT_DISTINCT' ? `distinct count (${a.cardinality_hint} cardinality)` : a.function.toLowerCase();
@@ -293,7 +293,7 @@ export default function RuleSummaryPanel({ rule, fetchRules }) {
         <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: '120px' }}>
             <label style={fieldLabelStyle}>Type</label>
-            <input style={readOnlyInputStyle} value={windowing.type || 'N/A'} disabled />
+            <input style={readOnlyInputStyle} value={windowing.type === 'SLIDING' ? 'Rolling' : windowing.type === 'TUMBLING' ? 'Fixed' : (windowing.type || 'N/A')} disabled />
           </div>
           <div style={{ flex: 1, minWidth: '120px' }}>
             <label style={fieldLabelStyle}>Size</label>
@@ -310,8 +310,8 @@ export default function RuleSummaryPanel({ rule, fetchRules }) {
         </div>
         <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: '140px' }}>
-            <label style={fieldLabelStyle}>Time Type</label>
-            <input style={readOnlyInputStyle} value={windowing.time_type || 'N/A'} disabled />
+            <label style={fieldLabelStyle}>Timing Mode</label>
+            <input style={readOnlyInputStyle} value={windowing.time_type === 'EVENT_TIME' ? 'Event Time' : windowing.time_type === 'PROCESSING_TIME' ? 'System Time' : (windowing.time_type || 'N/A')} disabled />
           </div>
           <div style={{ flex: 1, minWidth: '140px' }}>
             <label style={fieldLabelStyle}>Timestamp Field</label>
@@ -320,7 +320,7 @@ export default function RuleSummaryPanel({ rule, fetchRules }) {
         </div>
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: '140px' }}>
-            <label style={fieldLabelStyle}>Use Kafka Timestamp</label>
+            <label style={fieldLabelStyle}>Message Arrival Time</label>
             <input style={readOnlyInputStyle} value={windowing.use_kafka_timestamp ? 'Yes' : 'No'} disabled />
           </div>
           <div style={{ flex: 1, minWidth: '140px' }}>

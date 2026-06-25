@@ -49,14 +49,23 @@ function Section({ icon: Icon, iconColor = 'var(--violet-light)', title, tip, ba
     <div style={{
       marginBottom: '0.875rem',
       padding: '1rem 1.125rem',
-      background: 'var(--surface-2)',
       borderRadius: '10px',
-      border: error ? '1px solid rgba(239,68,68,0.35)' : '1px solid var(--border)',
-      transition: 'border-color 0.15s',
+      background: 'var(--surface-2)',
+      border: '1px solid var(--border)',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.875rem' }}>
-        {Icon && <Icon size={15} color={iconColor} strokeWidth={2} />}
-        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-1)', letterSpacing: '-0.01em' }}>{title}</span>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '0.5rem',
+        marginBottom: '0.875rem', paddingBottom: '0.65rem',
+        borderBottom: '1px solid var(--border)',
+      }}>
+        <div style={{
+          width: 24, height: 24, borderRadius: 6,
+          background: `${iconColor}18`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        }}>
+          <Icon size={13} color={iconColor} strokeWidth={2.2} />
+        </div>
+        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-1)', letterSpacing: '-0.01em' }}>{title}</span>
         {tip && <Tip text={tip} />}
         {badge && <span className="badge badge-violet" style={{ marginLeft: 'auto' }}>{badge}</span>}
         {error && (
@@ -509,15 +518,15 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
           )}
 
           {/* Window Config */}
-          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <div style={{ flex: '1 1 170px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: windowType === 'SLIDING' ? '1fr 1fr 1fr' : '1fr 1fr', gap: '0.75rem', alignItems: 'start' }}>
+            <div>
               <FieldLabel label="Window Type" tip="Rolling: overlaps with the previous window. Fixed: discrete non-overlapping intervals." required />
               <select value={windowType} onChange={e => setWindowType(e.target.value)}>
                 <option value="SLIDING">Rolling (overlapping)</option>
                 <option value="TUMBLING">Fixed (non-overlapping)</option>
               </select>
             </div>
-            <div style={{ flex: '0 1 130px' }}>
+            <div>
               <FieldLabel label="Window Size (sec)" required />
               <input
                 type="number"
@@ -527,8 +536,8 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
               />
             </div>
             {windowType === 'SLIDING' && (
-              <div style={{ flex: '0 1 130px' }}>
-                <FieldLabel label="Emit Every (sec)" tip="How often a result is produced. Must be ≤ window size." required />
+              <div>
+                <FieldLabel label="Slide By (sec)" tip="How frequently a new result is emitted. Must be ≤ window size." required />
                 <input
                   type="number"
                   value={windowSlide}
@@ -586,82 +595,81 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
           badge={`${aggregations.length}/3`}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.5rem' }}>
+            {aggregations.length > 0 && (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1.6fr 1fr auto',
+                gap: '0.5rem',
+                padding: '0 0.75rem',
+              }}>
+                <p style={{ fontSize: '0.62rem', color: 'var(--text-3)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', margin: 0 }}>Name</p>
+                <p style={{ fontSize: '0.62rem', color: 'var(--text-3)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', margin: 0 }}>Field</p>
+                <p style={{ fontSize: '0.62rem', color: 'var(--text-3)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', margin: 0 }}>Function</p>
+                <div style={{ width: '30px' }} />
+              </div>
+            )}
             {aggregations.map((a, i) => (
               <div
                 key={i}
                 style={{
-                  display: 'flex', gap: '0.5rem', alignItems: 'center',
-                  flexWrap: 'wrap', padding: '0.6rem 0.75rem',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1.6fr 1fr auto',
+                  gap: '0.5rem', alignItems: 'center',
+                  padding: '0.6rem 0.75rem',
                   background: 'var(--surface-3)', borderRadius: '7px',
                   border: '1px solid var(--border)',
                 }}
               >
-                {i === 0 && (
-                  <div style={{ display: 'contents' }}>
-                    <p style={{ fontSize: '0.62rem', color: 'var(--text-3)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', width: '100%', marginBottom: '0.35rem' }}>
-                      Metric {i + 1}
-                    </p>
-                  </div>
-                )}
-                <div style={{ flex: '1 1 120px' }}>
-                  {i === 0 && <p style={{ fontSize: '0.62rem', color: 'var(--text-3)', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Name</p>}
-                  <input
-                    value={a.alias}
-                    onChange={e => { const na = [...aggregations]; na[i].alias = e.target.value; setAggregations(na); }}
-                    placeholder="e.g. total_auths"
-                    required
-                  />
-                </div>
-                <div style={{ flex: '2 1 150px' }}>
-                  {i === 0 && <p style={{ fontSize: '0.62rem', color: 'var(--text-3)', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Field</p>}
-                  <input
-                    value={a.field}
-                    onChange={e => { const na = [...aggregations]; na[i].field = e.target.value; setAggregations(na); }}
-                    placeholder="e.g. _data.uid"
-                    required
-                  />
-                </div>
-                <div style={{ flex: '1 1 110px' }}>
-                  {i === 0 && <p style={{ fontSize: '0.62rem', color: 'var(--text-3)', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Function</p>}
-                  <select
-                    value={a.function}
-                    onChange={e => {
-                      const na = [...aggregations];
-                      na[i].function = e.target.value;
-                      if (e.target.value === 'COUNT_DISTINCT') na[i].cardinality_hint = 'HIGH';
-                      setAggregations(na);
-                    }}
-                  >
-                    <option value="COUNT">Count</option>
-                    <option value="COUNT_DISTINCT">Count Unique</option>
-                    <option value="SUM">Sum</option>
-                    <option value="AVG">Average</option>
-                    <option value="MIN">Minimum</option>
-                    <option value="MAX">Maximum</option>
-                  </select>
-                </div>
-                {a.function === 'COUNT_DISTINCT' && (
-                  <div style={{ flex: '0 1 130px' }}>
-                    {i === 0 && <p style={{ fontSize: '0.62rem', color: 'var(--text-3)', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Uniqueness</p>}
+                <input
+                  value={a.alias}
+                  onChange={e => { const na = [...aggregations]; na[i].alias = e.target.value; setAggregations(na); }}
+                  placeholder="e.g. total_auths"
+                  required
+                />
+                <input
+                  value={a.field}
+                  onChange={e => { const na = [...aggregations]; na[i].field = e.target.value; setAggregations(na); }}
+                  placeholder="e.g. _data.uid"
+                  required
+                />
+                <select
+                  value={a.function}
+                  onChange={e => {
+                    const na = [...aggregations];
+                    na[i].function = e.target.value;
+                    if (e.target.value === 'COUNT_DISTINCT') na[i].cardinality_hint = 'HIGH';
+                    setAggregations(na);
+                  }}
+                >
+                  <option value="COUNT">Count</option>
+                  <option value="COUNT_DISTINCT">Count Unique</option>
+                  <option value="SUM">Sum</option>
+                  <option value="AVG">Average</option>
+                  <option value="MIN">Minimum</option>
+                  <option value="MAX">Maximum</option>
+                </select>
+                <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
+                  {a.function === 'COUNT_DISTINCT' && (
                     <select
                       value={a.cardinality_hint}
                       onChange={e => { const na = [...aggregations]; na[i].cardinality_hint = e.target.value; setAggregations(na); }}
+                      style={{ width: '110px', fontSize: '0.76rem' }}
                     >
-                      <option value="LOW">Few unique values</option>
-                      <option value="HIGH">Many unique values</option>
+                      <option value="LOW">Few unique</option>
+                      <option value="HIGH">Many unique</option>
                     </select>
-                  </div>
-                )}
-                {aggregations.length > 1 && (
-                  <button
-                    type="button"
-                    className="btn btn-danger"
-                    style={{ padding: '0.45rem 0.5rem', flexShrink: 0 }}
-                    onClick={() => setAggregations(aggregations.filter((_, idx) => idx !== i))}
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                )}
+                  )}
+                  {aggregations.length > 1 && (
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      style={{ padding: '0.4rem 0.45rem', flexShrink: 0 }}
+                      onClick={() => setAggregations(aggregations.filter((_, idx) => idx !== i))}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -735,11 +743,14 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
           style={{
             width: '100%',
             justifyContent: 'center',
-            fontSize: '0.875rem',
+            fontSize: '0.84rem',
             fontWeight: 700,
-            padding: '0.7rem',
+            padding: '0.75rem 1rem',
+            borderRadius: '9px',
             opacity: atLeastOneSink ? 1 : 0.45,
-            marginTop: '0.25rem',
+            marginTop: '0.5rem',
+            letterSpacing: '-0.01em',
+            gap: '0.5rem',
           }}
           disabled={!atLeastOneSink}
         >

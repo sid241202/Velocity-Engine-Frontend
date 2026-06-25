@@ -19,7 +19,7 @@ const HELP_CONTENT = {
   },
   grouping_keys: {
     title: 'Grouping Keys',
-    description: 'Flink maintains INDEPENDENT state for each unique combination of these fields. Every distinct value gets its own counters, windows, and thresholds.',
+    description: 'The engine tracks each unique combination of these fields independently. Every distinct value gets its own counters, windows, and thresholds.',
     tip: 'Group by _data.aua to monitor each Authentication User Agency independently. Add multiple keys like _data.aua + _data.sa for finer granularity.'
   },
   global_key: {
@@ -29,28 +29,28 @@ const HELP_CONTENT = {
   },
   continuous: {
     title: 'Continuous Counting',
-    description: 'Disables window resets — counters grow indefinitely from Flink startup. Internally uses a 10-year window with 1-minute output intervals.',
+    description: 'Disables window resets — counters grow indefinitely from engine startup. Internally uses a very large window with periodic output intervals.',
     tip: 'Use for cumulative monitoring like "total auths since deployment" or detecting ever-growing distinct entity counts.'
   },
   event_time: {
     title: 'Event Time',
     description: 'Uses the timestamp from inside the event payload for windowing. Correctly handles out-of-order and late-arriving events.',
-    tip: 'Recommended for production. Ensures accurate window boundaries even when Kafka consumers lag.'
+    tip: 'Recommended for production. Ensures accurate window boundaries even when events arrive with some delay.'
   },
   processing_time: {
     title: 'Processing Time',
-    description: 'Uses the wall-clock time when Flink processes the event. Simpler but cannot handle out-of-order data.',
+    description: 'Uses the system clock when the engine receives the event. Simpler but cannot handle out-of-order data.',
     tip: 'Use only when payload timestamps are unreliable or when you want purely real-time (wall-clock) windowing.'
   },
   kafka_timestamp: {
     title: 'Kafka Arrival Timestamp',
-    description: 'Uses the timestamp set by the Kafka broker when the message arrived. A reliable default for event-time semantics.',
-    tip: 'Good default choice. The Kafka timestamp is always present and monotonically increasing per partition.'
+    description: 'Uses the timestamp recorded when the message arrived in the queue. A reliable default choice.',
+    tip: 'Good default choice. Always present and consistent across events.'
   },
   custom_ts_field: {
     title: 'Custom Timestamp Field',
     description: 'Point to a specific field in your JSON payload (e.g., _event_timestamp). Choose ISO_STRING for dates like "2026-06-04T12:00:00" or EPOCH_MILLIS for numeric timestamps.',
-    tip: 'If the custom field is missing or unparseable at runtime, Flink falls back to the Kafka timestamp automatically.'
+    tip: 'If the custom field is missing or unparseable at runtime, the engine falls back to the message arrival timestamp automatically.'
   },
   window_type_SLIDING: {
     title: 'Sliding Window',
@@ -68,14 +68,14 @@ const HELP_CONTENT = {
     tip: 'Smaller windows (1-5 min) catch rapid anomalies. Larger windows (15-60 min) detect sustained patterns.'
   },
   slide_interval: {
-    title: 'Slide Output Interval (minutes)',
-    description: 'How often Flink emits a result. Must be ≤ window size. Smaller slide = more frequent outputs = finer granularity.',
-    tip: 'A 10-min window with 1-min slide produces a result every minute, each covering the last 10 minutes.'
+    title: 'Slide By (seconds)',
+    description: 'How frequently a new result is produced. Must be ≤ window size. A smaller value gives finer time resolution.',
+    tip: 'A 10-min window with a 1-min slide produces a result every minute, each covering the last 10 minutes.'
   },
   lateness: {
     title: 'Allowed Lateness (seconds)',
-    description: 'How long after a window closes Flink still accepts late events. Late events update the window result retroactively.',
-    tip: 'Set to 0 for processing-time rules. For event-time, 30-60 seconds handles typical Kafka partition skew.'
+    description: 'How long after a window closes the engine still accepts late events. Late events update the window result retroactively.',
+    tip: 'Set to 0 for system-time rules. For event-time, 30–60 seconds handles typical message delivery delays.'
   },
   alignment: {
     title: 'Window Alignment (IST)',
@@ -104,7 +104,7 @@ const HELP_CONTENT = {
   },
   having_thresholds: {
     title: 'Alert Threshold Logic',
-    description: 'A JEXL expression evaluated against your aggregation aliases. When the expression evaluates to TRUE, Flink marks the result as a breach and emits an alert.',
+    description: 'A logical expression evaluated against your metric names. When the expression evaluates to TRUE, the engine flags the result as a breach and fires an alert.',
     tip: 'Reference aggregation aliases by name. Combine with && (AND) and || (OR). Example: (total_otp > 15) && (unique_auas >= 3)'
   }
 };
