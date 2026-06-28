@@ -47,34 +47,38 @@ function Accordion({ title, children, defaultOpen = false }) {
 function Section({ icon: Icon, iconColor = 'var(--violet-light)', title, tip, badge, children, error }) {
   return (
     <div style={{
-      marginBottom: '0.875rem',
-      padding: '1rem 1.125rem',
-      borderRadius: '10px',
+      marginBottom: '0.75rem',
+      borderRadius: '8px',
       background: 'var(--surface-2)',
       border: '1px solid var(--border)',
+      overflow: 'hidden',
     }}>
       <div style={{
         display: 'flex', alignItems: 'center', gap: '0.5rem',
-        marginBottom: '0.875rem', paddingBottom: '0.65rem',
+        padding: '0.625rem 1rem',
+        background: 'var(--surface-3)',
         borderBottom: '1px solid var(--border)',
       }}>
         <div style={{
-          width: 24, height: 24, borderRadius: 6,
-          background: `${iconColor}18`,
+          width: 22, height: 22, borderRadius: 5,
+          background: `${iconColor}15`,
+          border: `1px solid ${iconColor}25`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
         }}>
-          <Icon size={13} color={iconColor} strokeWidth={2.2} />
+          <Icon size={12} color={iconColor} strokeWidth={2.2} />
         </div>
-        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-1)', letterSpacing: '-0.01em' }}>{title}</span>
+        <span style={{ fontSize: '0.76rem', fontWeight: 600, color: 'var(--text-1)', letterSpacing: '0.005em' }}>{title}</span>
         {tip && <Tip text={tip} />}
         {badge && <span className="badge badge-violet" style={{ marginLeft: 'auto' }}>{badge}</span>}
         {error && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginLeft: 'auto', color: 'var(--danger)', fontSize: '0.73rem' }}>
-            <AlertTriangle size={12} /> {error}
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginLeft: badge ? '0.5rem' : 'auto', color: 'var(--danger)', fontSize: '0.71rem' }}>
+            <AlertTriangle size={11} /> {error}
           </span>
         )}
       </div>
-      {children}
+      <div style={{ padding: '0.875rem 1rem' }}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -88,14 +92,14 @@ function SinkCard({ id, accentColor, title, subtitle, checked, onChange }) {
         display: 'flex',
         alignItems: 'flex-start',
         gap: '0.6rem',
-        padding: '0.75rem',
-        borderRadius: '8px',
-        border: checked ? `1px solid ${accentColor}45` : '1px solid var(--border)',
-        background: checked ? `${accentColor}10` : 'var(--surface-3)',
+        padding: '0.75rem 0.875rem',
+        borderRadius: '7px',
+        border: checked ? `1px solid ${accentColor}40` : '1px solid var(--border)',
+        background: checked ? `${accentColor}0d` : 'var(--surface-3)',
         cursor: 'pointer',
-        transition: 'all 0.15s ease',
-        flex: 1,
-        minWidth: '155px',
+        transition: 'all 0.14s ease',
+        flex: '1 1 0',
+        minWidth: '140px',
       }}
     >
       <input
@@ -283,14 +287,15 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
         borderBottom: '1px solid var(--border)',
       }}>
         <div style={{
-          width: 30, height: 30, borderRadius: 8,
-          background: 'linear-gradient(135deg, #7c3aed 0%, #14b8a6 100%)',
+          width: 28, height: 28, borderRadius: 7,
+          background: 'linear-gradient(135deg, #5865f2 0%, #2dd4bf 100%)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          boxShadow: '0 0 0 1px rgba(88,101,242,0.3), 0 2px 8px rgba(0,0,0,0.3)',
         }}>
-          <Zap size={15} color="#fff" strokeWidth={2.5} />
+          <Zap size={14} color="#fff" strokeWidth={2.5} />
         </div>
         <div>
-          <h2 style={{ fontSize: '0.95rem', fontWeight: 700, letterSpacing: '-0.025em', color: 'var(--text-1)', margin: 0 }}>
+          <h2 style={{ fontSize: '0.92rem', fontWeight: 700, letterSpacing: '-0.025em', color: 'var(--text-1)', margin: 0 }}>
             New Detection Rule
           </h2>
           <p style={{ fontSize: '0.7rem', color: 'var(--text-3)', margin: 0 }}>Saved as draft — publish when ready</p>
@@ -594,82 +599,105 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
           tip="Define what to measure per entity per time window. Maximum 3 metrics."
           badge={`${aggregations.length}/3`}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.5rem' }}>
-            {aggregations.length > 0 && (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1.6fr 1fr auto',
-                gap: '0.5rem',
-                padding: '0 0.75rem',
-              }}>
-                <p style={{ fontSize: '0.62rem', color: 'var(--text-3)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', margin: 0 }}>Name</p>
-                <p style={{ fontSize: '0.62rem', color: 'var(--text-3)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', margin: 0 }}>Field</p>
-                <p style={{ fontSize: '0.62rem', color: 'var(--text-3)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', margin: 0 }}>Function</p>
-                <div style={{ width: '30px' }} />
-              </div>
-            )}
+          {aggregations.length > 0 && (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1.6fr 1.1fr 28px',
+              gap: '0.5rem',
+              padding: '0 0 0.4rem',
+              marginBottom: '0.1rem',
+            }}>
+              {['Name', 'Field', 'Function', ''].map(label => (
+                <p key={label} style={{ fontSize: '0.61rem', color: 'var(--text-3)', fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', margin: 0, lineHeight: 1 }}>{label}</p>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.625rem' }}>
             {aggregations.map((a, i) => (
-              <div
-                key={i}
-                style={{
+              <div key={i}>
+                <div style={{
                   display: 'grid',
-                  gridTemplateColumns: '1fr 1.6fr 1fr auto',
-                  gap: '0.5rem', alignItems: 'center',
-                  padding: '0.6rem 0.75rem',
-                  background: 'var(--surface-3)', borderRadius: '7px',
+                  gridTemplateColumns: '1fr 1.6fr 1.1fr 28px',
+                  gap: '0.5rem',
+                  alignItems: 'center',
+                  padding: '0.5rem 0.625rem',
+                  background: 'var(--surface-3)',
+                  borderRadius: a.function === 'COUNT_DISTINCT' ? '6px 6px 0 0' : '6px',
                   border: '1px solid var(--border)',
+                  borderBottom: a.function === 'COUNT_DISTINCT' ? 'none' : '1px solid var(--border)',
                 }}
-              >
-                <input
-                  value={a.alias}
-                  onChange={e => { const na = [...aggregations]; na[i].alias = e.target.value; setAggregations(na); }}
-                  placeholder="e.g. total_auths"
-                  required
-                />
-                <input
-                  value={a.field}
-                  onChange={e => { const na = [...aggregations]; na[i].field = e.target.value; setAggregations(na); }}
-                  placeholder="e.g. _data.uid"
-                  required
-                />
-                <select
-                  value={a.function}
-                  onChange={e => {
-                    const na = [...aggregations];
-                    na[i].function = e.target.value;
-                    if (e.target.value === 'COUNT_DISTINCT') na[i].cardinality_hint = 'HIGH';
-                    setAggregations(na);
-                  }}
                 >
-                  <option value="COUNT">Count</option>
-                  <option value="COUNT_DISTINCT">Count Unique</option>
-                  <option value="SUM">Sum</option>
-                  <option value="AVG">Average</option>
-                  <option value="MIN">Minimum</option>
-                  <option value="MAX">Maximum</option>
-                </select>
-                <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
-                  {a.function === 'COUNT_DISTINCT' && (
-                    <select
-                      value={a.cardinality_hint}
-                      onChange={e => { const na = [...aggregations]; na[i].cardinality_hint = e.target.value; setAggregations(na); }}
-                      style={{ width: '110px', fontSize: '0.76rem' }}
-                    >
-                      <option value="LOW">Few unique</option>
-                      <option value="HIGH">Many unique</option>
-                    </select>
-                  )}
-                  {aggregations.length > 1 && (
-                    <button
-                      type="button"
-                      className="btn btn-danger"
-                      style={{ padding: '0.4rem 0.45rem', flexShrink: 0 }}
-                      onClick={() => setAggregations(aggregations.filter((_, idx) => idx !== i))}
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  )}
+                  <input
+                    value={a.alias}
+                    onChange={e => { const na = [...aggregations]; na[i].alias = e.target.value; setAggregations(na); }}
+                    placeholder="e.g. total_auths"
+                    required
+                  />
+                  <input
+                    value={a.field}
+                    onChange={e => { const na = [...aggregations]; na[i].field = e.target.value; setAggregations(na); }}
+                    placeholder="e.g. _data.uid"
+                    required
+                  />
+                  <select
+                    value={a.function}
+                    onChange={e => {
+                      const na = [...aggregations];
+                      na[i].function = e.target.value;
+                      if (e.target.value === 'COUNT_DISTINCT') na[i].cardinality_hint = 'HIGH';
+                      setAggregations(na);
+                    }}
+                  >
+                    <option value="COUNT">Count</option>
+                    <option value="COUNT_DISTINCT">Count Unique</option>
+                    <option value="SUM">Sum</option>
+                    <option value="AVG">Average</option>
+                    <option value="MIN">Minimum</option>
+                    <option value="MAX">Maximum</option>
+                  </select>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {aggregations.length > 1 && (
+                      <button
+                        type="button"
+                        className="btn btn-danger"
+                        style={{ padding: '0.3rem 0.35rem', minWidth: 0, width: 28, height: 28, justifyContent: 'center' }}
+                        onClick={() => setAggregations(aggregations.filter((_, idx) => idx !== i))}
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    )}
+                  </div>
                 </div>
+                {a.function === 'COUNT_DISTINCT' && (
+                  <div style={{
+                    padding: '0.35rem 0.625rem',
+                    background: 'var(--surface-3)',
+                    borderRadius: '0 0 6px 6px',
+                    border: '1px solid var(--border)',
+                    borderTop: '1px solid var(--border-2)',
+                    display: 'flex', alignItems: 'center', gap: '0.5rem',
+                  }}>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-3)', fontWeight: 500 }}>Uniqueness scale:</span>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer', fontSize: '0.75rem', color: 'var(--text-2)', fontWeight: 500 }}>
+                      <input
+                        type="radio"
+                        checked={a.cardinality_hint === 'LOW'}
+                        onChange={() => { const na = [...aggregations]; na[i].cardinality_hint = 'LOW'; setAggregations(na); }}
+                        style={{ width: 'auto', accentColor: 'var(--violet)' }}
+                      />
+                      Few unique values
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer', fontSize: '0.75rem', color: 'var(--text-2)', fontWeight: 500 }}>
+                      <input
+                        type="radio"
+                        checked={a.cardinality_hint === 'HIGH'}
+                        onChange={() => { const na = [...aggregations]; na[i].cardinality_hint = 'HIGH'; setAggregations(na); }}
+                        style={{ width: 'auto', accentColor: 'var(--violet)' }}
+                      />
+                      Many unique values
+                    </label>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -677,7 +705,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
             <button
               type="button"
               className="btn btn-ghost"
-              style={{ fontSize: '0.76rem' }}
+              style={{ fontSize: '0.75rem', marginTop: '0.1rem' }}
               onClick={() => setAggregations([...aggregations, { alias: '', field: '', function: 'COUNT', cardinality_hint: 'LOW' }])}
             >
               <Plus size={12} /> Add metric
@@ -743,19 +771,19 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
           style={{
             width: '100%',
             justifyContent: 'center',
-            fontSize: '0.84rem',
-            fontWeight: 700,
-            padding: '0.75rem 1rem',
-            borderRadius: '9px',
-            opacity: atLeastOneSink ? 1 : 0.45,
-            marginTop: '0.5rem',
-            letterSpacing: '-0.01em',
-            gap: '0.5rem',
+            fontSize: '0.83rem',
+            fontWeight: 600,
+            padding: '0.7rem 1rem',
+            borderRadius: '7px',
+            opacity: atLeastOneSink ? 1 : 0.4,
+            marginTop: '0.625rem',
+            letterSpacing: '0.01em',
+            gap: '0.45rem',
           }}
           disabled={!atLeastOneSink}
         >
-          <Save size={15} />
-          Save Rule as Draft
+          <Save size={14} />
+          Save as Draft
         </button>
       </form>
     </div>
