@@ -1,7 +1,7 @@
 import React from 'react';
-import { Send, PlayCircle, PauseCircle, Trash2, Shield, Clock, Filter, Layers, BarChart3, AlertTriangle, Zap } from 'lucide-react';
+import { Send, PlayCircle, PauseCircle, Trash2, Shield, Clock, Filter, Layers, BarChart3, AlertTriangle, Zap, Pencil } from 'lucide-react';
 
-export default function RuleSummaryPanel({ rule, fetchRules }) {
+export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
 
   const publishRule = async (id) => {
     try {
@@ -402,21 +402,51 @@ export default function RuleSummaryPanel({ rule, fetchRules }) {
 
       {/* Section 3 — Actions */}
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', paddingTop: '0.5rem' }}>
+
+        {/* DRAFT: Publish + Edit */}
         {meta.status === 'DRAFT' && (
-          <button className="btn btn-accent" style={{ flex: 1, justifyContent: 'center', fontSize: '0.9rem' }} onClick={() => publishRule(meta.rule_id)}>
-            <Send size={16} /> Move to Prod
-          </button>
+          <>
+            <button className="btn btn-accent" style={{ flex: 1, justifyContent: 'center', fontSize: '0.9rem' }} onClick={() => publishRule(meta.rule_id)}>
+              <Send size={16} /> Move to Prod
+            </button>
+            <button
+              className="btn"
+              style={{ background: 'rgba(99,102,241,0.2)', border: '1px solid rgba(99,102,241,0.4)', color: '#a5b4fc', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
+              onClick={() => navigateToEdit && navigateToEdit(rule)}
+            >
+              <Pencil size={15} /> Edit Rule
+            </button>
+          </>
         )}
+
+        {/* ACTIVE: Pause (to enable editing) */}
         {meta.status === 'ACTIVE' && (
-          <button className="btn" style={{ background: 'var(--warning)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }} onClick={() => updateStatus(meta.rule_id, 'PAUSED')}>
+          <button
+            className="btn"
+            style={{ background: 'var(--warning)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
+            onClick={() => updateStatus(meta.rule_id, 'PAUSED')}
+            title="Pausing the rule brings it back to draft, enabling editing."
+          >
             <PauseCircle size={16} /> Pause
           </button>
         )}
+
+        {/* PAUSED: Resume + Edit */}
         {meta.status === 'PAUSED' && (
-          <button className="btn" style={{ background: 'var(--success)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }} onClick={() => updateStatus(meta.rule_id, 'ACTIVE')}>
-            <PlayCircle size={16} /> Resume
-          </button>
+          <>
+            <button className="btn" style={{ background: 'var(--success)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }} onClick={() => updateStatus(meta.rule_id, 'ACTIVE')}>
+              <PlayCircle size={16} /> Resume
+            </button>
+            <button
+              className="btn"
+              style={{ background: 'rgba(99,102,241,0.2)', border: '1px solid rgba(99,102,241,0.4)', color: '#a5b4fc', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
+              onClick={() => navigateToEdit && navigateToEdit(rule)}
+            >
+              <Pencil size={15} /> Edit Rule
+            </button>
+          </>
         )}
+
         <button className="btn" style={{ background: 'var(--danger)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }} onClick={() => deleteRule(meta.rule_id)}>
           <Trash2 size={16} /> Delete
         </button>

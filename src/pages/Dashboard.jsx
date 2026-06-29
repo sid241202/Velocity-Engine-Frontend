@@ -16,6 +16,7 @@ export default function Dashboard() {
   const [selectedRuleIds, setSelectedRuleIds] = useState(new Set());
   const [summaryRuleId, setSummaryRuleId] = useState(null);
   const [backendStatus, setBackendStatus] = useState('connecting');
+  const [editingRule, setEditingRule] = useState(null);
 
   const fetchRules = useCallback(async () => {
     try {
@@ -44,6 +45,15 @@ export default function Dashboard() {
   const navigateToSummary = (ruleId) => {
     setSummaryRuleId(ruleId);
     setActiveTab('summary');
+  };
+
+  const navigateToEdit = (rule) => {
+    setEditingRule(rule);
+    setActiveTab('build');
+  };
+
+  const handleEditComplete = () => {
+    setEditingRule(null);
   };
 
   const navItems = [
@@ -77,7 +87,12 @@ export default function Dashboard() {
       case 'build':
         return (
           <ErrorBoundary label="Rule Builder">
-            <RuleBuilderPage rules={rules} fetchRules={fetchRules} />
+            <RuleBuilderPage
+              rules={rules}
+              fetchRules={fetchRules}
+              editingRule={editingRule}
+              onEditComplete={handleEditComplete}
+            />
           </ErrorBoundary>
         );
       case 'summary':
@@ -86,6 +101,7 @@ export default function Dashboard() {
             <RuleSummaryPanel
               rule={rules.find(r => r.rule_metadata?.rule_id === summaryRuleId)}
               fetchRules={fetchRules}
+              navigateToEdit={navigateToEdit}
             />
           </ErrorBoundary>
         );

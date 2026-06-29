@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, Zap, Clock, Database, Filter, BarChart2, Bell } from 'lucide-react';
 import VisualThresholdBuilder from './VisualThresholdBuilder';
 import VisualFilterBuilder, { processFilterTree } from './VisualFilterBuilder';
@@ -132,8 +132,17 @@ function ttlToSeconds(amount, unit) {
   return Math.round(Number(amount) * (u ? u.factor : 1));
 }
 
+/* ─── TTL reverse helper ─────────────────────────────────────── */
+function secondsToTtl(totalSeconds) {
+  if (!totalSeconds || totalSeconds <= 0) return { amount: 1, unit: 'hr' };
+  if (totalSeconds % 86400 === 0) return { amount: totalSeconds / 86400, unit: 'day' };
+  if (totalSeconds % 3600 === 0) return { amount: totalSeconds / 3600, unit: 'hr' };
+  if (totalSeconds % 60 === 0)   return { amount: totalSeconds / 60, unit: 'min' };
+  return { amount: totalSeconds, unit: 'sec' };
+}
+
 /* ─── Main Component ─────────────────────────────────────────── */
-export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
+export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRule, onEditComplete }) {
   // ── Core ───────────────────────────────────────────────────────
   const [ruleId, setRuleId]       = useState(crypto.randomUUID());
 
@@ -180,6 +189,74 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
   const [anomalyStoreSinkEnabled,setAnomalyStoreSinkEnabled] = useState(true);
   const atLeastOneSink = aggSinkEnabled || anomalySinkEnabled || anomalyStoreSinkEnabled;
 
+  // Load an existing rule into the form for editing
+  useEffect(() => {
+    if (!editingRule) return;
+    const meta = editingRule.rule_metadata || {};
+    const grouping = editingRule.grouping || {};
+    const w = editingRule.windowing || {};
+    const aggs = editingRule.aggregations || [];
+    const sinks = editingRule.sinks || {};
+    const having = editingRule.having_thresholds || {};
+
+    // Core
+    setRuleId(meta.rule_id || crypto.randomUUID());
+    setSeverity(meta.severity_level || 'HIGH');
+    const { amount, unit } = secondsToTtl(meta.penalty_ttl_seconds);
+    setTtlAmount(amount); setTtlUnit(unit);
+
+    // Windowing
+    setWindowType(w.type || 'SLIDING');
+    setTimeType(w.time_type || 'EVENT_TIME');
+    if (w.use_kafka_timestamp) {
+      setEventTimeSource('KAFKA_TIMESTAMP');
+    } else if (w.timestamp_field && w.timestamp_field !== '_event_timestamp_epoch_ms') {
+      setEventTimeSource('CUSTOM');
+      setCustomTsField(w.timestamp_field || '');
+      setCustomTsFormat(w.timestamp_format || 'EPOCH_MILLIS');
+    } else {
+      setEventTimeSource('KAFKA_TIMESTAMP');
+    }
+    setWindowSize(w.size_ms ? w.size_ms / 1000 : DEFAULT_WINDOW_SIZE_SEC);
+    setWindowSlide(w.slide_ms ? w.slide_ms / 1000 : DEFAULT_SLIDE_SEC);
+    setLateness(w.allowed_lateness_ms ? w.allowed_lateness_ms / 1000 : 0);
+    const offsetSec = w.alignment_offset_ms ? Math.floor(w.alignment_offset_ms / 1000) : 0;
+    setAlignHour(Math.floor(offsetSec / 3600));
+    setAlignMinute(Math.floor((offsetSec % 3600) / 60));
+    setAlignSecond(offsetSec % 60);
+
+    // Grouping
+    const isGlob = grouping.keys?.includes('__GLOBAL__');
+    setIsGlobal(isGlob);
+    setKeys(isGlob ? ['_data.aua'] : (grouping.keys || ['_data.aua']));
+    setEntityName(grouping.entity_name || '');
+    if (grouping.anomaly_entity_field) {
+      setUseAnomalyEntityField(true);
+      setAnomalyEntityField(grouping.anomaly_entity_field);
+    } else {
+      setUseAnomalyEntityField(false);
+      setAnomalyEntityField('');
+    }
+
+    // Filters
+    if (editingRule.filters && editingRule.filters.type) {
+      setFilterTree(editingRule.filters);
+    } else {
+      setFilterTree({ type: 'group', logic: 'AND', conditions: [] });
+    }
+
+    // Aggregations
+    setAggregations(aggs.length > 0 ? aggs : [{ alias: 'total_count', field: '_data.authCode', function: 'COUNT', cardinality_hint: 'LOW' }]);
+
+    // Having / Alert condition
+    setJexlExpression(having.expression || '');
+
+    // Sinks
+    setAggSinkEnabled(sinks.agg_sink_enabled !== false);
+    setAnomalySinkEnabled(sinks.anomaly_sink_enabled !== false);
+    setAnomalyStoreSinkEnabled(sinks.anomaly_store_sink_enabled !== false);
+  }, [editingRule]);
+
   const resetForm = () => {
     setRuleId(crypto.randomUUID());
 
@@ -197,6 +274,8 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
     setJexlExpression('');
     setAggSinkEnabled(true); setAnomalySinkEnabled(true); setAnomalyStoreSinkEnabled(true);
   };
+
+  const isEditing = !!editingRule;
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -223,10 +302,9 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
 
     const payload = {
       rule_metadata: {
-        rule_id:            ruleId,
-
-        status:             'DRAFT',
-        severity_level:     severity,
+        rule_id:             ruleId,
+        status:              'DRAFT',
+        severity_level:      severity,
         penalty_ttl_seconds: penaltyTtlSeconds,
       },
       execution_routing: { target_source_topic: DEFAULT_SOURCE_TOPIC },
@@ -247,21 +325,27 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
       aggregations,
       having_thresholds: { expression: jexlExpression },
       sinks: {
-        agg_sink_enabled:          aggSinkEnabled,
-        anomaly_sink_enabled:      anomalySinkEnabled,
+        agg_sink_enabled:           aggSinkEnabled,
+        anomaly_sink_enabled:       anomalySinkEnabled,
         anomaly_store_sink_enabled: anomalyStoreSinkEnabled,
       },
     };
 
     try {
-      const res = await fetch(`${API_BASE}/rules`, {
-        method:  'POST',
+      const url    = isEditing ? `${API_BASE}/rules/${ruleId}` : `${API_BASE}/rules`;
+      const method = isEditing ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
       });
       if (res.ok) {
-        alert('Rule saved as draft. Go to Rule Details to review and publish.');
+        const msg = isEditing
+          ? 'Rule updated and saved as draft. Go to Rule Details to review and re-publish.'
+          : 'Rule saved as draft. Go to Rule Details to review and publish.';
+        alert(msg);
         fetchRules();
+        if (isEditing && onEditComplete) onEditComplete();
         resetForm();
       } else {
         const text = await res.text().catch(() => '');
@@ -296,11 +380,13 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus }) {
         </div>
         <div>
           <h2 style={{ fontSize: '0.92rem', fontWeight: 700, letterSpacing: '-0.025em', color: 'var(--text-1)', margin: 0 }}>
-            New Detection Rule
+            {isEditing ? 'Edit Detection Rule' : 'New Detection Rule'}
           </h2>
-          <p style={{ fontSize: '0.7rem', color: 'var(--text-3)', margin: 0 }}>Saved as draft — publish when ready</p>
+          <p style={{ fontSize: '0.7rem', color: 'var(--text-3)', margin: 0 }}>
+            {isEditing ? 'Editing draft — changes saved as new version' : 'Saved as draft — publish when ready'}
+          </p>
         </div>
-        <span className="badge badge-draft" style={{ marginLeft: 'auto' }}>Draft</span>
+        <span className="badge badge-draft" style={{ marginLeft: 'auto' }}>{isEditing ? 'Editing' : 'Draft'}</span>
       </div>
 
       <form onSubmit={handleSave}>
