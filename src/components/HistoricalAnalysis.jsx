@@ -6,6 +6,14 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import { getRuleColor, RULE_COLORS } from '../constants';
+import {
+  toISTDatetimeLocal,
+  toISTDatetimeLocalFromOffset,
+  istDatetimeLocalToEpochMs,
+  istDatetimeLocalToBackendStr,
+  validateISTRange,
+  formatISTDateTime,
+} from '../utils/istUtils';
 
 const TOOLTIP_STYLE = {
   contentStyle: {
@@ -21,22 +29,15 @@ const TOOLTIP_STYLE = {
 const AXIS_STROKE = '#94a3b8';
 const GRID_PROPS = { strokeDasharray: '3 3', stroke: '#334155' };
 
+// formatTime: always display timestamps in IST
 function formatTime(ts) {
-  if (!ts) return '';
-  const d = new Date(ts);
-  if (isNaN(d.getTime())) return ts;
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' });
-}
-
-function toLocalDatetimeStr(date) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return formatISTDateTime(ts);
 }
 
 export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
-  const [initNow] = useState(() => new Date());
-  const [startTs, setStartTs] = useState(() => toLocalDatetimeStr(new Date(Date.now() - 24 * 60 * 60 * 1000)));
-  const [endTs, setEndTs] = useState(() => toLocalDatetimeStr(new Date()));
+  // Initialize datetime-local values in IST (not browser local time)
+  const [startTs, setStartTs] = useState(() => toISTDatetimeLocal(Date.now() - 24 * 60 * 60 * 1000));
+  const [endTs, setEndTs] = useState(() => toISTDatetimeLocal(Date.now()));
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -63,20 +64,11 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
     [rules, effectiveRuleId]
   );
 
-  const minDate = toLocalDatetimeStr(new Date(initNow.getTime() - 7 * 24 * 60 * 60 * 1000));
-  const maxDate = toLocalDatetimeStr(new Date());
+  // min/max for datetime-local inputs — computed in IST
+  const minDate = toISTDatetimeLocalFromOffset(-7 * 24 * 60 * 60 * 1000);
+  const maxDate = toISTDatetimeLocal(Date.now());
 
-  const validate = () => {
-    const s = new Date(startTs);
-    const e = new Date(endTs);
-    const currentNow = new Date();
-    const sevenDaysAgo = new Date(currentNow.getTime() - 7 * 24 * 60 * 60 * 1000);
-    if (isNaN(s.getTime()) || isNaN(e.getTime())) return 'Invalid date format.';
-    if (s >= e) return 'Start must be before end.';
-    if (s < sevenDaysAgo) return 'Start cannot be more than 7 days ago.';
-    if (e > currentNow) return 'End cannot be in the future.';
-    return '';
-  };
+  const validate = () => validateISTRange(startTs, endTs);
 
   /* Get aggregation aliases from the rule's aggregations array */
   const aggAliases = useMemo(() => {
@@ -96,11 +88,15 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
     }
     setError('');
     setLoading(true);
-    const sISO = new Date(startTs).toISOString();
-    const eISO = new Date(endTs).toISOString();
+
+    // Convert IST datetime-local values to naive IST strings that the Go backend
+    // parseIST() function expects: "YYYY-MM-DD HH:MM:SS"
+    const sFormatted = istDatetimeLocalToBackendStr(startTs);
+    const eFormatted = istDatetimeLocalToBackendStr(endTs);
+
     try {
       const res = await fetch(
-        `/api/rules/historical-analysis?start_ts=${sISO}&end_ts=${eISO}`,
+        `/api/rules/historical-analysis?start_ts=${encodeURIComponent(sFormatted)}&end_ts=${encodeURIComponent(eFormatted)}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -111,7 +107,8 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
         const json = await res.json();
         setData(json.results || []);
       } else {
-        setError('Server returned an error. Check backend logs.');
+        const errJson = await res.json().catch(() => ({}));
+        setError(errJson.detail || 'Server returned an error. Check backend logs.');
       }
     } catch (e) {
       console.error('Historical fetch error:', e);
@@ -238,11 +235,11 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
           </div>
         )}
         <div className="form-group" style={{ flex: 1, marginBottom: 0, minWidth: 200 }}>
-          <label>Start Time</label>
+          <label>Start Time (IST)</label>
           <input type="datetime-local" value={startTs} onChange={e => setStartTs(e.target.value)} min={minDate} max={maxDate} />
         </div>
         <div className="form-group" style={{ flex: 1, marginBottom: 0, minWidth: 200 }}>
-          <label>End Time</label>
+          <label>End Time (IST)</label>
           <input type="datetime-local" value={endTs} onChange={e => setEndTs(e.target.value)} min={minDate} max={maxDate} />
         </div>
         <button
