@@ -15,6 +15,14 @@ function Tip({ text }) {
   );
 }
 
+function generateId() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 function FieldLabel({ label, tip, required }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '0.3rem' }}>
@@ -160,7 +168,7 @@ function secondsToTtl(totalSeconds) {
 export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRule, onEditComplete }) {
 
   // ── Core ───────────────────────────────────────────────────────
-  const [ruleId, setRuleId]         = useState(crypto.randomUUID());
+  const [ruleId, setRuleId]         = useState(generateId());
   const [severity, setSeverity]     = useState('HIGH');
   const [ttlAmount, setTtlAmount]   = useState(1);
   const [ttlUnit,   setTtlUnit]     = useState('hr');
@@ -251,7 +259,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
     const sinks    = editingRule.sinks || {};
     const having   = editingRule.having_thresholds || {};
 
-    setRuleId(meta.rule_id || crypto.randomUUID());
+    setRuleId(meta.rule_id || generateId());
     setSeverity(meta.severity_level || 'HIGH');
     const { amount, unit } = secondsToTtl(meta.penalty_ttl_seconds);
     setTtlAmount(amount); setTtlUnit(unit);
@@ -291,7 +299,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
   }, [editingRule]);
 
   const resetForm = () => {
-    setRuleId(crypto.randomUUID());
+    setRuleId(generateId());
     setSeverity('HIGH');
     setTtlAmount(1); setTtlUnit('hr');
     setNoWindowing(false);

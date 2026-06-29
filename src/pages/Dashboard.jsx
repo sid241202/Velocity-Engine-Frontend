@@ -68,7 +68,7 @@ export default function Dashboard() {
     switch (activeTab) {
       case 'live':
         return (
-          <ErrorBoundary label="Live Analysis">
+          <ErrorBoundary label="Live Analysis" showDetails={true}>
             <LiveAnalysis rules={rules} selectedRuleIds={selectedRuleIds} />
           </ErrorBoundary>
         );
