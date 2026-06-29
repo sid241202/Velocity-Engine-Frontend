@@ -64,7 +64,9 @@ export default function SavedRulesSidebar({
                 borderLeft: `3px solid ${isSelected ? color : 'transparent'}`,
                 padding: '0.6rem 0.75rem',
                 cursor: isAnalysisPage ? 'pointer' : 'default',
-                transition: 'all 0.15s ease',
+                /* Specific transitions only — 'transition: all' causes layout bounce */
+                transition: 'border-color 0.15s ease, background 0.15s ease',
+
               }}
               onMouseEnter={e => {
                 if (!isSelected) e.currentTarget.style.background = 'var(--surface-3)';

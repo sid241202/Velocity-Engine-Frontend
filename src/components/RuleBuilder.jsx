@@ -5,10 +5,52 @@ import VisualFilterBuilder, { processFilterTree } from './VisualFilterBuilder';
 import { API_BASE, DEFAULT_SOURCE_TOPIC, DEFAULT_PENALTY_TTL_SEC, DEFAULT_WINDOW_SIZE_SEC, DEFAULT_SLIDE_SEC } from '../config/appConfig';
 import { isValidRuleId, isNonEmpty, isValidJexlAlias, isPositiveInt } from '../utils/validators';
 
-/* ─── Helpers ─────────────────────────────────────────────────── */
+/* ─── Smart Tooltip with viewport-aware positioning ─────────────── */
 function Tip({ text }) {
+  const wrapRef = React.useRef(null);
+
+  const handleMouseEnter = React.useCallback(() => {
+    if (!wrapRef.current) return;
+    const tipEl = wrapRef.current.querySelector('.tooltip-text');
+    if (!tipEl) return;
+
+    // Reset to default absolute positioning first
+    tipEl.style.position = '';
+    tipEl.style.left = '';
+    tipEl.style.right = '';
+    tipEl.style.top = '';
+    tipEl.style.bottom = '';
+    tipEl.style.transform = '';
+
+    // Measure icon position relative to viewport
+    const iconRect = wrapRef.current.getBoundingClientRect();
+    const tipWidth = tipEl.offsetWidth || 240;
+    const tipHeight = tipEl.offsetHeight || 90;
+    const margin = 10;
+
+    let left = iconRect.left + iconRect.width / 2 - tipWidth / 2;
+    let top  = iconRect.top - tipHeight - margin;
+
+    // Clamp horizontally
+    if (left < margin) left = margin;
+    if (left + tipWidth > window.innerWidth - margin) {
+      left = window.innerWidth - tipWidth - margin;
+    }
+
+    // If would go off screen top, show below instead
+    if (top < margin) {
+      top = iconRect.bottom + margin;
+    }
+
+    tipEl.style.position  = 'fixed';
+    tipEl.style.left      = `${left}px`;
+    tipEl.style.top       = `${top}px`;
+    tipEl.style.transform = 'none';
+    tipEl.style.bottom    = 'auto';
+  }, []);
+
   return (
-    <span className="tooltip-wrap">
+    <span className="tooltip-wrap" ref={wrapRef} onMouseEnter={handleMouseEnter}>
       <span className="tooltip-icon">?</span>
       <span className="tooltip-text">{text}</span>
     </span>
@@ -69,6 +111,7 @@ function Section({ icon: Icon, iconColor = 'var(--violet-light)', title, tip, ba
       borderRadius: '8px',
       background: 'var(--surface-2)',
       border: '1px solid var(--border)',
+      /* overflow visible is CRITICAL — overflow:hidden clips tooltips */
       overflow: 'visible',
       opacity: dimmed ? 0.45 : 1,
       pointerEvents: dimmed ? 'none' : undefined,
@@ -76,19 +119,22 @@ function Section({ icon: Icon, iconColor = 'var(--violet-light)', title, tip, ba
     }}>
       <div style={{
         display: 'flex', alignItems: 'center', gap: '0.5rem',
-        padding: '0.625rem 1rem',
+        padding: '0.7rem 1rem',
         background: 'var(--surface-3)',
         borderBottom: '1px solid var(--border)',
+        borderRadius: '8px 8px 0 0',
+        /* overflow visible so tooltip inside header is not clipped */
+        overflow: 'visible',
       }}>
         <div style={{
-          width: 22, height: 22, borderRadius: 5,
+          width: 24, height: 24, borderRadius: 6,
           background: `${iconColor}15`,
           border: `1px solid ${iconColor}25`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
         }}>
-          <Icon size={12} color={iconColor} strokeWidth={2.2} />
+          <Icon size={13} color={iconColor} strokeWidth={2.2} />
         </div>
-        <span style={{ fontSize: '0.76rem', fontWeight: 600, color: dimmed ? 'var(--text-3)' : 'var(--text-1)', letterSpacing: '0.005em' }}>{title}</span>
+        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: dimmed ? 'var(--text-3)' : 'var(--text-1)', letterSpacing: '0.005em' }}>{title}</span>
         {tip && <Tip text={tip} />}
         {badge && <span className="badge badge-violet" style={{ marginLeft: 'auto' }}>{badge}</span>}
         {dimmed && <span className="badge" style={{ marginLeft: badge ? '0.5rem' : 'auto', background: 'rgba(100,100,100,0.2)', color: 'var(--text-3)' }}>N/A in No-Window mode</span>}
@@ -119,6 +165,7 @@ function SinkCard({ id, accentColor, title, subtitle, checked, onChange, disable
         border: checked ? `1px solid ${accentColor}40` : '1px solid var(--border)',
         background: checked ? `${accentColor}0d` : 'var(--surface-3)',
         cursor: disabled ? 'not-allowed' : 'pointer',
+        /* Specific transitions only — never 'all' which causes layout bounce */
         transition: 'border-color 0.14s ease, background 0.14s ease, opacity 0.14s ease',
         flex: '1 1 0',
         minWidth: '140px',
@@ -134,7 +181,7 @@ function SinkCard({ id, accentColor, title, subtitle, checked, onChange, disable
         style={{ width: 'auto', marginTop: 3, accentColor, flexShrink: 0 }}
       />
       <span>
-        <span style={{ color: checked ? accentColor : 'var(--text-1)', fontWeight: 600, fontSize: '0.8rem', display: 'block', marginBottom: '0.18rem', transition: 'color 0.15s' }}>
+        <span style={{ color: checked ? accentColor : 'var(--text-1)', fontWeight: 600, fontSize: '0.8rem', display: 'block', marginBottom: '0.18rem', transition: 'color 0.15s ease' }}>
           {title}
         </span>
         <span style={{ color: 'var(--text-3)', fontSize: '0.7rem', lineHeight: 1.45 }}>{subtitle}</span>
@@ -572,13 +619,15 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
             ].map(({ val, label, tip }) => (
               <label key={String(val)} style={{
                 display: 'flex', alignItems: 'center', gap: '0.5rem',
-                padding: '0.6rem 1rem',
+                padding: '0.65rem 1rem',
                 borderRadius: '8px',
                 border: noWindowing === val ? '1px solid rgba(99,102,241,0.6)' : '1px solid var(--border)',
                 background: noWindowing === val ? 'rgba(99,102,241,0.12)' : 'var(--surface-3)',
                 cursor: 'pointer', fontSize: '0.82rem', fontWeight: 500,
                 color: noWindowing === val ? 'var(--violet-light)' : 'var(--text-2)',
-                transition: 'border-color 0.15s ease, background 0.15s ease, color 0.15s ease', flex: '1 1 auto',
+                /* Specific transitions only — 'all' causes bounce */
+                transition: 'border-color 0.15s ease, background 0.15s ease, color 0.15s ease',
+                flex: '1 1 auto',
               }}>
                 <input type="radio" name="windowMode" checked={noWindowing === val}
                   onChange={() => {
