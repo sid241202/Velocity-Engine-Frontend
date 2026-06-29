@@ -7,6 +7,7 @@ import RuleSummaryPanel from '../components/RuleSummaryPanel';
 import LiveAnalysis from '../components/LiveAnalysis';
 import AggregatedAnalysis from '../components/AggregatedAnalysis';
 import HistoricalAnalysis from '../components/HistoricalAnalysis';
+import ErrorBoundary from '../components/ErrorBoundary';
 import { API_BASE } from '../config/appConfig';
 
 export default function Dashboard() {
@@ -55,16 +56,39 @@ export default function Dashboard() {
 
   const renderPage = () => {
     switch (activeTab) {
-      case 'live':       return <LiveAnalysis rules={rules} selectedRuleIds={selectedRuleIds} />;
-      case 'agg':        return <AggregatedAnalysis rules={rules} selectedRuleIds={selectedRuleIds} />;
-      case 'historical': return <HistoricalAnalysis rules={rules} selectedRuleIds={selectedRuleIds} />;
-      case 'build':      return <RuleBuilderPage rules={rules} fetchRules={fetchRules} />;
-      case 'summary':    return (
-        <RuleSummaryPanel
-          rule={rules.find(r => r.rule_metadata?.rule_id === summaryRuleId)}
-          fetchRules={fetchRules}
-        />
-      );
+      case 'live':
+        return (
+          <ErrorBoundary label="Live Analysis">
+            <LiveAnalysis rules={rules} selectedRuleIds={selectedRuleIds} />
+          </ErrorBoundary>
+        );
+      case 'agg':
+        return (
+          <ErrorBoundary label="Aggregated Analysis">
+            <AggregatedAnalysis rules={rules} selectedRuleIds={selectedRuleIds} />
+          </ErrorBoundary>
+        );
+      case 'historical':
+        return (
+          <ErrorBoundary label="Historical Analysis">
+            <HistoricalAnalysis rules={rules} selectedRuleIds={selectedRuleIds} />
+          </ErrorBoundary>
+        );
+      case 'build':
+        return (
+          <ErrorBoundary label="Rule Builder">
+            <RuleBuilderPage rules={rules} fetchRules={fetchRules} />
+          </ErrorBoundary>
+        );
+      case 'summary':
+        return (
+          <ErrorBoundary label="Rule Details">
+            <RuleSummaryPanel
+              rule={rules.find(r => r.rule_metadata?.rule_id === summaryRuleId)}
+              fetchRules={fetchRules}
+            />
+          </ErrorBoundary>
+        );
       default: return null;
     }
   };
