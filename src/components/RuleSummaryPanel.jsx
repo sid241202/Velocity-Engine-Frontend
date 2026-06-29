@@ -1,19 +1,26 @@
 import React from 'react';
 import { Send, PlayCircle, PauseCircle, Trash2, Shield, Clock, Filter, Layers, BarChart3, AlertTriangle, Zap, Pencil } from 'lucide-react';
+import { API_BASE } from '../config/appConfig';
 
 export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
+  const [isActioning, setIsActioning] = React.useState(false);
 
   const publishRule = async (id) => {
+    if (isActioning) return;
+    setIsActioning(true);
     try {
-      const res = await fetch(`/api/rules/${id}/prod`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/rules/${id}/prod`, { method: 'POST' });
       if (res.ok) { alert('Rule published successfully!'); fetchRules(); }
       else { alert('Failed to publish. Check backend logs.'); }
     } catch (e) { console.error(e); alert('Network error.'); }
+    finally { setIsActioning(false); }
   };
 
   const updateStatus = async (id, status) => {
+    if (isActioning) return;
+    setIsActioning(true);
     try {
-      const res = await fetch(`/api/rules/${id}/status`, {
+      const res = await fetch(`${API_BASE}/rules/${id}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
@@ -21,15 +28,19 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
       if (res.ok) { alert(`Rule is now ${status}`); fetchRules(); }
       else { alert('Failed to update status. Check backend logs.'); }
     } catch (e) { console.error(e); alert('Network error.'); }
+    finally { setIsActioning(false); }
   };
 
   const deleteRule = async (id) => {
-    if (!window.confirm('Deactivate this rule and move it back to draft?')) return;
+    if (!window.confirm('Permanently delete this rule?')) return;
+    if (isActioning) return;
+    setIsActioning(true);
     try {
-      const res = await fetch(`/api/rules/${id}`, { method: 'DELETE' });
-      if (res.ok) { alert('Rule deactivated and moved to draft.'); fetchRules(); }
+      const res = await fetch(`${API_BASE}/rules/${id}`, { method: 'DELETE' });
+      if (res.ok) { alert('Rule deleted successfully.'); fetchRules(); }
       else { alert('Failed to delete. Check backend logs.'); }
     } catch (e) { console.error(e); alert('Network error.'); }
+    finally { setIsActioning(false); }
   };
 
   if (!rule) {
@@ -406,8 +417,8 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
         {/* DRAFT: Publish + Edit */}
         {meta.status === 'DRAFT' && (
           <>
-            <button className="btn btn-accent" style={{ flex: 1, justifyContent: 'center', fontSize: '0.9rem' }} onClick={() => publishRule(meta.rule_id)}>
-              <Send size={16} /> Move to Prod
+            <button className="btn btn-accent" style={{ flex: 1, justifyContent: 'center', fontSize: '0.9rem' }} onClick={() => publishRule(meta.rule_id)} disabled={isActioning}>
+              <Send size={16} /> {isActioning ? 'Publishing…' : 'Move to Prod'}
             </button>
             <button
               className="btn"
@@ -426,16 +437,17 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
             style={{ background: 'var(--warning)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
             onClick={() => updateStatus(meta.rule_id, 'PAUSED')}
             title="Pausing the rule brings it back to draft, enabling editing."
+            disabled={isActioning}
           >
-            <PauseCircle size={16} /> Pause
+            <PauseCircle size={16} /> {isActioning ? 'Pausing…' : 'Pause'}
           </button>
         )}
 
         {/* PAUSED: Resume + Edit */}
         {meta.status === 'PAUSED' && (
           <>
-            <button className="btn" style={{ background: 'var(--success)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }} onClick={() => updateStatus(meta.rule_id, 'ACTIVE')}>
-              <PlayCircle size={16} /> Resume
+            <button className="btn" style={{ background: 'var(--success)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }} onClick={() => updateStatus(meta.rule_id, 'ACTIVE')} disabled={isActioning}>
+              <PlayCircle size={16} /> {isActioning ? 'Resuming…' : 'Resume'}
             </button>
             <button
               className="btn"
@@ -447,8 +459,8 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
           </>
         )}
 
-        <button className="btn" style={{ background: 'var(--danger)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }} onClick={() => deleteRule(meta.rule_id)}>
-          <Trash2 size={16} /> Delete
+        <button className="btn" style={{ background: 'var(--danger)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }} onClick={() => deleteRule(meta.rule_id)} disabled={isActioning}>
+          <Trash2 size={16} /> {isActioning ? 'Deleting…' : 'Delete'}
         </button>
       </div>
     </div>

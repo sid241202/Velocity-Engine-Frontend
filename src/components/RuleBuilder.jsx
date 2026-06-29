@@ -61,7 +61,7 @@ function Section({ icon: Icon, iconColor = 'var(--violet-light)', title, tip, ba
       borderRadius: '8px',
       background: 'var(--surface-2)',
       border: '1px solid var(--border)',
-      overflow: 'hidden',
+      overflow: 'visible',
       opacity: dimmed ? 0.45 : 1,
       pointerEvents: dimmed ? 'none' : undefined,
       transition: 'opacity 0.2s ease',
@@ -111,7 +111,7 @@ function SinkCard({ id, accentColor, title, subtitle, checked, onChange, disable
         border: checked ? `1px solid ${accentColor}40` : '1px solid var(--border)',
         background: checked ? `${accentColor}0d` : 'var(--surface-3)',
         cursor: disabled ? 'not-allowed' : 'pointer',
-        transition: 'all 0.14s ease',
+        transition: 'border-color 0.14s ease, background 0.14s ease, opacity 0.14s ease',
         flex: '1 1 0',
         minWidth: '140px',
         opacity: disabled ? 0.5 : 1,
@@ -203,6 +203,8 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
   const [anomalyStoreSinkEnabled, setAnomalyStoreSinkEnabled] = useState(true);
 
   const atLeastOneSink = aggSinkEnabled || anomalySinkEnabled || anomalyStoreSinkEnabled;
+
+  const [isSaving, setIsSaving] = useState(false);
 
   // ── Validation ────────────────────────────────────────────────
   const errors = useMemo(() => {
@@ -310,7 +312,8 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (hasErrors) return;
+    if (hasErrors || isSaving) return;
+    setIsSaving(true);
 
     const penaltyTtlSeconds   = ttlToSeconds(ttlAmount, ttlUnit);
     const processedFilters    = processFilterTree(filterTree);
@@ -383,6 +386,8 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
     } catch (err) {
       console.error('Save error:', err);
       alert('Network error. Please check your connection and try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -565,7 +570,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
                 background: noWindowing === val ? 'rgba(99,102,241,0.12)' : 'var(--surface-3)',
                 cursor: 'pointer', fontSize: '0.82rem', fontWeight: 500,
                 color: noWindowing === val ? 'var(--violet-light)' : 'var(--text-2)',
-                transition: 'all 0.15s ease', flex: '1 1 auto',
+                transition: 'border-color 0.15s ease, background 0.15s ease, color 0.15s ease', flex: '1 1 auto',
               }}>
                 <input type="radio" name="windowMode" checked={noWindowing === val}
                   onChange={() => {
@@ -940,15 +945,15 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
             fontWeight: 600,
             padding: '0.7rem 1rem',
             borderRadius: '7px',
-            opacity: hasErrors ? 0.4 : 1,
+            opacity: (hasErrors || isSaving) ? 0.4 : 1,
             marginTop: '0.625rem',
             letterSpacing: '0.01em',
             gap: '0.45rem',
           }}
-          disabled={hasErrors}
+          disabled={hasErrors || isSaving}
         >
           <Save size={14} />
-          Save as Draft
+          {isSaving ? 'Saving…' : isEditing ? 'Update Rule' : 'Save as Draft'}
         </button>
         {hasErrors && (
           <p style={{ textAlign: 'center', marginTop: '0.45rem', fontSize: '0.71rem', color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem' }}>

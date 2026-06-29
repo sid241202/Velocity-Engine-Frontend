@@ -388,7 +388,7 @@ select {
   border-radius: 8px;
   padding: 0.65rem 0.875rem;
   cursor: pointer;
-  transition: all 0.14s ease;
+  transition: border-color 0.14s ease, background-color 0.14s ease, box-shadow 0.14s ease;
   position: relative;
 }
 
@@ -573,7 +573,7 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 8px; padding: 0.875rem;
-  cursor: pointer; transition: all 0.14s ease;
+  cursor: pointer; transition: border-color 0.14s ease, background-color 0.14s ease, box-shadow 0.14s ease;
   position: relative; overflow: hidden;
 }
 .sink-card:hover { border-color: var(--border-2); background: var(--surface-3); }
