@@ -275,7 +275,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
       {loading && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '3rem', gap: '0.75rem' }}>
           <Loader2 size={28} color="var(--primary)" style={{ animation: 'spin 1s linear infinite' }} />
-          <span style={{ color: 'var(--text-muted)', fontSize: '1rem' }}>Running DuckDB query on Iceberg data...</span>
+          <span style={{ color: 'var(--text-muted)', fontSize: '1rem' }}>Querying historical data…</span>
         </div>
       )}
 
@@ -283,7 +283,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
         <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', gap: '1rem' }}>
           <Database size={48} color="var(--text-muted)" style={{ opacity: 0.4 }} />
           <p style={{ color: 'var(--text-muted)', fontSize: '1rem', textAlign: 'center' }}>
-            Select a time range and click "Run DuckDB Simulation" to query Iceberg historical data.
+            Select a time range and click <strong>Run Replay</strong> to query historical data from ClickHouse.
           </p>
         </div>
       )}
