@@ -6,6 +6,7 @@ import {
   ResponsiveContainer, Brush, ReferenceLine
 } from 'recharts';
 import { getRuleColor } from '../constants';
+import { formatISTTime, formatISTDateTime } from '../utils/istUtils';
 
 const TOOLTIP_STYLE = {
   contentStyle: {
@@ -27,24 +28,33 @@ const STATUS_COLORS = {
   disconnected: '#ef4444',
 };
 
+// IST-safe time formatting — treats naive strings (no tz suffix) as IST
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+function parseAsIST(ts) {
+  if (!ts) return null;
+  const raw = String(ts).replace(' ', 'T');
+  const d = new Date(raw.includes('+') || raw.endsWith('Z') ? raw : raw + '+05:30');
+  return isNaN(d.getTime()) ? null : d;
+}
+
 function formatTime(ts) {
-  if (!ts) return '';
-  const d = new Date(ts);
-  if (isNaN(d.getTime())) return String(ts);
-  return d.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
+  return formatISTTime(ts);
 }
 
 function formatTimeShort(ts) {
-  if (!ts) return '';
-  const d = new Date(ts);
-  if (isNaN(d.getTime())) return String(ts);
-  return d.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  const d = parseAsIST(ts);
+  if (!d) return ts ? String(ts) : '';
+  // Use UTC offset trick to extract IST wall-clock values
+  const ist = new Date(d.getTime() + IST_OFFSET_MS);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(ist.getUTCHours())}:${pad(ist.getUTCMinutes())}:${pad(ist.getUTCSeconds())}`;
 }
 
 function timeAgo(ts) {
   if (!ts) return 'N/A';
-  const d = new Date(ts);
-  if (isNaN(d.getTime())) return 'N/A';
+  const d = parseAsIST(ts);
+  if (!d) return 'N/A';
   const diffMs = Date.now() - d.getTime();
   if (diffMs < 0) return 'Just now';
   const diffSec = Math.floor(diffMs / 1000);
@@ -131,8 +141,12 @@ export default function LiveAnalysis({ rules, selectedRuleIds }) {
       const next = { ...prev };
       if (!next[ruleId]) next[ruleId] = [];
       next[ruleId] = [...next[ruleId], normRow];
-      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      next[ruleId] = next[ruleId].filter(r => (r.windowStart || '') >= cutoff.replace('T', ' '));
+      // Build 24h cutoff as IST naive string to match windowStart format ("YYYY-MM-DD HH:MM:SS")
+      const cutoffEpoch = Date.now() - 24 * 60 * 60 * 1000;
+      const istWall = new Date(cutoffEpoch + IST_OFFSET_MS);
+      const pad = (n) => String(n).padStart(2, '0');
+      const cutoff = `${istWall.getUTCFullYear()}-${pad(istWall.getUTCMonth()+1)}-${pad(istWall.getUTCDate())} ${pad(istWall.getUTCHours())}:${pad(istWall.getUTCMinutes())}:${pad(istWall.getUTCSeconds())}`;
+      next[ruleId] = next[ruleId].filter(r => (r.windowStart || '') >= cutoff);
       return next;
     });
   }, []);
