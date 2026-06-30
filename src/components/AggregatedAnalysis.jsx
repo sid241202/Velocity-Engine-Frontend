@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { BarChart3, ArrowUpDown, Loader2, TrendingUp, AlertTriangle, Clock, Target, Activity, Zap, Shield, RefreshCw } from 'lucide-react';
+import { BarChart3, ArrowUpDown, Loader2, TrendingUp, AlertTriangle, Target, Activity, RefreshCw } from 'lucide-react';
+
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line, ComposedChart,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
