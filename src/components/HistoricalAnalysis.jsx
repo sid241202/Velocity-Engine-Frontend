@@ -200,7 +200,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
         <div style={{ textAlign: 'center' }}>
           <p style={{ color: 'var(--text-2)', fontSize: '1rem', fontWeight: 600, margin: '0 0 0.4rem' }}>Select a rule to begin</p>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0, maxWidth: 380 }}>
-            Choose a rule from the sidebar, pick a time range, and run a historical query against ClickHouse to see how that rule would have performed.
+            Choose a rule from the sidebar, pick a time range, and run a historical query against Iceberg to see how that rule would have performed.
           </p>
         </div>
       </div>
