@@ -196,13 +196,13 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
   if (selectedRuleIds.size === 0) {
     return (
       <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '500px', gap: '1.5rem' }}>
-        <History size={64} color="var(--text-muted)" style={{ opacity: 0.4 }} />
-        <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', textAlign: 'center', maxWidth: 420 }}>
-          Select a rule from the sidebar to run historical analysis
-        </p>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', opacity: 0.7, textAlign: 'center' }}>
-          This runs a DuckDB simulation against Iceberg historical data
-        </p>
+        <History size={64} color="var(--text-muted)" style={{ opacity: 0.3 }} />
+        <div style={{ textAlign: 'center' }}>
+          <p style={{ color: 'var(--text-2)', fontSize: '1rem', fontWeight: 600, margin: '0 0 0.4rem' }}>Select a rule to begin</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0, maxWidth: 380 }}>
+            Choose a rule from the sidebar, pick a time range, and run a historical query against ClickHouse to see how that rule would have performed.
+          </p>
+        </div>
       </div>
     );
   }
@@ -211,12 +211,14 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {/* Header */}
       <div className="glass-panel" style={{ paddingBottom: '1rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
-          <Database size={24} color="#60a5fa" />
-          <h2 style={{ color: 'white', margin: 0, fontSize: '1.3rem' }}>Historical Analysis (Iceberg via DuckDB)</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
+          <div style={{ width: 30, height: 30, borderRadius: 8, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Database size={16} color="#fff" strokeWidth={2.2} />
+          </div>
+          <h2 style={{ color: 'var(--text-1)', margin: 0, fontSize: '0.95rem', fontWeight: 700, letterSpacing: '-0.02em' }}>Historical Rule Replay</h2>
         </div>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0 }}>
-          This runs a DuckDB simulation against Iceberg historical data. Results may take a few seconds for large date ranges.
+        <p style={{ color: 'var(--text-3)', fontSize: '0.73rem', margin: 0 }}>
+          Replay a rule against historical data from ClickHouse to see how it would have performed. Max lookback: 7 days.
         </p>
       </div>
 
@@ -224,7 +226,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
       <div className="date-picker-row">
         {selectedRulesArr.length > 1 && (
           <div className="form-group" style={{ flex: 1.5, marginBottom: 0, minWidth: 200 }}>
-            <label>Analyze Rule</label>
+            <label className="form-label">Select Rule to Replay</label>
             <select value={effectiveRuleId} onChange={e => setChosenRuleId(e.target.value)}>
               {selectedRulesArr.map(r => (
                 <option key={r.rule_metadata.rule_id} value={r.rule_metadata.rule_id}>
@@ -235,25 +237,25 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
           </div>
         )}
         <div className="form-group" style={{ flex: 1, marginBottom: 0, minWidth: 200 }}>
-          <label>Start Time (IST)</label>
+          <label className="form-label">From (IST)</label>
           <input type="datetime-local" value={startTs} onChange={e => setStartTs(e.target.value)} min={minDate} max={maxDate} />
         </div>
         <div className="form-group" style={{ flex: 1, marginBottom: 0, minWidth: 200 }}>
-          <label>End Time (IST)</label>
+          <label className="form-label">To (IST)</label>
           <input type="datetime-local" value={endTs} onChange={e => setEndTs(e.target.value)} min={minDate} max={maxDate} />
         </div>
         <button
           className="btn btn-accent"
           onClick={fetchData}
           disabled={loading}
-          style={{ height: 40, minWidth: 180, justifyContent: 'center' }}
+          style={{ height: 40, minWidth: 165, justifyContent: 'center', gap: '0.4rem' }}
         >
           {loading ? (
             <>
-              <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-              DuckDB Computing...
+              <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+              Computing…
             </>
-          ) : 'Run DuckDB Simulation'}
+          ) : <><History size={14} /> Run Replay</> }
         </button>
       </div>
 

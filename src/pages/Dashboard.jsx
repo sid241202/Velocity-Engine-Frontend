@@ -57,11 +57,11 @@ export default function Dashboard() {
   };
 
   const navItems = [
-    { key: 'live',       label: 'Live Monitor',      icon: Activity },
-    { key: 'agg',        label: 'Aggregated',        icon: BarChart3 },
-    { key: 'historical', label: 'Historical',        icon: History },
-    { key: 'build',      label: 'New Rule',          icon: PlusSquare },
-    { key: 'summary',    label: 'Rule Details',      icon: Shield },
+    { key: 'live',       label: 'Live Stream',       icon: Activity,   tip: 'Real-time event stream & breach detection' },
+    { key: 'agg',        label: 'Analytics',         icon: BarChart3,   tip: 'Aggregated rule analysis from ClickHouse' },
+    { key: 'historical', label: 'Historical Replay', icon: History,     tip: 'Replay and test rules on historical data' },
+    { key: 'build',      label: 'Create Rule',       icon: PlusSquare,  tip: 'Build a new anomaly detection rule' },
+    { key: 'summary',    label: 'Rule Summary',      icon: Shield,      tip: 'View and manage a specific rule' },
   ];
 
   const renderPage = () => {
@@ -118,7 +118,7 @@ export default function Dashboard() {
         </div>
         <h1>Velocity Engine</h1>
         <div className="header-right">
-          <span style={{ fontSize: '0.68rem', color: 'var(--text-3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>UIDAI Auth Analytics</span>
+          <span style={{ fontSize: '0.68rem', color: 'var(--text-3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>UIDAI · Auth Analytics</span>
           <span
             className={`conn-pill ${
               backendStatus === 'up' ? 'connected' :
@@ -140,7 +140,7 @@ export default function Dashboard() {
         <div className="backend-banner">
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <AlertTriangle size={14} />
-            Backend is unreachable — the interface is in read-only mode.
+            Cannot reach backend — the interface is in read-only mode. Check that the backend service is running.
           </span>
           <button
             className="btn btn-ghost"
@@ -154,11 +154,12 @@ export default function Dashboard() {
 
       {/* Nav */}
       <nav className="nav-bar">
-        {navItems.map(({ key, label, icon: Icon }) => (
+        {navItems.map(({ key, label, icon: Icon, tip }) => (
           <button
             key={key}
             className={`nav-btn ${activeTab === key ? 'active' : ''}`}
             onClick={() => setActiveTab(key)}
+            title={tip}
           >
             <Icon size={15} />
             {label}
