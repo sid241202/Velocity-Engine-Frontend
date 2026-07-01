@@ -190,18 +190,29 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
 
   const generateSummary = (rule) => {
     const meta = rule.rule_metadata;
-    const grouping = rule.grouping;
-    const windowing = rule.windowing;
-    const aggs = rule.aggregations;
+    const grouping = rule.grouping || {};
+    const windowing = rule.windowing || {};
+    const aggs = rule.aggregations || [];
     const having = rule.having_thresholds;
     const filters = rule.filters;
 
-    const isGlobal = grouping.keys.length === 1 && grouping.keys[0] === '__GLOBAL__';
-    const groupDesc = isGlobal ? 'all events globally (no grouping)' : `events grouped by ${grouping.keys.map(k => k).join(' + ')}`;
+    // Guard: grouping.keys may be undefined on older rules
+    const keys = grouping.keys || [];
+    const isGlobal = keys.length === 1 && keys[0] === '__GLOBAL__';
+    const groupDesc = isGlobal ? 'all events globally (no grouping)' : `events grouped by ${keys.map(k => k).join(' + ')}`;
 
-    const windowDesc = windowing.size_ms >= 315360000000
-      ? 'a continuous (never-resetting) counter'
-      : `a ${windowing.type === 'SLIDING' ? 'rolling' : 'fixed'} window of ${formatMs(windowing.size_ms)}${windowing.type === 'SLIDING' ? `, sliding by ${formatMs(windowing.slide_ms)}` : ''}`;
+    let windowDesc;
+    const isNoWindow = !windowing.type || windowing.type === 'NONE';
+    if (isNoWindow) {
+      windowDesc = 'real-time stateless event evaluation (no aggregation window)';
+    } else if (windowing.size_ms >= 315360000000) {
+      windowDesc = 'a continuous (never-resetting) counter';
+    } else {
+      const slide = windowing.type === 'SLIDING' && windowing.slide_ms
+        ? `, sliding by ${formatMs(windowing.slide_ms)}`
+        : '';
+      windowDesc = `a ${windowing.type === 'SLIDING' ? 'rolling' : 'fixed'} window of ${formatMs(windowing.size_ms)}${slide}`;
+    }
 
     const timeDesc = windowing.time_type === 'EVENT_TIME'
       ? (windowing.use_kafka_timestamp ? 'message arrival timestamps' : `event timestamps from ${windowing.timestamp_field}`)
@@ -221,7 +232,11 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
       ? `An alert fires when: ${having.expression.replace(/&&/g, 'AND').replace(/\|\|/g, 'OR')}.`
       : 'No alert threshold is defined (data-only rule).';
 
-    return `This rule monitors ${groupDesc}. Using ${windowDesc} based on ${timeDesc}, it computes: ${aggDescs.join('; ')}.${filterDesc} ${thresholdDesc} Severity: ${meta.severity_level}. Alerts are suppressed for ${meta.penalty_ttl_seconds} seconds after each breach.`;
+    const aggPart = aggDescs.length > 0
+      ? `, it computes: ${aggDescs.join('; ')}.`
+      : '.';
+
+    return `This rule monitors ${groupDesc}. Using ${windowDesc} based on ${timeDesc}${aggPart}${filterDesc} ${thresholdDesc} Severity: ${meta.severity_level}. Alerts are suppressed for ${meta.penalty_ttl_seconds} seconds after each breach.`;
   };
 
   return (

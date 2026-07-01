@@ -110,7 +110,7 @@ function formatHourRange(hour) {
   return `${pad(hour)}:00–${pad(nextHour)}:00`;
 }
 
-export default function AggregatedAnalysis({ rules, selectedRuleIds }) {
+export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelectedRuleIds }) {
   // Initialize datetime-local values in IST (not browser local time)
   const [startTs, setStartTs] = useState(() => toISTDatetimeLocal(Date.now() - 24 * 60 * 60 * 1000));
   const [endTs, setEndTs] = useState(() => toISTDatetimeLocal(Date.now()));
@@ -322,7 +322,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds }) {
     for (const row of allRows) {
       const ts = row.windowStart;
       if (!timeMap[ts]) timeMap[ts] = { windowStart: ts };
-      timeMap[ts][row.ruleId] = (timeMap[ts][row.ruleId] || 0) + row.eventCount;
+      timeMap[ts][row.ruleId] = (timeMap[ts][row.ruleId] || 0) + getRowEventCount(row);
     }
     return Object.values(timeMap).sort((a, b) => new Date(a.windowStart) - new Date(b.windowStart));
   }, [allRows]);
@@ -354,8 +354,15 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds }) {
     for (const ruleId of [...selectedRuleIds]) {
       const rows = data[ruleId] || [];
       if (rows.length === 0) continue;
-      // Use normalized aggResults (supports both old and new schema)
-      const aliases = Object.keys(getAggResults(rows[0]));
+      // Collect alias union from ALL rows (not just rows[0]) so we don't miss
+      // aliases when the first row has an empty aggResult.
+      const aliasSet = new Set();
+      for (const row of rows) {
+        for (const alias of Object.keys(getAggResults(row))) {
+          aliasSet.add(alias);
+        }
+      }
+      const aliases = [...aliasSet];
       const rName = getRuleName(ruleId);
       const rColor = getRuleColor(rules, ruleId);
 
@@ -392,7 +399,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds }) {
       if (!groupMap[gk]) {
         groupMap[gk] = { groupKey: gk, ruleId: row.ruleId, totalEvents: 0, breaches: 0, totalWindows: 0, lastSeen: row.windowEnd };
       }
-      groupMap[gk].totalEvents += row.eventCount || 0;
+      groupMap[gk].totalEvents += getRowEventCount(row);
       groupMap[gk].totalWindows += 1;
       if (isBreached(row)) groupMap[gk].breaches += 1;
       if (row.windowEnd > groupMap[gk].lastSeen) groupMap[gk].lastSeen = row.windowEnd;
@@ -546,10 +553,22 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds }) {
         <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', gap: '0.875rem' }}>
           <BarChart3 size={52} color="var(--text-muted)" style={{ opacity: 0.2 }} />
           <div style={{ textAlign: 'center' }}>
-            <p style={{ color: 'var(--text-2)', fontSize: '0.9rem', fontWeight: 600, margin: '0 0 0.3rem' }}>No data yet</p>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: 0, maxWidth: 320 }}>
-              Select one or more rules from the sidebar, pick a time range, and click "Load Analytics" to query results from ClickHouse.
-            </p>
+            {allSelectedRuleIds && allSelectedRuleIds.size > 0 && selectedRuleIds.size === 0 ? (
+              <>
+                <p style={{ color: 'var(--amber)', fontSize: '0.9rem', fontWeight: 600, margin: '0 0 0.3rem' }}>Selected rules are in DRAFT status</p>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: 0, maxWidth: 360 }}>
+                  DRAFT rules have not been published to Flink and have no aggregated data in ClickHouse.
+                  Publish the rule to ACTIVE status, or use Historical Analysis to test it against raw event data.
+                </p>
+              </>
+            ) : (
+              <>
+                <p style={{ color: 'var(--text-2)', fontSize: '0.9rem', fontWeight: 600, margin: '0 0 0.3rem' }}>No data yet</p>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: 0, maxWidth: 320 }}>
+                  Select one or more rules from the sidebar, pick a time range, and click "Load Analytics" to query results from ClickHouse.
+                </p>
+              </>
+            )}
           </div>
         </div>
       )}

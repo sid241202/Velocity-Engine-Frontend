@@ -1,34 +1,83 @@
 import React from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, AlertTriangle } from 'lucide-react';
 
 // A visual builder that outputs a JEXL string.
 // Example: (total_count > 10) && (distinct_users < 5)
 
-export default function VisualThresholdBuilder({ expression, setExpression, aggregations }) {
-  
-  // We'll parse the simple string back into a tree, or just manage tree state and compile it.
-  // Given time constraints and React complexities of bidirectional string parsing, 
-  // we will manage state as a Tree, and re-compile to JEXL on every change.
-  // The user sees the tree, the backend sees the JEXL string.
+/**
+ * Attempts to parse a simple JEXL expression back into a tree.
+ * Supports the format produced by compileNode: (alias op value) [&& | ||] (alias op value)
+ * Returns null if the expression is too complex to parse.
+ */
+function tryParseExpression(expr) {
+  if (!expr) return null;
+  try {
+    // Strip outer parens if the whole expression is one group
+    const stripped = expr.trim().replace(/^\((.+)\)$/, (_, inner) => {
+      // Only strip outer parens if they match the full expression
+      let depth = 0;
+      for (let i = 0; i < expr.trim().length; i++) {
+        if (expr.trim()[i] === '(') depth++;
+        if (expr.trim()[i] === ')') depth--;
+        if (depth === 0 && i < expr.trim().length - 1) return expr.trim(); // not outer parens
+      }
+      return inner;
+    });
 
-  const [tree, setTree] = React.useState({
-    type: 'GROUP',
-    logic: '&&', // AND
-    children: [
-      { type: 'RULE', alias: aggregations[0]?.alias || '', operator: '>', value: '' }
-    ]
+    // Match individual conditions: (alias op value)
+    const conditionRe = /\(([a-zA-Z_][a-zA-Z0-9_]*)\s*(>=|<=|==|!=|>|<)\s*([\d.]+)\)/g;
+    // Detect top-level logic operator
+    const isAnd = stripped.includes('&&');
+    const isOr = stripped.includes('||');
+    const logic = isAnd ? '&&' : (isOr ? '||' : '&&');
+
+    const children = [];
+    let match;
+    while ((match = conditionRe.exec(stripped)) !== null) {
+      children.push({ type: 'RULE', alias: match[1], operator: match[2], value: match[3] });
+    }
+
+    if (children.length === 0) return null;
+    return { type: 'GROUP', logic, children };
+  } catch {
+    return null;
+  }
+}
+
+export default function VisualThresholdBuilder({ expression, setExpression, aggregations }) {
+  const [parseError, setParseError] = React.useState(false);
+
+  const [tree, setTree] = React.useState(() => {
+    // On mount: if an expression already exists (edit mode), try to parse it into the tree.
+    // This prevents the builder from overwriting an existing threshold on save.
+    if (expression && expression.trim() !== '') {
+      const parsed = tryParseExpression(expression);
+      if (parsed) return parsed;
+      // Expression is too complex to reverse-parse; flag it for the user.
+      setParseError(true);
+      return { type: 'GROUP', logic: '&&', children: [{ type: 'RULE', alias: aggregations[0]?.alias || '', operator: '>', value: '' }] };
+    }
+    return {
+      type: 'GROUP',
+      logic: '&&',
+      children: [
+        { type: 'RULE', alias: aggregations[0]?.alias || '', operator: '>', value: '' }
+      ]
+    };
   });
 
   // Reset tree if expression is cleared from outside (e.g. form reset)
   React.useEffect(() => {
     if (expression === '') {
+      setParseError(false);
       setTree({
         type: 'GROUP',
         logic: '&&',
         children: [{ type: 'RULE', alias: aggregations[0]?.alias || '', operator: '>', value: '' }]
       });
     }
-  }, [expression, aggregations]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expression]);
 
   // Re-compile whenever tree changes
   React.useEffect(() => {
@@ -53,6 +102,7 @@ export default function VisualThresholdBuilder({ expression, setExpression, aggr
   }, [tree, setExpression]);
 
   const updateNode = (path, updates) => {
+    setParseError(false); // user has started editing, clear warning
     const newTree = JSON.parse(JSON.stringify(tree));
     let curr = newTree;
     for (let i = 0; i < path.length - 1; i++) {
@@ -142,6 +192,13 @@ export default function VisualThresholdBuilder({ expression, setExpression, aggr
 
   return (
     <div>
+      {parseError && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '6px', marginBottom: '0.75rem', fontSize: '0.78rem', color: '#fbbf24' }}>
+          <AlertTriangle size={14} />
+          The existing expression is complex and cannot be visualized. Editing below will replace it.
+          The current expression is preserved in the preview below until you make changes.
+        </div>
+      )}
       {renderNode(tree, [])}
       
       <div style={{ marginTop: '1rem', padding: '0.5rem', background: 'rgba(0,0,0,0.4)', borderRadius: '4px', fontFamily: 'monospace', color: '#a78bfa', fontSize: '0.85rem' }}>

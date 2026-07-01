@@ -45,11 +45,12 @@ function formatTime(ts) {
 }
 
 function formatTimeShort(ts) {
+  // parseAsIST already appends +05:30 and returns a correct UTC Date.
+  // Read UTC hours/minutes/seconds directly — do NOT add IST_OFFSET_MS again.
   const d = parseAsIST(ts);
   if (!d) return ts ? String(ts) : '';
-  const ist = new Date(d.getTime() + IST_OFFSET_MS);
   const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(ist.getUTCHours())}:${pad(ist.getUTCMinutes())}:${pad(ist.getUTCSeconds())}`;
+  return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
 }
 
 function timeAgo(ts) {
@@ -323,8 +324,9 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     for (const row of breachRows) {
       const ts = row.evaluatedAt || row.windowEnd || row.windowStart;
       if (!ts) continue;
-      const d = new Date(ts);
-      if (isNaN(d.getTime())) continue;
+      // parseAsIST correctly handles space-separated IST strings from the backend
+      const d = parseAsIST(ts);
+      if (!d) continue;
       if (!latest || d.getTime() > latest.getTime()) latest = d;
     }
     if (!latest) return { text: 'None', color: '#94a3b8' };
@@ -333,7 +335,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     let color = '#ef4444';
     if (diffMin > 10) color = '#10b981';
     else if (diffMin >= 2) color = '#f59e0b';
-    return { text: timeAgo(latest), color };
+    return { text: timeAgo(latest.toISOString()), color };
   }, [allRows]);
 
   const breachTrend = useMemo(() => {
@@ -344,8 +346,10 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     let lastHour = 0;
     let prevHour = 0;
     for (const row of breachRows) {
-      const ts = new Date(row.windowStart || row.evaluatedAt).getTime();
-      if (isNaN(ts)) continue;
+      // Use parseAsIST — naive new Date() on space-separated IST strings is browser-dependent
+      const d = parseAsIST(row.windowStart || row.evaluatedAt);
+      if (!d) continue;
+      const ts = d.getTime();
       if (ts >= oneHourAgo && ts <= now) lastHour++;
       else if (ts >= twoHoursAgo && ts < oneHourAgo) prevHour++;
     }

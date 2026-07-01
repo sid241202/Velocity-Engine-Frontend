@@ -124,7 +124,7 @@ export default function SavedRulesSidebar({
                     </span>
                     <button
                       onClick={e => { e.stopPropagation(); navigateToSummary(ruleId); }}
-                      className="btn-ghost"
+                      className="btn btn-ghost"
                       style={{
                         background: 'none', border: 'none', cursor: 'pointer',
                         padding: '2px', borderRadius: '4px',

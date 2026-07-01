@@ -41,15 +41,21 @@ export default function Dashboard() {
   };
 
   const fetchRules = useCallback(async () => {
+    const controller = new AbortController();
+    // 10-second timeout: if the backend is hanging (no response, not closed),
+    // transition to 'down' state so the offline banner is shown promptly.
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
-      const res = await fetch(`${API_BASE}/rules`);
+      const res = await fetch(`${API_BASE}/rules`, { signal: controller.signal });
+      clearTimeout(timeoutId);
       if (!res.ok) { setBackendStatus('down'); return; }
       const ct = res.headers.get('content-type');
       if (!ct || !ct.includes('application/json')) { setBackendStatus('down'); return; }
       const data = await res.json();
       setRules(Array.isArray(data) ? data : []);
       setBackendStatus('up');
-    } catch {
+    } catch (err) {
+      clearTimeout(timeoutId);
       setBackendStatus('down');
     }
   }, []);
