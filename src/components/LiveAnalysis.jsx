@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import { getRuleColor } from '../constants';
 import { formatISTTime, formatISTDateTime } from '../utils/istUtils';
+import { MockLiveTicker, MOCK_RULE_ID } from '../simulation/mockEngine';
 
 const TOOLTIP_STYLE = {
   contentStyle: {
@@ -132,7 +133,7 @@ function getEventCount(row) {
 }
 
 
-export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleIds }) {
+export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleIds, simulationMode }) {
   const [data, setData] = useState({});
   const [sortCol, setSortCol] = useState('breaches');
   const [sortDir, setSortDir] = useState('desc');
@@ -143,6 +144,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
   const reconnectTimerRef = useRef(null);
   const fallbackIntervalRef = useRef(null);
   const usingFallbackRef = useRef(false);
+  const mockTickerRef = useRef(null); // simulation only
 
   const selectedRules = useMemo(
     () => rules.filter(r => selectedRuleIds.has(r.rule_metadata.rule_id)),
@@ -270,7 +272,51 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     }
   }, [selectedRuleIds, closeWebSocket, stopFallbackPolling, startFallbackPolling, handleDelta]);
 
+  // ── Simulation mode: MockLiveTicker replaces WebSocket ──────────────────────
   useEffect(() => {
+    if (!simulationMode) return;
+
+    // Clean up any previous ticker
+    if (mockTickerRef.current) {
+      mockTickerRef.current.stop();
+      mockTickerRef.current = null;
+    }
+
+    if (selectedRuleIds.size === 0) {
+      setData({});
+      setConnectionStatus('disconnected');
+      return;
+    }
+
+    setConnectionStatus('connected');
+
+    const ticker = new MockLiveTicker(
+      // onBootstrap: seed the data state with last 10 closed windows
+      (ruleId, rows) => {
+        setData(prev => ({
+          ...prev,
+          [ruleId]: rows.map(r => normalizeRow(r)),
+        }));
+      },
+      // onDelta: append one new window row when the real clock minute ticks
+      (ruleId, row) => {
+        handleDelta(ruleId, row);
+      },
+    );
+
+    ticker.start();
+    mockTickerRef.current = ticker;
+
+    return () => {
+      ticker.stop();
+      mockTickerRef.current = null;
+    };
+  }, [simulationMode, selectedRuleIds, handleDelta]);
+
+  // ── Real WebSocket / HTTP fallback (only when NOT in simulation mode) ────────
+  useEffect(() => {
+    if (simulationMode) return; // handled by the simulation effect above
+
     if (selectedRuleIds.size === 0) {
       setData({});
       closeWebSocket();
@@ -293,7 +339,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
       closeWebSocket();
       stopFallbackPolling();
     };
-  }, [selectedRuleIds, connectWebSocket, closeWebSocket, stopFallbackPolling, startFallbackPolling]);
+  }, [simulationMode, selectedRuleIds, connectWebSocket, closeWebSocket, stopFallbackPolling, startFallbackPolling]);
 
   const getRuleName = useCallback((ruleId) => {
     const match = rules.find(rule => rule.rule_metadata.rule_id === ruleId);

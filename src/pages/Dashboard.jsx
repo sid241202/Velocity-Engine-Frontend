@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './Dashboard.css';
-import { Zap, History, PlusSquare, Activity, BarChart3, Shield, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Zap, History, PlusSquare, Activity, BarChart3, Shield, AlertTriangle, RefreshCw, FlaskConical } from 'lucide-react';
 import RuleBuilderPage from '../components/RuleBuilderPage';
 import SavedRulesSidebar from '../components/SavedRulesSidebar';
 import RuleSummaryPanel from '../components/RuleSummaryPanel';
@@ -9,6 +9,13 @@ import AggregatedAnalysis from '../components/AggregatedAnalysis';
 import HistoricalAnalysis from '../components/HistoricalAnalysis';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { API_BASE } from '../config/appConfig';
+import { MOCK_RULE, MOCK_RULE_ID } from '../simulation/mockEngine';
+
+// ── SIMULATION MODE ──────────────────────────────────────────────────────────
+// This branch (test-simulation) runs entirely in-browser.
+// All backend/WebSocket calls are replaced by the mock engine.
+// To disable, remove this constant and restore original fetchRules / LiveAnalysis.
+const SIMULATION_MODE = true;
 
 /**
  * Dashboard — all five panels are always mounted (display:none when inactive).
@@ -41,9 +48,13 @@ export default function Dashboard() {
   };
 
   const fetchRules = useCallback(async () => {
+    if (SIMULATION_MODE) {
+      // In simulation mode: inject the single mock rule and mark backend as up.
+      setRules([MOCK_RULE]);
+      setBackendStatus('up');
+      return;
+    }
     const controller = new AbortController();
-    // 10-second timeout: if the backend is hanging (no response, not closed),
-    // transition to 'down' state so the offline banner is shown promptly.
     const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
       const res = await fetch(`${API_BASE}/rules`, { signal: controller.signal });
@@ -61,6 +72,13 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => { fetchRules(); }, [fetchRules]);
+
+  // Auto-select the mock rule on mount in simulation mode.
+  useEffect(() => {
+    if (SIMULATION_MODE) {
+      setSelectedRuleIds(new Set([MOCK_RULE_ID]));
+    }
+  }, []);
 
   const toggleRuleSelection = (ruleId) => {
     setSelectedRuleIds(prev => {
@@ -131,8 +149,28 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Offline banner */}
-      {backendStatus === 'down' && (
+      {/* Simulation mode banner */}
+      {SIMULATION_MODE && (
+        <div style={{
+          background: 'linear-gradient(90deg, rgba(251,191,36,0.15), rgba(251,191,36,0.05))',
+          border: '1px solid rgba(251,191,36,0.4)',
+          borderRadius: '8px',
+          margin: '0.5rem 1rem',
+          padding: '0.5rem 1rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.6rem',
+          fontSize: '0.78rem',
+          color: '#fbbf24',
+          fontWeight: 500,
+        }}>
+          <FlaskConical size={14} />
+          <span><strong>Simulation Mode</strong> — Backend &amp; Flink are not required. Auth events (6–10/min) are generated in-browser. Rule: count ≥ {8} triggers breach.</span>
+        </div>
+      )}
+
+      {/* Offline banner — only shown when NOT in simulation mode */}
+      {!SIMULATION_MODE && backendStatus === 'down' && (
         <div className="backend-banner">
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <AlertTriangle size={14} />
@@ -191,7 +229,12 @@ export default function Dashboard() {
           <div style={{ display: activeTab === 'live' ? 'block' : 'none' }}
                className={activeTab === 'live' ? 'animate-fade-in' : ''}>
             <ErrorBoundary label="Live Analysis" showDetails={true}>
-              <LiveAnalysis rules={rules} selectedRuleIds={prodSelectedIds} allSelectedRuleIds={selectedRuleIds} />
+              <LiveAnalysis
+                rules={rules}
+                selectedRuleIds={prodSelectedIds}
+                allSelectedRuleIds={selectedRuleIds}
+                simulationMode={SIMULATION_MODE}
+              />
             </ErrorBoundary>
           </div>
 
@@ -199,7 +242,12 @@ export default function Dashboard() {
           <div style={{ display: activeTab === 'agg' ? 'block' : 'none' }}
                className={activeTab === 'agg' ? 'animate-fade-in' : ''}>
             <ErrorBoundary label="Aggregated Analysis">
-              <AggregatedAnalysis rules={rules} selectedRuleIds={prodSelectedIds} allSelectedRuleIds={selectedRuleIds} />
+              <AggregatedAnalysis
+                rules={rules}
+                selectedRuleIds={prodSelectedIds}
+                allSelectedRuleIds={selectedRuleIds}
+                simulationMode={SIMULATION_MODE}
+              />
             </ErrorBoundary>
           </div>
 

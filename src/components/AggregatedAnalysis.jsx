@@ -14,6 +14,7 @@ import {
   istDatetimeLocalToEpochMs,
   formatISTDateTime,
 } from '../utils/istUtils';
+import { generateHistoricalData } from '../simulation/mockEngine';
 
 function isBreached(row) {
   return row.thresholdBreached === 1 || row.thresholdBreached === true
@@ -110,7 +111,7 @@ function formatHourRange(hour) {
   return `${pad(hour)}:00–${pad(nextHour)}:00`;
 }
 
-export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelectedRuleIds }) {
+export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelectedRuleIds, simulationMode }) {
   // Initialize datetime-local values in IST (not browser local time)
   const [startTs, setStartTs] = useState(() => toISTDatetimeLocal(Date.now() - 24 * 60 * 60 * 1000));
   const [endTs, setEndTs] = useState(() => toISTDatetimeLocal(Date.now()));
@@ -154,12 +155,23 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
     }
     setError('');
     setLoading(true);
+
+    // ── SIMULATION MODE: generate data in-browser ─────────────────────────
+    if (simulationMode) {
+      // Small artificial delay for realism
+      await new Promise(resolve => setTimeout(resolve, 600));
+      const { results, anomalyResults } = generateHistoricalData(startTs, endTs);
+      setData(results);
+      setAnomalyData(anomalyResults);
+      setLoading(false);
+      return;
+    }
+
+    // ── REAL MODE: fetch from backend ────────────────────────────────────
     const ids = [...selectedRuleIds].join(',');
-    // Send naive IST strings to ClickHouse via backend
     const sFormatted = istDatetimeLocalToBackendStr(startTs);
     const eFormatted = istDatetimeLocalToBackendStr(endTs);
     try {
-      // Fetch aggregated data and anomaly feed in parallel for richer insights
       const [aggRes, anomalyRes] = await Promise.allSettled([
         fetch(`/api/rules/agg-analysis?rule_ids=${ids}&start_ts=${encodeURIComponent(sFormatted)}&end_ts=${encodeURIComponent(eFormatted)}`),
         fetch(`/api/rules/anomaly-analysis?rule_ids=${ids}&limit=500`),
@@ -177,14 +189,13 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
         const json = await anomalyRes.value.json();
         setAnomalyData(json.results || []);
       }
-      // Anomaly data failure is non-critical — silently continue
     } catch (e) {
       console.error('Agg fetch error:', e);
       setError('Network error. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
-  }, [selectedRuleIds, startTs, endTs]);
+  }, [simulationMode, selectedRuleIds, startTs, endTs]);
 
   const getRuleName = useCallback((ruleId) => {
     const match = rules.find(rule => rule.rule_metadata.rule_id === ruleId);
