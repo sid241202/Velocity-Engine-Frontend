@@ -385,40 +385,71 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     return { text: 'Stable', color: '#f59e0b', Icon: Minus };
   }, [allRows]);
 
-  // Chart 1: Event Volume with breach dots + shaded reference areas
-  const { comboData, breachAreas } = useMemo(() => {
+  // Chart 1: Event Volume — also bakes in agg metric values and breach markers
+  const { comboData, breachTs } = useMemo(() => {
     const timeMap = {};
     for (const row of allRows) {
       const ts = row.windowStart;
       if (!ts) continue;
       if (!timeMap[ts]) timeMap[ts] = { windowStart: ts, _tsMs: new Date(ts).getTime(), _breached: false };
+
       const evtKey = `evt_${row.ruleId}`;
       timeMap[ts][evtKey] = (timeMap[ts][evtKey] || 0) + getEventCount(row);
+
       if (isBreached(row)) {
         timeMap[ts]._breached = true;
-        // copy all breach flags into the point for custom dot rendering
         timeMap[ts].thresholdBreached = true;
         timeMap[ts].thresholdMet = true;
+      }
+
+      // Also bake in agg metric values (for consolidated view)
+      const aggObj = row.aggResult && typeof row.aggResult === 'object' ? row.aggResult
+        : row.aggregationResults && typeof row.aggregationResults === 'object' ? row.aggregationResults : null;
+      if (aggObj) {
+        for (const [alias, val] of Object.entries(aggObj)) {
+          const numVal = Number(val);
+          if (!isNaN(numVal)) timeMap[ts][`agg_${row.ruleId}__${alias}`] = numVal;
+        }
+      }
+      const mv = parseMetricValues(row.metricValues);
+      for (const [alias, val] of Object.entries(mv)) {
+        const numVal = Number(val);
+        if (!isNaN(numVal)) timeMap[ts][`agg_${row.ruleId}__${alias}`] = numVal;
       }
     }
     const sorted = Object.values(timeMap).sort((a, b) => a._tsMs - b._tsMs);
 
-    // Build contiguous breach area spans
-    const areas = [];
-    let areaStart = null;
-    for (const pt of sorted) {
-      if (pt._breached && areaStart === null) areaStart = pt.windowStart;
-      if (!pt._breached && areaStart !== null) {
-        areas.push({ x1: areaStart, x2: pt.windowStart });
-        areaStart = null;
-      }
-    }
-    if (areaStart !== null && sorted.length > 0) {
-      areas.push({ x1: areaStart, x2: sorted[sorted.length - 1].windowStart });
-    }
+    // Collect exact breach timestamps (windowStart of each breached window)
+    const breachTimestamps = sorted.filter(pt => pt._breached).map(pt => pt.windowStart);
 
-    return { comboData: sorted, breachAreas: areas };
+    return { comboData: sorted, breachTs: breachTimestamps };
   }, [allRows]);
+
+  // Derive agg line descriptors from selectedRules / data (for legend labels in consolidated chart)
+  const aggLineDescriptors = useMemo(() => {
+    const lines = [];
+    for (const ruleId of [...selectedRuleIds]) {
+      const rows = data[ruleId] || [];
+      if (!rows.length) continue;
+      const metricKeysSet = new Set();
+      for (const row of rows) {
+        const aggObj = row.aggResult && typeof row.aggResult === 'object' ? row.aggResult
+          : row.aggregationResults && typeof row.aggregationResults === 'object' ? row.aggregationResults : null;
+        if (aggObj) for (const k of Object.keys(aggObj)) metricKeysSet.add(k);
+        const mv = parseMetricValues(row.metricValues);
+        for (const k of Object.keys(mv)) metricKeysSet.add(k);
+      }
+      const rName = getRuleName(ruleId);
+      [...metricKeysSet].forEach((alias, ai) => {
+        lines.push({
+          key: `agg_${ruleId}__${alias}`,
+          name: `${rName} · ${alias}`,
+          dashArray: DASH_PATTERNS[(ai + 1) % DASH_PATTERNS.length],
+        });
+      });
+    }
+    return lines;
+  }, [data, selectedRuleIds, getRuleName]);
 
   // Chart 2: Cumulative Breaches — area gradient
   const cumulativeData = useMemo(() => {
@@ -481,47 +512,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     return Object.values(timeMap).sort((a, b) => new Date(a.windowStart) - new Date(b.windowStart));
   }, [allRows]);
 
-  // Chart 4: Aggregation metrics
-  const { aggData, aggLines } = useMemo(() => {
-    const lines = [];
-    const timeMap = {};
-    for (const ruleId of [...selectedRuleIds]) {
-      const rows = data[ruleId] || [];
-      if (!rows.length) continue;
-      const metricKeysSet = new Set();
-      for (const row of rows) {
-        const aggObj = row.aggResult && typeof row.aggResult === 'object' ? row.aggResult
-          : row.aggregationResults && typeof row.aggregationResults === 'object' ? row.aggregationResults : null;
-        if (aggObj) for (const k of Object.keys(aggObj)) metricKeysSet.add(k);
-        const mv = parseMetricValues(row.metricValues);
-        for (const k of Object.keys(mv)) metricKeysSet.add(k);
-      }
-      const metricKeys = [...metricKeysSet];
-      const rName = getRuleName(ruleId);
-      metricKeys.forEach((alias, ai) => {
-        lines.push({ key: `${ruleId}__${alias}`, name: `${rName} — ${alias}`, dashArray: DASH_PATTERNS[ai % DASH_PATTERNS.length] });
-      });
-      for (const row of rows) {
-        const ts = row.windowStart;
-        if (!timeMap[ts]) timeMap[ts] = { windowStart: ts };
-        const aggObj = row.aggResult && typeof row.aggResult === 'object' ? row.aggResult
-          : row.aggregationResults && typeof row.aggregationResults === 'object' ? row.aggregationResults : null;
-        if (aggObj) for (const [alias, val] of Object.entries(aggObj)) {
-          const numVal = Number(val);
-          if (!isNaN(numVal)) timeMap[ts][`${ruleId}__${alias}`] = numVal;
-        }
-        const mv = parseMetricValues(row.metricValues);
-        for (const [alias, val] of Object.entries(mv)) {
-          const numVal = Number(val);
-          if (!isNaN(numVal)) timeMap[ts][`${ruleId}__${alias}`] = numVal;
-        }
-      }
-    }
-    return {
-      aggData: Object.values(timeMap).sort((a, b) => new Date(a.windowStart) - new Date(b.windowStart)),
-      aggLines: lines,
-    };
-  }, [data, selectedRuleIds, getRuleName, rules]);
+  // (aggData / aggLines removed — aggregation metrics are now merged into the primary ComposedChart)
 
   const currentlyBreaching = useMemo(() => {
     const set = new Set();
@@ -664,16 +655,22 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          Chart 1: Event Volume — area + breach shading + scatter dots
+      {/* ═══════════════════════════════════════════════════════════════════
+          Chart 1: Event Volume — area + agg metric lines + precise breach markers
           ═══════════════════════════════════════════════════════════════════ */}
-      <div className="chart-container">
+      <div className="chart-container" style={{ paddingBottom: '0.5rem' }}>
         <div className="chart-title" style={{ marginBottom: '1.25rem' }}>
           Event Volume &amp; Breach Markers
+          {aggLineDescriptors.length > 0 && (
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: 12 }}>
+              · aggregation metrics overlaid as dashed lines
+            </span>
+          )}
         </div>
-        <div style={{ width: '100%', height: 420 }}>
+        {/* Fixed height + paddingBottom gives the Brush room without overlapping siblings */}
+        <div style={{ width: '100%', height: 440, paddingBottom: '8px' }}>
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={comboData} margin={{ top: 10, right: 24, bottom: 60, left: 12 }}>
+            <ComposedChart data={comboData} margin={{ top: 10, right: 24, bottom: 72, left: 12 }}>
               <ChartGradientDefs />
               <CartesianGrid {...GRID_PROPS} />
 
@@ -700,25 +697,32 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
                 wrapperStyle={{ paddingBottom: '0.75rem', fontSize: '0.78rem' }}
                 formatter={(value) => {
                   if (value.startsWith('evt_')) return `📊 ${getRuleName(value.replace('evt_', ''))}`;
+                  if (value.startsWith('agg_')) {
+                    // agg_ruleId__alias → extract alias label
+                    const parts = value.replace('agg_', '').split('__');
+                    return `〰 ${parts[parts.length - 1]}`;
+                  }
                   return value;
                 }}
               />
 
-              {/* Red shaded areas over breach windows */}
-              {breachAreas.map((area, i) => (
-                <ReferenceArea
-                  key={`ba_${i}`}
-                  x1={area.x1}
-                  x2={area.x2}
-                  fill={BREACH_RED}
-                  fillOpacity={0.08}
-                  stroke={BREACH_RED}
-                  strokeOpacity={0.25}
-                  strokeWidth={1}
+              {/* ── Aggregation metric lines (dashed, same Y-axis) ── */}
+              {aggLineDescriptors.map((line) => (
+                <Line
+                  key={line.key}
+                  type="monotone"
+                  dataKey={line.key}
+                  name={line.key}
+                  stroke={ACCENT_CYAN}
+                  strokeWidth={1.8}
+                  strokeDasharray={line.dashArray || '6 3'}
+                  dot={false}
+                  activeDot={{ r: 4, fill: ACCENT_CYAN, stroke: '#fff', strokeWidth: 1.5 }}
+                  isAnimationActive={false}
                 />
               ))}
 
-              {/* Event Volume Area with gradient fill */}
+              {/* ── Event Volume Area with gradient fill ── */}
               {selectedRules.map(r => {
                 const id = r.rule_metadata.rule_id;
                 return (
@@ -738,6 +742,25 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
                 );
               })}
 
+              {/* ── Breach markers: precise vertical ReferenceLine at each breached windowStart ── */}
+              {/* Each line marks exactly where the window closed and the threshold was exceeded.  */}
+              {/* No area bands — the breach belongs to one point on the timeline, not a span.    */}
+              {breachTs.map((ts, i) => (
+                <ReferenceLine
+                  key={`bl_${i}`}
+                  x={ts}
+                  stroke={BREACH_RED}
+                  strokeWidth={2}
+                  strokeOpacity={0.8}
+                  strokeDasharray="4 3"
+                  label={{
+                    value: '⚡',
+                    position: 'top',
+                    style: { fontSize: 11, fill: BREACH_RED },
+                  }}
+                />
+              ))}
+
               <Brush
                 dataKey="windowStart"
                 height={22}
@@ -751,10 +774,11 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          Chart row: Breach Intensity Bars + Cumulative Breaches
+      {/* ═══════════════════════════════════════════════════════════════════
+          Chart row: Window Intensity + Cumulative Breaches
+          50px top margin enforces the 1-2 cm gap from the chart above.
           ═══════════════════════════════════════════════════════════════════ */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '1rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '1rem', marginTop: '50px' }}>
 
         {/* Chart 2: Breach Intensity — colored bar per window */}
         <div className="chart-container">
@@ -878,51 +902,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          Chart 4: Aggregation Metrics — area with cyan gradient
-          ═══════════════════════════════════════════════════════════════════ */}
-      {aggLines.length > 0 && (
-        <div className="chart-container">
-          <div className="chart-title" style={{ marginBottom: '1.25rem' }}>Aggregation Metrics</div>
-          <div style={{ width: '100%', height: 300 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={aggData} margin={{ top: 10, right: 24, bottom: 36, left: 12 }}>
-                <CartesianGrid {...GRID_PROPS} />
-                <XAxis
-                  dataKey="windowStart"
-                  stroke={AXIS_STROKE}
-                  tick={{ fontSize: 11, fill: '#64748b' }}
-                  tickFormatter={formatTime}
-                  minTickGap={40}
-                  dy={8}
-                />
-                <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11, fill: '#64748b' }} width={44} />
-                <Tooltip {...TOOLTIP_STYLE} labelFormatter={formatTime} />
-                <Legend
-                  verticalAlign="top"
-                  wrapperStyle={{ paddingBottom: '0.75rem', fontSize: '0.75rem' }}
-                />
-                {aggLines.map((line, i) => (
-                  <Area
-                    key={line.key}
-                    type="monotone"
-                    dataKey={line.key}
-                    name={line.name}
-                    stroke={ACCENT_CYAN}
-                    strokeWidth={2.5}
-                    strokeDasharray={line.dashArray}
-                    fill="url(#gradAggMetric)"
-                    dot={false}
-                    activeDot={{ r: 4, fill: ACCENT_CYAN, stroke: '#fff', strokeWidth: 1.5 }}
-                    isAnimationActive={true}
-                    animationDuration={800}
-                  />
-                ))}
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
+      {/* Standalone Aggregation Metrics chart removed — now merged into Event Volume chart above */}
 
       {/* ═══════════════════════════════════════════════════════════════════════
           Table: Top Groups by Breach Activity
