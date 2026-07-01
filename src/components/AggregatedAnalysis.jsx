@@ -749,13 +749,14 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
           <div className="chart-container">
             <div className="chart-title">Event Volume Over Time</div>
             <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>Total events processed per evaluation window. <span style={{ color: '#f85149' }}>Red markers</span> indicate threshold breaches.</div>
-            <ResponsiveContainer width="100%" height={350}>
-              <AreaChart data={eventVolumeData}>
+            {/* height:430 + bottom:70 = room for Brush(24) + X-axis labels + gap */}
+            <ResponsiveContainer width="100%" height={430}>
+              <AreaChart data={eventVolumeData} margin={{ top: 10, right: 20, left: 10, bottom: 70 }}>
                 <CartesianGrid {...GRID_PROPS} />
-                <XAxis dataKey="windowStart" stroke={AXIS_STROKE} tick={{ fontSize: 11 }} tickFormatter={formatTime} />
-                <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} />
+                <XAxis dataKey="windowStart" stroke={AXIS_STROKE} tick={{ fontSize: 11 }} tickFormatter={formatTime} minTickGap={30} dy={10} />
+                <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} width={48} />
                 <Tooltip {...TOOLTIP_STYLE} labelFormatter={ts => `Window: ${formatTime(ts)} IST`} formatter={(value, name) => [value?.toLocaleString() + ' events', getRuleName(name)]} />
-                <Legend formatter={(value) => getRuleName(value)} />
+                <Legend verticalAlign="top" wrapperStyle={{ paddingBottom: '8px' }} formatter={(value) => getRuleName(value)} />
                 {breachTimestamps.map((ts, idx) => (
                   <ReferenceLine key={`breach-ref-${idx}`} x={ts} stroke="#ef4444" strokeDasharray="4 4" strokeOpacity={0.3} />
                 ))}
@@ -766,7 +767,8 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
                     <Area key={id} type="monotone" dataKey={id} stroke={color} fill={color} fillOpacity={0.15} strokeWidth={2} name={id} dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
                   );
                 })}
-                <Brush dataKey="windowStart" height={28} stroke="#3b82f6" fill="rgba(15,23,42,0.8)" tickFormatter={formatTime} />
+                {/* Brush auto-positioned by Recharts within the bottom margin */}
+                <Brush dataKey="windowStart" height={24} stroke="#3b82f6" fill="rgba(15,23,42,0.8)" tickFormatter={formatTime} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -775,11 +777,12 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
           <div className="chart-container">
             <div className="chart-title">Breach Density by Hour (IST)</div>
             <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>Number of threshold breaches per hour of day. Identifies when anomalous activity peaks.</div>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={breachHeatmapData}>
+            {/* height:260 + bottom:60 ensures angled labels (-35deg) don't clip under chart edge */}
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={breachHeatmapData} margin={{ top: 10, right: 20, left: 10, bottom: 60 }}>
                 <CartesianGrid {...GRID_PROPS} />
-                <XAxis dataKey="label" stroke={AXIS_STROKE} tick={{ fontSize: 10 }} interval={0} angle={-35} textAnchor="end" height={50} />
-                <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} allowDecimals={false} />
+                <XAxis dataKey="label" stroke={AXIS_STROKE} tick={{ fontSize: 10 }} interval={0} angle={-35} textAnchor="end" />
+                <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} allowDecimals={false} width={40} />
                 <Tooltip
                   {...TOOLTIP_STYLE}
                   formatter={(value) => [value, 'Breaches']}
@@ -799,13 +802,13 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
           <div className="chart-container">
             <div className="chart-title">Computed Metric Values Over Time</div>
             <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>The aggregated metric values (counts, sums, averages) your rules computed for each window.</div>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={aggData}>
+            <ResponsiveContainer width="100%" height={340}>
+              <LineChart data={aggData} margin={{ top: 10, right: 20, left: 10, bottom: 40 }}>
                 <CartesianGrid {...GRID_PROPS} />
-                <XAxis dataKey="windowStart" stroke={AXIS_STROKE} tick={{ fontSize: 11 }} tickFormatter={formatTime} />
-                <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} />
+                <XAxis dataKey="windowStart" stroke={AXIS_STROKE} tick={{ fontSize: 11 }} tickFormatter={formatTime} minTickGap={30} dy={10} />
+                <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} width={48} />
                 <Tooltip {...TOOLTIP_STYLE} labelFormatter={ts => `Window: ${formatTime(ts)} IST`} />
-                <Legend wrapperStyle={{ fontSize: '0.75rem' }} />
+                <Legend verticalAlign="top" wrapperStyle={{ paddingBottom: '8px', fontSize: '0.75rem' }} />
                 {breachTimestamps.slice(0, 50).map((ts, idx) => (
                   <ReferenceLine key={`aref-${idx}`} x={ts} stroke="#f85149" strokeDasharray="4 3" strokeOpacity={0.4} strokeWidth={1.5} />
                 ))}

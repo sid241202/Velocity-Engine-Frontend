@@ -679,30 +679,31 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
         </div>
       </div>
 
-      {/* UI FIX 3: Added flexShrink: 0 and strict height to prevent the chart from collapsing */}
+      {/* Chart: Event Volume & Breach Signal */}
       <div className="chart-container" style={{ flexShrink: 0 }}>
         <div className="chart-title">Event Volume &amp; Breach Signal</div>
-        <div style={{ width: '100%', height: 400, marginTop: '1rem' }}>
+        {/* Extra top margin ensures chart-title text sits ABOVE the chart body, not over it */}
+        <div style={{ width: '100%', height: 480, marginTop: '1rem' }}>
           <ResponsiveContainer width="100%" height="100%">
-            {/* UI FIX 2: Added margin to separate the Brush from the X-Axis text */}
-            <ComposedChart data={comboData} margin={{ top: 10, right: 20, bottom: 30, left: 0 }}>
+            {/* bottom:70 gives enough room for Brush (20px) + X-axis ticks + gap */}
+            <ComposedChart data={comboData} margin={{ top: 10, right: 30, bottom: 70, left: 10 }}>
               <CartesianGrid {...GRID_PROPS} />
               <XAxis
                 dataKey="windowStart"
                 stroke={AXIS_STROKE}
                 tick={{ fontSize: 11 }}
                 tickFormatter={formatTime}
-                minTickGap={30} /* Prevents text squishing */
-                dy={10} /* Pushes text down slightly */
+                minTickGap={30}
+                dy={10}
               />
               <YAxis
                 yAxisId="left"
                 stroke={AXIS_STROKE}
                 tick={{ fontSize: 11 }}
                 allowDecimals={false}
-                label={{ value: 'Event Count', angle: -90, position: 'insideLeft', style: { fill: '#94a3b8', fontSize: 11 } }}
+                width={48}
+                label={{ value: 'Event Count', angle: -90, position: 'insideLeft', offset: 10, style: { fill: '#94a3b8', fontSize: 11 } }}
               />
-              {/* UI FIX 4: Extended domain to 1.1 so the breach line stroke isn't clipped at the absolute top edge */}
               <YAxis
                 yAxisId="right"
                 orientation="right"
@@ -710,7 +711,8 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
                 tick={{ fontSize: 11 }}
                 domain={[-0.1, 1.1]}
                 ticks={[0, 1]}
-                label={{ value: 'Breach', angle: 90, position: 'insideRight', style: { fill: '#94a3b8', fontSize: 11 } }}
+                width={40}
+                label={{ value: 'Breach', angle: 90, position: 'insideRight', offset: 10, style: { fill: '#94a3b8', fontSize: 11 } }}
               />
               <Tooltip
                 {...TOOLTIP_STYLE}
@@ -721,7 +723,9 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
                   return [value, name];
                 }}
               />
-              <Legend wrapperStyle={{ paddingTop: '15px' }}
+              <Legend
+                verticalAlign="top"
+                wrapperStyle={{ paddingBottom: '8px' }}
                 formatter={(value) => {
                   if (value.startsWith('evt_')) return `📊 ${getRuleName(value.replace('evt_', ''))}`;
                   if (value.startsWith('br_')) return `⚡ ${getRuleName(value.replace('br_', ''))} Signal`;
@@ -760,7 +764,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
                     yAxisId="right"
                     type="stepAfter"
                     dataKey={`br_${id}`}
-                    stroke={color}
+                    stroke="#ef4444"
                     strokeWidth={2}
                     strokeDasharray="4 2"
                     name={`br_${id}`}
@@ -783,26 +787,26 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
                 />
               ))}
 
+              {/* Brush: let Recharts auto-position it using the bottom margin space */}
               <Brush
                 dataKey="windowStart"
-                height={20}
+                height={24}
                 stroke="#3b82f6"
                 fill="rgba(15,23,42,0.8)"
                 tickFormatter={formatTime}
-                y={375} /* Forces the brush out of the way */
               />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* UI FIX 5: Used auto-fit grid so charts elegantly wrap on smaller screens */}
+      {/* Side-by-side: Cumulative Breaches + Aggregation Metrics */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '1rem', flexShrink: 0 }}>
         <div className="chart-container" style={{ flexShrink: 0 }}>
           <div className="chart-title">Cumulative Breaches</div>
-          <div style={{ width: '100%', height: 320, marginTop: '1rem' }}>
+          <div style={{ width: '100%', height: 340, marginTop: '1rem' }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={cumulativeData} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
+              <LineChart data={cumulativeData} margin={{ top: 10, right: 20, left: 10, bottom: 40 }}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis
                   dataKey="windowStart"
@@ -816,6 +820,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
                   stroke={AXIS_STROKE}
                   tick={{ fontSize: 11 }}
                   allowDecimals={false}
+                  width={40}
                 />
                 <Tooltip
                   {...TOOLTIP_STYLE}
@@ -825,7 +830,9 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
                     return [value, getRuleName(ruleId)];
                   }}
                 />
-                <Legend wrapperStyle={{ paddingTop: '10px' }}
+                <Legend
+                  verticalAlign="top"
+                  wrapperStyle={{ paddingBottom: '8px' }}
                   formatter={(value) => {
                     const ruleId = value.replace('cum_', '');
                     return getRuleName(ruleId);
@@ -856,9 +863,9 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
 
         <div className="chart-container" style={{ flexShrink: 0 }}>
           <div className="chart-title">Aggregation Metrics</div>
-          <div style={{ width: '100%', height: 320, marginTop: '1rem' }}>
+          <div style={{ width: '100%', height: 340, marginTop: '1rem' }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={aggData} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
+              <LineChart data={aggData} margin={{ top: 10, right: 20, left: 10, bottom: 40 }}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis
                   dataKey="windowStart"
@@ -868,12 +875,15 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
                   minTickGap={30}
                   dy={10}
                 />
-                <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} />
+                <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} width={40} />
                 <Tooltip
                   {...TOOLTIP_STYLE}
                   labelFormatter={formatTime}
                 />
-                <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                <Legend
+                  verticalAlign="top"
+                  wrapperStyle={{ paddingBottom: '8px' }}
+                />
                 {aggLines.map(line => (
                   <Line
                     key={line.key}
