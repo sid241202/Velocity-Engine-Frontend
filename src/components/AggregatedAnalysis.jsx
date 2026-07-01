@@ -9,9 +9,8 @@ import {
 import { getRuleColor } from '../constants';
 import {
   toISTDatetimeLocal,
-  toISTDatetimeLocalFromOffset,
   istDatetimeLocalToBackendStr,
-  validateISTRange,
+  istDatetimeLocalToEpochMs,
   formatISTDateTime,
 } from '../utils/istUtils';
 
@@ -127,11 +126,17 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
     [rules, selectedRuleIds]
   );
 
-  // min/max for datetime-local inputs — computed in IST
-  const minDate = toISTDatetimeLocalFromOffset(-7 * 24 * 60 * 60 * 1000);
-  const maxDate = toISTDatetimeLocal(Date.now());
+  // No min/max constraints — users may query any date range (past or future).
+  // If future dates are queried, ClickHouse will simply return empty results.
 
-  const validate = () => validateISTRange(startTs, endTs);
+  // Only validate that start is strictly before end.
+  const validate = () => {
+    const startEpoch = istDatetimeLocalToEpochMs(startTs);
+    const endEpoch   = istDatetimeLocalToEpochMs(endTs);
+    if (isNaN(startEpoch) || isNaN(endEpoch)) return 'Invalid date format.';
+    if (startEpoch >= endEpoch) return 'Start time must be before end time.';
+    return '';
+  };
 
   const fetchData = useCallback(async () => {
     if (selectedRuleIds.size === 0) {
@@ -499,8 +504,6 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
             type="datetime-local"
             value={startTs}
             onChange={(e) => setStartTs(e.target.value)}
-            min={minDate}
-            max={maxDate}
           />
         </div>
         <div className="form-group" style={{ flex: 1, marginBottom: 0, minWidth: 200 }}>
@@ -509,8 +512,6 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
             type="datetime-local"
             value={endTs}
             onChange={(e) => setEndTs(e.target.value)}
-            min={minDate}
-            max={maxDate}
           />
         </div>
         <button

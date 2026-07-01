@@ -8,10 +8,8 @@ import {
 import { getRuleColor, RULE_COLORS } from '../constants';
 import {
   toISTDatetimeLocal,
-  toISTDatetimeLocalFromOffset,
   istDatetimeLocalToEpochMs,
   istDatetimeLocalToBackendStr,
-  validateISTRange,
   formatISTDateTime,
 } from '../utils/istUtils';
 
@@ -65,11 +63,20 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
     [rules, effectiveRuleId]
   );
 
-  // min/max for datetime-local inputs — computed in IST
-  const minDate = toISTDatetimeLocalFromOffset(-7 * 24 * 60 * 60 * 1000);
+  // max = now: future dates are not meaningful for historical replay.
+  // No minimum date restriction — users may query as far back as needed.
   const maxDate = toISTDatetimeLocal(Date.now());
 
-  const validate = () => validateISTRange(startTs, endTs);
+  // Validate: start must be before end, and end must not be in the future.
+  const validate = () => {
+    const startEpoch = istDatetimeLocalToEpochMs(startTs);
+    const endEpoch   = istDatetimeLocalToEpochMs(endTs);
+    const nowEpoch   = Date.now();
+    if (isNaN(startEpoch) || isNaN(endEpoch)) return 'Invalid date format.';
+    if (startEpoch >= endEpoch) return 'Start time must be before end time.';
+    if (endEpoch > nowEpoch + 60000) return 'End time cannot be in the future.';
+    return '';
+  };
 
   /* Get aggregation aliases from the rule's aggregations array */
   const aggAliases = useMemo(() => {
@@ -263,11 +270,11 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
         )}
         <div className="form-group" style={{ flex: 1, marginBottom: 0, minWidth: 200 }}>
           <label className="form-label">From (IST)</label>
-          <input type="datetime-local" value={startTs} onChange={e => setStartTs(e.target.value)} min={minDate} max={maxDate} />
+          <input type="datetime-local" value={startTs} onChange={e => setStartTs(e.target.value)} max={maxDate} />
         </div>
         <div className="form-group" style={{ flex: 1, marginBottom: 0, minWidth: 200 }}>
           <label className="form-label">To (IST)</label>
-          <input type="datetime-local" value={endTs} onChange={e => setEndTs(e.target.value)} min={minDate} max={maxDate} />
+          <input type="datetime-local" value={endTs} onChange={e => setEndTs(e.target.value)} max={maxDate} />
         </div>
         <button
           className="btn btn-accent"
