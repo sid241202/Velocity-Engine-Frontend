@@ -13,7 +13,11 @@ export default defineConfig({
         changeOrigin: true,
         ws: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
+        // 15-minute timeout for long-running DuckDB historical analysis queries
+        timeout: 900000,
+        proxyTimeout: 900000,
       },
     },
   },
 })
+

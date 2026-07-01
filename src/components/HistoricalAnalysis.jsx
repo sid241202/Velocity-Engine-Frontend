@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { History, Loader2, ArrowUpDown, Database } from 'lucide-react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
+import { History, Loader2, ArrowUpDown, Database, XCircle } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -43,6 +43,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
   const [error, setError] = useState('');
   const [sortCol, setSortCol] = useState('totalValue');
   const [sortDir, setSortDir] = useState('desc');
+  const abortRef = useRef(null);
 
   const selectedRulesArr = useMemo(
     () => rules.filter(r => selectedRuleIds.has(r.rule_metadata.rule_id)),
@@ -88,6 +89,14 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
     }
     setError('');
     setLoading(true);
+    setData([]);
+
+    // Cancel any previous in-flight request
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     // Convert IST datetime-local values to naive IST strings that the Go backend
     // parseIST() function expects: "YYYY-MM-DD HH:MM:SS"
@@ -101,6 +110,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(selectedRule),
+          signal: controller.signal,
         }
       );
       if (res.ok) {
@@ -111,12 +121,27 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
         setError(errJson.detail || 'Server returned an error. Check backend logs.');
       }
     } catch (e) {
-      console.error('Historical fetch error:', e);
-      setError('Network error fetching data.');
+      if (e.name === 'AbortError') {
+        setError('');
+        // loading already cleared below
+      } else {
+        console.error('Historical fetch error:', e);
+        setError('Network error fetching data.');
+      }
     } finally {
       setLoading(false);
+      abortRef.current = null;
     }
   }, [selectedRule, startTs, endTs]);
+
+  const handleStop = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    setLoading(false);
+    setError('');
+  }, []);
 
   /* ───── Derived data ───── */
   const totalMatches = data.length;
@@ -248,7 +273,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
           className="btn btn-accent"
           onClick={fetchData}
           disabled={loading}
-          style={{ height: 40, minWidth: 165, justifyContent: 'center', gap: '0.4rem' }}
+          style={{ height: 40, minWidth: 145, justifyContent: 'center', gap: '0.4rem' }}
         >
           {loading ? (
             <>
@@ -257,6 +282,19 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
             </>
           ) : <><History size={14} /> Run Replay</> }
         </button>
+        {loading && (
+          <button
+            className="btn btn-ghost"
+            onClick={handleStop}
+            title="Cancel the running query"
+            style={{
+              height: 40, minWidth: 90, justifyContent: 'center', gap: '0.4rem',
+              borderColor: 'var(--danger)', color: 'var(--danger)',
+            }}
+          >
+            <XCircle size={14} /> Stop
+          </button>
+        )}
       </div>
 
       {error && (

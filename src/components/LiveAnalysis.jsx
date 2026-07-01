@@ -99,7 +99,30 @@ function normalizeRow(row) {
 }
 
 function getEventCount(row) {
+  // Explicit field (old schema / ClickHouse rows)
   if (row.eventCount != null && row.eventCount !== undefined) return Number(row.eventCount) || 0;
+
+  // New Flink schema: aggResult contains the alias→value map, e.g. {"count": 5, "txnAmount": 2500}
+  // The first numeric value in aggResult is used as the canonical event count for visualization.
+  // For multi-aggregation rules we sum all values as a rough proxy.
+  const aggObj = row.aggResult && typeof row.aggResult === 'object' ? row.aggResult
+    : row.aggregationResults && typeof row.aggregationResults === 'object' ? row.aggregationResults
+    : null;
+  if (aggObj) {
+    // Try known count aliases first
+    for (const alias of ['count', 'eventCount', 'event_count', 'txnCount', 'total']) {
+      if (aggObj[alias] != null) return Number(aggObj[alias]) || 0;
+    }
+    // Fall back to sum of all numeric values
+    let sum = 0;
+    for (const val of Object.values(aggObj)) {
+      const n = Number(val);
+      if (!isNaN(n)) sum += n;
+    }
+    if (sum > 0) return sum;
+  }
+
+  // Legacy metricValues field
   const mv = parseMetricValues(row.metricValues);
   if (mv.eventCount != null) return Number(mv.eventCount) || 0;
   if (mv.event_count != null) return Number(mv.event_count) || 0;
@@ -108,7 +131,7 @@ function getEventCount(row) {
 }
 
 
-export default function LiveAnalysis({ rules, selectedRuleIds }) {
+export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleIds }) {
   const [data, setData] = useState({});
   const [sortCol, setSortCol] = useState('breaches');
   const [sortDir, setSortDir] = useState('desc');
@@ -417,13 +440,16 @@ export default function LiveAnalysis({ rules, selectedRuleIds }) {
 
       const metricKeysSet = new Set();
       for (const row of rows) {
+        // New Flink schema: aggResult is the primary metric container
+        const aggObj = row.aggResult && typeof row.aggResult === 'object' ? row.aggResult
+          : row.aggregationResults && typeof row.aggregationResults === 'object' ? row.aggregationResults
+          : null;
+        if (aggObj) {
+          for (const k of Object.keys(aggObj)) metricKeysSet.add(k);
+        }
+        // Legacy schema: metricValues
         const mv = parseMetricValues(row.metricValues);
         for (const k of Object.keys(mv)) metricKeysSet.add(k);
-      }
-      for (const row of rows) {
-        if (row.aggregationResults && typeof row.aggregationResults === 'object') {
-          for (const k of Object.keys(row.aggregationResults)) metricKeysSet.add(k);
-        }
       }
 
       const metricKeys = [...metricKeysSet];
@@ -443,19 +469,26 @@ export default function LiveAnalysis({ rules, selectedRuleIds }) {
       for (const row of rows) {
         const ts = row.windowStart;
         if (!timeMap[ts]) timeMap[ts] = { windowStart: ts };
+
+        // New Flink schema: read from aggResult / aggregationResults
+        const aggObj = row.aggResult && typeof row.aggResult === 'object' ? row.aggResult
+          : row.aggregationResults && typeof row.aggregationResults === 'object' ? row.aggregationResults
+          : null;
+        if (aggObj) {
+          for (const [alias, val] of Object.entries(aggObj)) {
+            const numVal = Number(val);
+            if (!isNaN(numVal)) {
+              timeMap[ts][`${ruleId}__${alias}`] = numVal;
+            }
+          }
+        }
+
+        // Legacy: metricValues
         const mv = parseMetricValues(row.metricValues);
         for (const [alias, val] of Object.entries(mv)) {
           const numVal = Number(val);
           if (!isNaN(numVal)) {
             timeMap[ts][`${ruleId}__${alias}`] = numVal;
-          }
-        }
-        if (row.aggregationResults && typeof row.aggregationResults === 'object') {
-          for (const [alias, val] of Object.entries(row.aggregationResults)) {
-            const numVal = Number(val);
-            if (!isNaN(numVal)) {
-              timeMap[ts][`${ruleId}__${alias}`] = numVal;
-            }
           }
         }
       }
@@ -539,15 +572,31 @@ export default function LiveAnalysis({ rules, selectedRuleIds }) {
   };
 
   if (selectedRuleIds.size === 0) {
+    // Check if DRAFT rules were selected (allSelectedRuleIds has entries but selectedRuleIds is empty)
+    const hasDraftOnly = allSelectedRuleIds && allSelectedRuleIds.size > 0 && selectedRuleIds.size === 0;
     return (
       <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '500px', gap: '1.5rem' }}>
         <Activity size={64} color="var(--text-muted)" style={{ opacity: 0.4 }} />
-        <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', textAlign: 'center', maxWidth: 400 }}>
-          Select one or more rules from the sidebar to see live analysis
-        </p>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', opacity: 0.7, textAlign: 'center' }}>
-          WebSocket streaming · 24-hour rolling window
-        </p>
+        {hasDraftOnly ? (
+          <>
+            <p style={{ color: 'var(--amber)', fontSize: '1rem', textAlign: 'center', maxWidth: 440, fontWeight: 600 }}>
+              Selected rules are in DRAFT status
+            </p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', maxWidth: 440 }}>
+              DRAFT rules are not processed by Flink and cannot stream live data.
+              Publish the rule to make it ACTIVE, or use Historical Analysis to test it against past data.
+            </p>
+          </>
+        ) : (
+          <>
+            <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', textAlign: 'center', maxWidth: 400 }}>
+              Select one or more rules from the sidebar to see live analysis
+            </p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', opacity: 0.7, textAlign: 'center' }}>
+              WebSocket streaming · 24-hour rolling window
+            </p>
+          </>
+        )}
       </div>
     );
   }

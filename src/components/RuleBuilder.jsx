@@ -58,11 +58,12 @@ function Tip({ text }) {
 }
 
 function generateId() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let id = '';
+  for (let i = 0; i < 3; i++) {
+    id += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return id;
 }
 
 function FieldLabel({ label, tip, required }) {
@@ -264,7 +265,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
   // ── Validation ────────────────────────────────────────────────
   const errors = useMemo(() => {
     const e = {};
-    if (!isValidRuleId(ruleId)) e.ruleId = 'Use 4–64 chars: letters, numbers, _ or - only';
+    if (!isValidRuleId(ruleId)) e.ruleId = 'Use 3-64 chars: letters, numbers, _ or - only';
     if (Number(ttlAmount) <= 0) e.ttl = 'Must be greater than 0';
     if (!isGlobal) {
       keys.forEach((k, i) => {
@@ -490,7 +491,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
 
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.75rem' }}>
             <div>
-              <FieldLabel label="Rule ID" tip="Unique identifier. Auto-generated UUID — you can customise it. Use letters, numbers, dashes or underscores only." />
+              <FieldLabel label="Rule ID" tip="Unique 3-character identifier. Auto-generated — you can customise it. Letters and numbers only." />
               <input
                 value={ruleId}
                 onChange={e => setRuleId(e.target.value)}

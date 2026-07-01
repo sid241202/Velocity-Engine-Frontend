@@ -3,3 +3,26 @@
   max-width: 1600px;
   margin: 0 auto;
 }
+
+/* Smooth fade-in when switching between panels */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.18s ease-out forwards;
+}
+
+/* Offline banner */
+.backend-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 1.25rem;
+  background: rgba(245, 158, 11, 0.1);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+  color: var(--amber, #f59e0b);
+  font-size: 0.8rem;
+  gap: 1rem;
+}

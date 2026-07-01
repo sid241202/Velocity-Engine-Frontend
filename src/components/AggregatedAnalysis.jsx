@@ -21,6 +21,32 @@ function isBreached(row) {
 }
 
 /**
+ * Extract event count from a row — supports both old and new Flink schema.
+ * New Flink schema: aggResult = {"alias": value}, e.g. {"count": 5, "txnAmount": 2500}
+ * Old schema: eventCount field directly on the row.
+ */
+function getRowEventCount(row) {
+  if (row.eventCount != null) return Number(row.eventCount) || 0;
+  const aggObj = row.aggResult && typeof row.aggResult === 'object' ? row.aggResult
+    : row.aggregationResults && typeof row.aggregationResults === 'object' ? row.aggregationResults
+    : null;
+  if (aggObj) {
+    // Try standard count aliases first
+    for (const alias of ['count', 'eventCount', 'event_count', 'txnCount', 'total']) {
+      if (aggObj[alias] != null) return Number(aggObj[alias]) || 0;
+    }
+    // Fall back to sum of all numeric values in the agg map
+    let sum = 0;
+    for (const val of Object.values(aggObj)) {
+      const n = Number(val);
+      if (!isNaN(n)) sum += n;
+    }
+    if (sum > 0) return sum;
+  }
+  return 0;
+}
+
+/**
  * Normalize aggregation results — supports both old schema (aggregationResults)
  * and new schema (aggResult). Backend pre-parses JSON strings, so both may be
  * plain objects already.
@@ -170,7 +196,8 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds }) {
   const totalBreaches = useMemo(() => allRows.filter(r => isBreached(r)).length, [allRows]);
   const breachRate = useMemo(() => totalWindows > 0 ? (totalBreaches / totalWindows * 100) : 0, [totalBreaches, totalWindows]);
   const uniqueGroups = useMemo(() => new Set(allRows.map(r => r.groupKey)).size, [allRows]);
-  const totalEvents = useMemo(() => allRows.reduce((s, r) => s + (r.eventCount || 0), 0), [allRows]);
+  const totalEvents = useMemo(() => allRows.reduce((s, r) => s + getRowEventCount(r), 0), [allRows]);
+
   const avgEventsPerWindow = useMemo(() => totalWindows > 0 ? (totalEvents / totalWindows).toFixed(1) : '0.0', [totalEvents, totalWindows]);
 
   /* ───── Peak Hour (most activity) ───── */

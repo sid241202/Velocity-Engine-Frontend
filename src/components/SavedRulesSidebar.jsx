@@ -20,6 +20,8 @@ export default function SavedRulesSidebar({
   rules, fetchRules, selectedRuleIds, toggleRuleSelection, activeTab, navigateToSummary
 }) {
   const isAnalysisPage = ['live', 'agg', 'historical'].includes(activeTab);
+  // Live and Agg analysis only work for non-DRAFT rules
+  const isProdOnlyAnalysis = ['live', 'agg'].includes(activeTab);
 
   return (
     <div
@@ -56,20 +58,32 @@ export default function SavedRulesSidebar({
           return (
             <div
               key={ruleId}
-              onClick={() => isAnalysisPage && toggleRuleSelection(ruleId)}
+              onClick={() => {
+                if (!isAnalysisPage) return;
+                if (isProdOnlyAnalysis && meta.status === 'DRAFT') {
+                  // DRAFT rules cannot be used in Live or Agg analysis
+                  return;
+                }
+                toggleRuleSelection(ruleId);
+              }}
+              title={isProdOnlyAnalysis && meta.status === 'DRAFT'
+                ? 'DRAFT rules are not available for Live or Agg analysis. Use Historical Analysis instead, or publish this rule.'
+                : ''}
               style={{
                 background: isSelected ? `${color}12` : 'var(--surface-2)',
                 borderRadius: '8px',
                 border: `1px solid ${isSelected ? `${color}35` : 'var(--border)'}`,
                 borderLeft: `3px solid ${isSelected ? color : 'transparent'}`,
                 padding: '0.6rem 0.75rem',
-                cursor: isAnalysisPage ? 'pointer' : 'default',
+                cursor: (isAnalysisPage && !(isProdOnlyAnalysis && meta.status === 'DRAFT'))
+                  ? 'pointer' : isProdOnlyAnalysis && meta.status === 'DRAFT' ? 'not-allowed' : 'default',
+                opacity: isProdOnlyAnalysis && meta.status === 'DRAFT' ? 0.5 : 1,
                 /* Specific transitions only — 'transition: all' causes layout bounce */
                 transition: 'border-color 0.15s ease, background 0.15s ease',
 
               }}
               onMouseEnter={e => {
-                if (!isSelected) e.currentTarget.style.background = 'var(--surface-3)';
+                if (!isSelected && !(isProdOnlyAnalysis && meta.status === 'DRAFT')) e.currentTarget.style.background = 'var(--surface-3)';
               }}
               onMouseLeave={e => {
                 if (!isSelected) e.currentTarget.style.background = 'var(--surface-2)';

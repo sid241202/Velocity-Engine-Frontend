@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './Dashboard.css';
 import { Zap, History, PlusSquare, Activity, BarChart3, Shield, AlertTriangle, RefreshCw } from 'lucide-react';
 import RuleBuilderPage from '../components/RuleBuilderPage';
@@ -10,13 +10,35 @@ import HistoricalAnalysis from '../components/HistoricalAnalysis';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { API_BASE } from '../config/appConfig';
 
+/**
+ * Dashboard — all five panels are always mounted (display:none when inactive).
+ *
+ * WHY: React unmounts components on tab-switch when using a switch/renderPage()
+ * pattern. This wipes all local state (query results, chart data, WebSocket
+ * connections, in-flight DuckDB queries, etc.). By keeping every panel mounted
+ * and toggling CSS visibility instead, we get:
+ *   • Agg/Historical results survive navigation
+ *   • Live WebSocket stays connected while user browses other tabs
+ *   • DuckDB queries run in the background and show results on return
+ *   • No wasted re-fetches or reconnect latency
+ *
+ * Hard-reload (browser F5) resets all ephemeral React state automatically
+ * because the JS runtime is destroyed — no extra logic needed.
+ */
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState('live');
-  const [rules, setRules] = useState([]);
+  const [activeTab, setActiveTab]         = useState('live');
+  const [rules, setRules]                 = useState([]);
   const [selectedRuleIds, setSelectedRuleIds] = useState(new Set());
   const [summaryRuleId, setSummaryRuleId] = useState(null);
   const [backendStatus, setBackendStatus] = useState('connecting');
-  const [editingRule, setEditingRule] = useState(null);
+  const [editingRule, setEditingRule]     = useState(null);
+
+  // Track which tabs have been visited so we can lazy-mount panels
+  const visitedTabsRef = useRef(new Set(['live']));
+  const handleTabChange = (tab) => {
+    visitedTabsRef.current.add(tab);
+    setActiveTab(tab);
+  };
 
   const fetchRules = useCallback(async () => {
     try {
@@ -44,12 +66,12 @@ export default function Dashboard() {
 
   const navigateToSummary = (ruleId) => {
     setSummaryRuleId(ruleId);
-    setActiveTab('summary');
+    handleTabChange('summary');
   };
 
   const navigateToEdit = (rule) => {
     setEditingRule(rule);
-    setActiveTab('build');
+    handleTabChange('build');
   };
 
   const handleEditComplete = () => {
@@ -64,50 +86,18 @@ export default function Dashboard() {
     { key: 'summary',    label: 'Rule Summary',      icon: Shield,      tip: 'View and manage a specific rule' },
   ];
 
-  const renderPage = () => {
-    switch (activeTab) {
-      case 'live':
-        return (
-          <ErrorBoundary label="Live Analysis" showDetails={true}>
-            <LiveAnalysis rules={rules} selectedRuleIds={selectedRuleIds} />
-          </ErrorBoundary>
-        );
-      case 'agg':
-        return (
-          <ErrorBoundary label="Aggregated Analysis">
-            <AggregatedAnalysis rules={rules} selectedRuleIds={selectedRuleIds} />
-          </ErrorBoundary>
-        );
-      case 'historical':
-        return (
-          <ErrorBoundary label="Historical Analysis">
-            <HistoricalAnalysis rules={rules} selectedRuleIds={selectedRuleIds} />
-          </ErrorBoundary>
-        );
-      case 'build':
-        return (
-          <ErrorBoundary label="Rule Builder">
-            <RuleBuilderPage
-              rules={rules}
-              fetchRules={fetchRules}
-              editingRule={editingRule}
-              onEditComplete={handleEditComplete}
-            />
-          </ErrorBoundary>
-        );
-      case 'summary':
-        return (
-          <ErrorBoundary label="Rule Details">
-            <RuleSummaryPanel
-              rule={rules.find(r => r.rule_metadata?.rule_id === summaryRuleId)}
-              fetchRules={fetchRules}
-              navigateToEdit={navigateToEdit}
-            />
-          </ErrorBoundary>
-        );
-      default: return null;
-    }
-  };
+  // Determine which rules a draft user can access per panel
+  // Draft rules: ONLY historical analysis allowed
+  // Prod/Paused rules: all panels allowed
+  const analysisSelectedIds = selectedRuleIds;
+
+  // For Live and Agg: filter out DRAFT rules with a tooltip
+  const prodSelectedIds = new Set(
+    [...selectedRuleIds].filter(id => {
+      const rule = rules.find(r => r.rule_metadata.rule_id === id);
+      return rule && rule.rule_metadata.status !== 'DRAFT';
+    })
+  );
 
   return (
     <div className="app-container">
@@ -158,7 +148,7 @@ export default function Dashboard() {
           <button
             key={key}
             className={`nav-btn ${activeTab === key ? 'active' : ''}`}
-            onClick={() => setActiveTab(key)}
+            onClick={() => handleTabChange(key)}
             title={tip}
           >
             <Icon size={15} />
@@ -179,8 +169,70 @@ export default function Dashboard() {
             navigateToSummary={navigateToSummary}
           />
         </aside>
-        <main className="content-area animate-fade-in">
-          {renderPage()}
+        <main className="content-area">
+          {/*
+           * All analysis panels are permanently mounted. We use display:none to
+           * hide inactive ones. This keeps all React state, WebSocket connections,
+           * and in-flight queries alive across tab switches.
+           *
+           * The animate-fade-in class is applied only to the active tab to give a
+           * smooth transition feel when switching.
+           *
+           * Lazy-mount: RuleBuilder, Summary, Build are only mounted once visited.
+           */}
+
+          {/* Live Analysis — always mounted */}
+          <div style={{ display: activeTab === 'live' ? 'block' : 'none' }}
+               className={activeTab === 'live' ? 'animate-fade-in' : ''}>
+            <ErrorBoundary label="Live Analysis" showDetails={true}>
+              <LiveAnalysis rules={rules} selectedRuleIds={prodSelectedIds} allSelectedRuleIds={selectedRuleIds} />
+            </ErrorBoundary>
+          </div>
+
+          {/* Aggregated Analysis — always mounted */}
+          <div style={{ display: activeTab === 'agg' ? 'block' : 'none' }}
+               className={activeTab === 'agg' ? 'animate-fade-in' : ''}>
+            <ErrorBoundary label="Aggregated Analysis">
+              <AggregatedAnalysis rules={rules} selectedRuleIds={prodSelectedIds} allSelectedRuleIds={selectedRuleIds} />
+            </ErrorBoundary>
+          </div>
+
+          {/* Historical Analysis — always mounted */}
+          <div style={{ display: activeTab === 'historical' ? 'block' : 'none' }}
+               className={activeTab === 'historical' ? 'animate-fade-in' : ''}>
+            <ErrorBoundary label="Historical Analysis">
+              <HistoricalAnalysis rules={rules} selectedRuleIds={analysisSelectedIds} />
+            </ErrorBoundary>
+          </div>
+
+          {/* Rule Builder — lazy mount on first visit */}
+          {visitedTabsRef.current.has('build') && (
+            <div style={{ display: activeTab === 'build' ? 'block' : 'none' }}
+                 className={activeTab === 'build' ? 'animate-fade-in' : ''}>
+              <ErrorBoundary label="Rule Builder">
+                <RuleBuilderPage
+                  rules={rules}
+                  fetchRules={fetchRules}
+                  editingRule={editingRule}
+                  onEditComplete={handleEditComplete}
+                />
+              </ErrorBoundary>
+            </div>
+          )}
+
+          {/* Rule Summary — lazy mount on first visit */}
+          {visitedTabsRef.current.has('summary') && (
+            <div style={{ display: activeTab === 'summary' ? 'block' : 'none' }}
+                 className={activeTab === 'summary' ? 'animate-fade-in' : ''}>
+              <ErrorBoundary label="Rule Details">
+                <RuleSummaryPanel
+                  rule={rules.find(r => r.rule_metadata?.rule_id === summaryRuleId)}
+                  fetchRules={fetchRules}
+                  navigateToEdit={navigateToEdit}
+                />
+              </ErrorBoundary>
+            </div>
+          )}
         </main>
       </div>
     </div>

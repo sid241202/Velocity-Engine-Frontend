@@ -3,9 +3,9 @@
  * All validation functions return true = valid, false = invalid.
  */
 
-/** Rule ID: 4–64 chars, letters/numbers/dashes/underscores only */
+/** Rule ID: 3–64 chars, letters/numbers/dashes/underscores only */
 export const isValidRuleId = (s) =>
-  typeof s === 'string' && /^[a-zA-Z0-9_\-]{4,64}$/.test(s.trim());
+  typeof s === 'string' && /^[a-zA-Z0-9_\-]{3,64}$/.test(s.trim());
 
 /** Non-empty, non-whitespace string */
 export const isNonEmpty = (s) =>
