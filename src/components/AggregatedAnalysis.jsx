@@ -9,6 +9,7 @@ import {
 import { getRuleColor } from '../constants';
 import {
   toISTDatetimeLocal,
+  toISTDatetimeLocalFromOffset,
   istDatetimeLocalToBackendStr,
   istDatetimeLocalToEpochMs,
   formatISTDateTime,
@@ -126,15 +127,18 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
     [rules, selectedRuleIds]
   );
 
-  // No min/max constraints — users may query any date range (past or future).
-  // If future dates are queried, ClickHouse will simply return empty results.
+  // min = 7 days ago, no max — users may query into the future (returns empty results).
+  const minDate = toISTDatetimeLocalFromOffset(-7 * 24 * 60 * 60 * 1000);
 
-  // Only validate that start is strictly before end.
+  // Validate: start must be within the 7-day lookback window, and start must be before end.
+  // Future end dates are allowed — ClickHouse will simply return no rows.
   const validate = () => {
     const startEpoch = istDatetimeLocalToEpochMs(startTs);
     const endEpoch   = istDatetimeLocalToEpochMs(endTs);
+    const nowEpoch   = Date.now();
     if (isNaN(startEpoch) || isNaN(endEpoch)) return 'Invalid date format.';
     if (startEpoch >= endEpoch) return 'Start time must be before end time.';
+    if (startEpoch < nowEpoch - 7 * 24 * 60 * 60 * 1000) return 'Start cannot be more than 7 days ago.';
     return '';
   };
 
@@ -504,6 +508,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
             type="datetime-local"
             value={startTs}
             onChange={(e) => setStartTs(e.target.value)}
+            min={minDate}
           />
         </div>
         <div className="form-group" style={{ flex: 1, marginBottom: 0, minWidth: 200 }}>
@@ -512,6 +517,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
             type="datetime-local"
             value={endTs}
             onChange={(e) => setEndTs(e.target.value)}
+            min={minDate}
           />
         </div>
         <button
