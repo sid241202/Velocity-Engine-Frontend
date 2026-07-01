@@ -15,11 +15,14 @@ const TOOLTIP_STYLE = {
     borderRadius: '8px',
     color: '#e2e8f0',
     fontSize: '0.8rem',
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)',
   },
-  labelStyle: { color: '#94a3b8' },
+  labelStyle: { color: '#94a3b8', fontWeight: 600, marginBottom: '0.3rem' },
 };
-const AXIS_STROKE = '#94a3b8';
-const GRID_PROPS = { strokeDasharray: '3 3', stroke: '#334155' };
+
+// UI FIX 1: Removed vertical grid lines to stop clutter
+const AXIS_STROKE = '#64748b';
+const GRID_PROPS = { strokeDasharray: '3 3', stroke: 'rgba(255,255,255,0.1)', vertical: false };
 const DASH_PATTERNS = ['', '5 5', '8 4', '3 6', '10 3', '4 4 2 4'];
 
 const STATUS_COLORS = {
@@ -28,7 +31,6 @@ const STATUS_COLORS = {
   disconnected: '#ef4444',
 };
 
-// IST-safe time formatting — treats naive strings (no tz suffix) as IST
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
 function parseAsIST(ts) {
@@ -45,7 +47,6 @@ function formatTime(ts) {
 function formatTimeShort(ts) {
   const d = parseAsIST(ts);
   if (!d) return ts ? String(ts) : '';
-  // Use UTC offset trick to extract IST wall-clock values
   const ist = new Date(d.getTime() + IST_OFFSET_MS);
   const pad = (n) => String(n).padStart(2, '0');
   return `${pad(ist.getUTCHours())}:${pad(ist.getUTCMinutes())}:${pad(ist.getUTCSeconds())}`;
@@ -83,30 +84,19 @@ function isBreached(row) {
     || row.thresholdBreached === true || row.thresholdBreached === 1;
 }
 
-/**
- * Normalize a row from either the old Flink schema or the new multi-sink schema.
- * Old: { ruleId, groupKey, aggregationResults:{...}, thresholdBreached, evaluatedAt }
- * New: { id, entityValue, aggResult:{...}, producedAt, event_type:'agg' }
- */
 function normalizeRow(row) {
   if (!row) return row;
   const r = { ...row };
-  // ruleId: new schema uses 'id'
   if (!r.ruleId && r.id) r.ruleId = r.id;
-  // groupKey: new schema uses 'entityValue'
   if (!r.groupKey && r.entityValue) r.groupKey = r.entityValue;
-  // aggregationResults: new schema uses 'aggResult' (may already be parsed by backend)
   if (!r.aggregationResults && r.aggResult) {
     r.aggregationResults = typeof r.aggResult === 'string'
       ? (() => { try { return JSON.parse(r.aggResult); } catch { return {}; } })()
       : r.aggResult;
   }
-  // evaluatedAt: new schema uses 'producedAt'
   if (!r.evaluatedAt && r.producedAt) r.evaluatedAt = r.producedAt;
   return r;
 }
-
-
 
 function getEventCount(row) {
   if (row.eventCount != null && row.eventCount !== undefined) return Number(row.eventCount) || 0;
@@ -141,7 +131,6 @@ export default function LiveAnalysis({ rules, selectedRuleIds }) {
       const next = { ...prev };
       if (!next[ruleId]) next[ruleId] = [];
       next[ruleId] = [...next[ruleId], normRow];
-      // Build 24h cutoff as IST naive string to match windowStart format ("YYYY-MM-DD HH:MM:SS")
       const cutoffEpoch = Date.now() - 24 * 60 * 60 * 1000;
       const istWall = new Date(cutoffEpoch + IST_OFFSET_MS);
       const pad = (n) => String(n).padStart(2, '0');
@@ -150,7 +139,6 @@ export default function LiveAnalysis({ rules, selectedRuleIds }) {
       return next;
     });
   }, []);
-
 
   const fetchDataHttp = useCallback(async () => {
     if (selectedRuleIds.size === 0) return;
@@ -282,12 +270,6 @@ export default function LiveAnalysis({ rules, selectedRuleIds }) {
       stopFallbackPolling();
     };
   }, [selectedRuleIds, connectWebSocket, closeWebSocket, stopFallbackPolling, startFallbackPolling]);
-
-  useEffect(() => {
-    if (tableRef.current) {
-      tableRef.current.scrollTop = tableRef.current.scrollHeight;
-    }
-  }, [data]);
 
   const getRuleName = useCallback((ruleId) => {
     const match = rules.find(rule => rule.rule_metadata.rule_id === ruleId);
@@ -644,156 +626,70 @@ export default function LiveAnalysis({ rules, selectedRuleIds }) {
         </div>
       </div>
 
-      <div className="chart-container">
+      {/* UI FIX 3: Added flexShrink: 0 and strict height to prevent the chart from collapsing */}
+      <div className="chart-container" style={{ flexShrink: 0 }}>
         <div className="chart-title">Event Volume &amp; Breach Signal</div>
-        <ResponsiveContainer width="100%" height={400}>
-          <ComposedChart data={comboData}>
-            <CartesianGrid {...GRID_PROPS} />
-            <XAxis
-              dataKey="windowStart"
-              stroke={AXIS_STROKE}
-              tick={{ fontSize: 11 }}
-              tickFormatter={formatTime}
-            />
-            <YAxis
-              yAxisId="left"
-              stroke={AXIS_STROKE}
-              tick={{ fontSize: 11 }}
-              label={{ value: 'Event Count', angle: -90, position: 'insideLeft', style: { fill: '#94a3b8', fontSize: 11 } }}
-            />
-            <YAxis
-              yAxisId="right"
-              orientation="right"
-              stroke={AXIS_STROKE}
-              tick={{ fontSize: 11 }}
-              domain={[0, 1]}
-              ticks={[0, 1]}
-              label={{ value: 'Breach', angle: 90, position: 'insideRight', style: { fill: '#94a3b8', fontSize: 11 } }}
-            />
-            <Tooltip
-              {...TOOLTIP_STYLE}
-              labelFormatter={formatTime}
-              formatter={(value, name) => {
-                if (name.startsWith('evt_')) return [value?.toLocaleString(), `Events: ${getRuleName(name.replace('evt_', ''))}`];
-                if (name.startsWith('br_')) return [value === 1 ? 'BREACH' : 'OK', `Signal: ${getRuleName(name.replace('br_', ''))}`];
-                return [value, name];
-              }}
-            />
-            <Legend
-              formatter={(value) => {
-                if (value.startsWith('evt_')) return `📊 ${getRuleName(value.replace('evt_', ''))}`;
-                if (value.startsWith('br_')) return `⚡ ${getRuleName(value.replace('br_', ''))} Signal`;
-                return value;
-              }}
-            />
-
-            {selectedRules.map(r => {
-              const id = r.rule_metadata.rule_id;
-              const color = getRuleColor(rules, id);
-              return (
-                <Area
-                  key={`evt_${id}`}
-                  yAxisId="left"
-                  type="monotone"
-                  dataKey={`evt_${id}`}
-                  stroke={color}
-                  fill={color}
-                  fillOpacity={0.12}
-                  strokeWidth={2}
-                  name={`evt_${id}`}
-                  dot={false}
-                  activeDot={{ r: 4, strokeWidth: 0 }}
-                  isAnimationActive={true}
-                  animationDuration={800}
-                />
-              );
-            })}
-
-            {selectedRules.map(r => {
-              const id = r.rule_metadata.rule_id;
-              const color = getRuleColor(rules, id);
-              return (
-                <Line
-                  key={`br_${id}`}
-                  yAxisId="right"
-                  type="stepAfter"
-                  dataKey={`br_${id}`}
-                  stroke={color}
-                  strokeWidth={2}
-                  strokeDasharray="4 2"
-                  name={`br_${id}`}
-                  dot={false}
-                  activeDot={{ r: 4, fill: '#ef4444', strokeWidth: 0 }}
-                  isAnimationActive={true}
-                  animationDuration={800}
-                />
-              );
-            })}
-
-            {breachRefLines.map((ts, idx) => (
-              <ReferenceLine
-                key={`ref_${idx}`}
-                x={ts}
-                yAxisId="left"
-                stroke="#ef4444"
-                strokeDasharray="3 3"
-                strokeOpacity={0.4}
-              />
-            ))}
-
-            <Brush
-              dataKey="windowStart"
-              height={28}
-              stroke="#3b82f6"
-              fill="rgba(15,23,42,0.8)"
-              tickFormatter={formatTime}
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-        <div className="chart-container">
-          <div className="chart-title">Cumulative Breaches</div>
-          <ResponsiveContainer width="100%" height={320}>
-            <LineChart data={cumulativeData}>
+        <div style={{ width: '100%', height: 400, marginTop: '1rem' }}>
+          <ResponsiveContainer width="100%" height="100%">
+            {/* UI FIX 2: Added margin to separate the Brush from the X-Axis text */}
+            <ComposedChart data={comboData} margin={{ top: 10, right: 20, bottom: 30, left: 0 }}>
               <CartesianGrid {...GRID_PROPS} />
               <XAxis
                 dataKey="windowStart"
                 stroke={AXIS_STROKE}
                 tick={{ fontSize: 11 }}
                 tickFormatter={formatTime}
+                minTickGap={30} /* Prevents text squishing */
+                dy={10} /* Pushes text down slightly */
               />
               <YAxis
+                yAxisId="left"
                 stroke={AXIS_STROKE}
                 tick={{ fontSize: 11 }}
                 allowDecimals={false}
+                label={{ value: 'Event Count', angle: -90, position: 'insideLeft', style: { fill: '#94a3b8', fontSize: 11 } }}
+              />
+              {/* UI FIX 4: Extended domain to 1.1 so the breach line stroke isn't clipped at the absolute top edge */}
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                stroke={AXIS_STROKE}
+                tick={{ fontSize: 11 }}
+                domain={[-0.1, 1.1]}
+                ticks={[0, 1]}
+                label={{ value: 'Breach', angle: 90, position: 'insideRight', style: { fill: '#94a3b8', fontSize: 11 } }}
               />
               <Tooltip
                 {...TOOLTIP_STYLE}
                 labelFormatter={formatTime}
                 formatter={(value, name) => {
-                  const ruleId = name.replace('cum_', '');
-                  return [value, getRuleName(ruleId)];
+                  if (name.startsWith('evt_')) return [value?.toLocaleString(), `Events: ${getRuleName(name.replace('evt_', ''))}`];
+                  if (name.startsWith('br_')) return [value === 1 ? 'BREACH' : 'OK', `Signal: ${getRuleName(name.replace('br_', ''))}`];
+                  return [value, name];
                 }}
               />
-              <Legend
+              <Legend wrapperStyle={{ paddingTop: '15px' }}
                 formatter={(value) => {
-                  const ruleId = value.replace('cum_', '');
-                  return getRuleName(ruleId);
+                  if (value.startsWith('evt_')) return `📊 ${getRuleName(value.replace('evt_', ''))}`;
+                  if (value.startsWith('br_')) return `⚡ ${getRuleName(value.replace('br_', ''))} Signal`;
+                  return value;
                 }}
               />
+
               {selectedRules.map(r => {
                 const id = r.rule_metadata.rule_id;
                 const color = getRuleColor(rules, id);
                 return (
-                  <Line
-                    key={`cum_${id}`}
+                  <Area
+                    key={`evt_${id}`}
+                    yAxisId="left"
                     type="monotone"
-                    dataKey={`cum_${id}`}
+                    dataKey={`evt_${id}`}
                     stroke={color}
+                    fill={color}
+                    fillOpacity={0.12}
                     strokeWidth={2}
-                    name={`cum_${id}`}
+                    name={`evt_${id}`}
                     dot={false}
                     activeDot={{ r: 4, strokeWidth: 0 }}
                     isAnimationActive={true}
@@ -801,54 +697,158 @@ export default function LiveAnalysis({ rules, selectedRuleIds }) {
                   />
                 );
               })}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
 
-        <div className="chart-container">
-          <div className="chart-title">Aggregation Metrics</div>
-          <ResponsiveContainer width="100%" height={320}>
-            <LineChart data={aggData}>
-              <CartesianGrid {...GRID_PROPS} />
-              <XAxis
-                dataKey="windowStart"
-                stroke={AXIS_STROKE}
-                tick={{ fontSize: 11 }}
-                tickFormatter={formatTime}
-              />
-              <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} />
-              <Tooltip
-                {...TOOLTIP_STYLE}
-                labelFormatter={formatTime}
-              />
-              <Legend />
-              {aggLines.map(line => (
-                <Line
-                  key={line.key}
-                  type="monotone"
-                  dataKey={line.key}
-                  name={line.name}
-                  stroke={line.color}
-                  strokeWidth={2}
-                  strokeDasharray={line.dashArray}
-                  dot={false}
-                  activeDot={{ r: 3, strokeWidth: 0 }}
-                  isAnimationActive={true}
-                  animationDuration={800}
+              {selectedRules.map(r => {
+                const id = r.rule_metadata.rule_id;
+                const color = getRuleColor(rules, id);
+                return (
+                  <Line
+                    key={`br_${id}`}
+                    yAxisId="right"
+                    type="stepAfter"
+                    dataKey={`br_${id}`}
+                    stroke={color}
+                    strokeWidth={2}
+                    strokeDasharray="4 2"
+                    name={`br_${id}`}
+                    dot={false}
+                    activeDot={{ r: 4, fill: '#ef4444', strokeWidth: 0 }}
+                    isAnimationActive={true}
+                    animationDuration={800}
+                  />
+                );
+              })}
+
+              {breachRefLines.map((ts, idx) => (
+                <ReferenceLine
+                  key={`ref_${idx}`}
+                  x={ts}
+                  yAxisId="left"
+                  stroke="#ef4444"
+                  strokeDasharray="3 3"
+                  strokeOpacity={0.4}
                 />
               ))}
-            </LineChart>
+
+              <Brush
+                dataKey="windowStart"
+                height={20}
+                stroke="#3b82f6"
+                fill="rgba(15,23,42,0.8)"
+                tickFormatter={formatTime}
+                y={375} /* Forces the brush out of the way */
+              />
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      <div className="chart-container">
+      {/* UI FIX 5: Used auto-fit grid so charts elegantly wrap on smaller screens */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '1rem', flexShrink: 0 }}>
+        <div className="chart-container" style={{ flexShrink: 0 }}>
+          <div className="chart-title">Cumulative Breaches</div>
+          <div style={{ width: '100%', height: 320, marginTop: '1rem' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={cumulativeData} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
+                <CartesianGrid {...GRID_PROPS} />
+                <XAxis
+                  dataKey="windowStart"
+                  stroke={AXIS_STROKE}
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={formatTime}
+                  minTickGap={30}
+                  dy={10}
+                />
+                <YAxis
+                  stroke={AXIS_STROKE}
+                  tick={{ fontSize: 11 }}
+                  allowDecimals={false}
+                />
+                <Tooltip
+                  {...TOOLTIP_STYLE}
+                  labelFormatter={formatTime}
+                  formatter={(value, name) => {
+                    const ruleId = name.replace('cum_', '');
+                    return [value, getRuleName(ruleId)];
+                  }}
+                />
+                <Legend wrapperStyle={{ paddingTop: '10px' }}
+                  formatter={(value) => {
+                    const ruleId = value.replace('cum_', '');
+                    return getRuleName(ruleId);
+                  }}
+                />
+                {selectedRules.map(r => {
+                  const id = r.rule_metadata.rule_id;
+                  const color = getRuleColor(rules, id);
+                  return (
+                    <Line
+                      key={`cum_${id}`}
+                      type="monotone"
+                      dataKey={`cum_${id}`}
+                      stroke={color}
+                      strokeWidth={2}
+                      name={`cum_${id}`}
+                      dot={false}
+                      activeDot={{ r: 4, strokeWidth: 0 }}
+                      isAnimationActive={true}
+                      animationDuration={800}
+                    />
+                  );
+                })}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="chart-container" style={{ flexShrink: 0 }}>
+          <div className="chart-title">Aggregation Metrics</div>
+          <div style={{ width: '100%', height: 320, marginTop: '1rem' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={aggData} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
+                <CartesianGrid {...GRID_PROPS} />
+                <XAxis
+                  dataKey="windowStart"
+                  stroke={AXIS_STROKE}
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={formatTime}
+                  minTickGap={30}
+                  dy={10}
+                />
+                <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} />
+                <Tooltip
+                  {...TOOLTIP_STYLE}
+                  labelFormatter={formatTime}
+                />
+                <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                {aggLines.map(line => (
+                  <Line
+                    key={line.key}
+                    type="monotone"
+                    dataKey={line.key}
+                    name={line.name}
+                    stroke={line.color}
+                    strokeWidth={2}
+                    strokeDasharray={line.dashArray}
+                    dot={false}
+                    activeDot={{ r: 3, strokeWidth: 0 }}
+                    isAnimationActive={true}
+                    animationDuration={800}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      <div className="chart-container" style={{ flexShrink: 0 }}>
         <div className="chart-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <AlertTriangle size={16} style={{ opacity: 0.7 }} />
           Top Groups by Breach Activity
         </div>
         <div ref={tableRef} style={{ overflowX: 'auto', maxHeight: 520, overflowY: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '0.5rem' }}>
             <thead>
               <tr>
                 <th style={thStyle}>#</th>
@@ -878,13 +878,8 @@ export default function LiveAnalysis({ rules, selectedRuleIds }) {
                 const isCurrentlyBreaching = currentlyBreaching.has(`${g.groupKey}||${g.ruleId}`);
 
                 const rowStyle = isCurrentlyBreaching
-                  ? {
-                      borderLeft: '4px solid #ef4444',
-                      background: 'rgba(239,68,68,0.08)',
-                    }
-                  : {
-                      borderLeft: `3px solid ${color}`,
-                    };
+                  ? { borderLeft: '4px solid #ef4444', background: 'rgba(239,68,68,0.08)' }
+                  : { borderLeft: `3px solid ${color}` };
 
                 return (
                   <tr
@@ -896,18 +891,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds }) {
                     <td style={{ ...tdStyle, fontFamily: 'monospace', color: '#93c5fd' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                         {isCurrentlyBreaching && (
-                          <span
-                            style={{
-                              display: 'inline-block',
-                              width: 8,
-                              height: 8,
-                              borderRadius: '50%',
-                              background: '#ef4444',
-                              boxShadow: '0 0 6px #ef4444',
-                              animation: 'pulse-dot 1.5s ease-in-out infinite',
-                              flexShrink: 0,
-                            }}
-                          />
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', boxShadow: '0 0 6px #ef4444', animation: 'pulse-dot 1.5s ease-in-out infinite', flexShrink: 0 }} />
                         )}
                         <span>
                           {g.entityName && g.entityName !== 'group' && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>{g.entityName}</span>}
@@ -917,23 +901,9 @@ export default function LiveAnalysis({ rules, selectedRuleIds }) {
                     </td>
                     <td style={tdStyle}>{getRuleName(g.ruleId)}</td>
                     <td style={{ ...tdStyle, fontWeight: 600 }}>{g.totalEvents.toLocaleString()}</td>
-                    <td style={{
-                      ...tdStyle,
-                      color: g.breaches > 0 ? '#ef4444' : 'var(--text-muted)',
-                      fontWeight: g.breaches > 0 ? 600 : 400,
-                    }}>
-                      {g.breaches}
-                    </td>
-                    <td style={{
-                      ...tdStyle,
-                      color: parseFloat(g.breachRate) > 50 ? '#ef4444' : parseFloat(g.breachRate) > 20 ? '#f59e0b' : 'var(--text-muted)',
-                      fontWeight: parseFloat(g.breachRate) > 20 ? 600 : 400,
-                    }}>
-                      {g.breachRate}%
-                    </td>
-                    <td style={{ ...tdStyle, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      {formatTimeShort(g.lastWindow)}
-                    </td>
+                    <td style={{ ...tdStyle, color: g.breaches > 0 ? '#ef4444' : 'var(--text-muted)', fontWeight: g.breaches > 0 ? 600 : 400 }}>{g.breaches}</td>
+                    <td style={{ ...tdStyle, color: parseFloat(g.breachRate) > 50 ? '#ef4444' : parseFloat(g.breachRate) > 20 ? '#f59e0b' : 'var(--text-muted)', fontWeight: parseFloat(g.breachRate) > 20 ? 600 : 400 }}>{g.breachRate}%</td>
+                    <td style={{ ...tdStyle, fontSize: '0.75rem', color: 'var(--text-muted)' }}>{formatTimeShort(g.lastWindow)}</td>
                   </tr>
                 );
               })}
