@@ -441,7 +441,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     for (const arr of Object.values(perRule)) for (const e of arr) allTimestamps.add(e.windowStart);
     const sortedTs = [...allTimestamps].sort((a, b) => new Date(a) - new Date(b));
     const lastCum = {};
-    return sortedTs.map(ts => {
+    const merged = sortedTs.map(ts => {
       const point = { windowStart: ts };
       for (const ruleId of [...selectedRuleIds]) {
         const entry = (perRule[ruleId] || []).find(e => e.windowStart === ts);
@@ -450,6 +450,22 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
       }
       return point;
     });
+
+    // Pre-compute which timestamps had a cumulative breach increment (for dot rendering).
+    // Recharts does NOT pass the data array into dot() render props, so we must do
+    // this comparison ahead of time and pass it via closure.
+    const breachIncrementTs = new Set();
+    for (let i = 1; i < merged.length; i++) {
+      for (const ruleId of [...selectedRuleIds]) {
+        const key = `cum_${ruleId}`;
+        if ((merged[i][key] || 0) > (merged[i - 1][key] || 0)) {
+          breachIncrementTs.add(merged[i].windowStart);
+          break;
+        }
+      }
+    }
+
+    return { merged, breachIncrementTs };
   }, [allRows, selectedRuleIds]);
 
   // Chart 3: Event count bars colored by breach status
@@ -798,7 +814,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
           <div className="chart-title" style={{ marginBottom: '1.25rem' }}>Cumulative Breaches</div>
           <div style={{ width: '100%', height: 280 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={cumulativeData} margin={{ top: 10, right: 16, bottom: 36, left: 12 }}>
+              <AreaChart data={cumulativeData.merged} margin={{ top: 10, right: 16, bottom: 36, left: 12 }}>
                 <defs>
                   <linearGradient id="gradCumBreachInner" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor={BREACH_RED} stopOpacity={0.45} />
@@ -837,14 +853,14 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
                       fill="url(#gradCumBreachInner)"
                       name={`cum_${id}`}
                       dot={(props) => {
-                        // Only show a dot when the value just incremented
-                        const { cx, cy, payload, index, data: chartData } = props;
+                        // Show a marker only at timestamps where the cumulative count incremented.
+                        // breachIncrementTs is pre-computed in the useMemo above;
+                        // we never access props.data here to avoid the Recharts undefined crash.
+                        const { cx, cy, payload } = props;
                         if (!payload || cx == null || cy == null) return null;
-                        const prev = index > 0 ? chartData[index - 1] : null;
-                        const didBreach = prev && payload[`cum_${id}`] > prev[`cum_${id}`];
-                        if (!didBreach) return null;
+                        if (!cumulativeData.breachIncrementTs.has(payload.windowStart)) return null;
                         return (
-                          <g key={`dot_${index}`}>
+                          <g key={`dot_${payload.windowStart}`}>
                             <circle cx={cx} cy={cy} r={10} fill="rgba(239,68,68,0.15)" />
                             <circle cx={cx} cy={cy} r={5} fill={BREACH_RED} stroke="#fff" strokeWidth={1.5} />
                           </g>
