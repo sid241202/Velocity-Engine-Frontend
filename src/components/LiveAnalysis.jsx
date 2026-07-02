@@ -685,7 +685,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
       {/* ═══════════════════════════════════════════════════════════════════
           Chart 1: Event Volume — area + agg metric lines + precise breach markers
           ═══════════════════════════════════════════════════════════════════ */}
-      <div className="chart-container" style={{ paddingBottom: '40px', marginBottom: '40px' }}>
+      <div className="chart-container" style={{ paddingBottom: '40px', marginBottom: '40px', height: 'auto' }}>
         <div className="chart-title" style={{ marginBottom: '1.25rem' }}>
           Event Volume, Aggregation Metrics, and Breaches
         </div>
@@ -925,10 +925,10 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
 
       {/* Standalone Aggregation Metrics chart removed — now merged into Event Volume chart above */}
 
-      {/* ═══════════════════════════════════════════════════════════════════════
+      {/* ═══════════════════════════════════════════════════════════════════
           Table: Top Groups by Breach Activity
           ═══════════════════════════════════════════════════════════════════ */}
-      <div className="chart-container">
+      <div className="chart-container" style={{ height: 'auto' }}>
         <div className="chart-title" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1rem' }}>
           <AlertTriangle size={15} style={{ opacity: 0.7 }} />
           Top Groups by Breach Activity
