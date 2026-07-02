@@ -366,6 +366,14 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
     return Math.max(1, ...breachHeatmapData.map(d => d.breaches));
   }, [breachHeatmapData]);
 
+  const sortedAnomalyData = useMemo(() => {
+    return [...anomalyData].sort((a, b) => {
+      const tsA = new Date(a.timestamp || a.producedAt || a.detectedAt || a.windowEnd || 0).getTime();
+      const tsB = new Date(b.timestamp || b.producedAt || b.detectedAt || b.windowEnd || 0).getTime();
+      return tsB - tsA;
+    });
+  }, [anomalyData]);
+
   /* ───── Aggregation values chart data ───── */
   const { aggData, aggLines } = useMemo(() => {
     const lines = [];
@@ -694,13 +702,13 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--danger)', boxShadow: '0 0 6px rgba(248,81,73,0.6)', animation: 'pulse-dot 1.5s ease-in-out infinite', flexShrink: 0 }} />
                 <span style={{ color: 'var(--danger)', fontSize: '0.83rem', fontWeight: 600 }}>Live Anomaly Feed</span>
                 <span style={{ marginLeft: '0.5rem', padding: '0.1rem 0.55rem', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 700, background: 'rgba(248,81,73,0.15)', color: 'var(--danger)', border: '1px solid rgba(248,81,73,0.25)' }}>
-                  {anomalyData.length} breach event{anomalyData.length !== 1 ? 's' : ''}
+                  {sortedAnomalyData.length} breach event{sortedAnomalyData.length !== 1 ? 's' : ''}
                 </span>
                 <span style={{ color: 'var(--text-3)', fontSize: '0.72rem', marginLeft: 'auto' }}>{showAnomalyFeed ? '▲ Hide' : '▼ Show'}</span>
               </div>
               {showAnomalyFeed && (
                 <div style={{ maxHeight: 280, overflowY: 'auto', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                  {anomalyData.slice(0, 30).map((ev, i) => {
+                  {sortedAnomalyData.slice(0, 30).map((ev, i) => {
                     const ruleId = ev.ruleId || ev.id || 'unknown';
                     const entity = ev.entityValue || ev.groupKey || ev.entity || '—';
                     const ts     = ev.timestamp || ev.producedAt || ev.detectedAt || ev.windowEnd || '';
@@ -721,8 +729,8 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
                       </div>
                     );
                   })}
-                  {anomalyData.length > 30 && (
-                    <p style={{ color: 'var(--text-3)', fontSize: '0.73rem', textAlign: 'center', margin: '0.25rem 0 0' }}>+ {anomalyData.length - 30} more breach events</p>
+                  {sortedAnomalyData.length > 30 && (
+                    <p style={{ color: 'var(--text-3)', fontSize: '0.73rem', textAlign: 'center', margin: '0.25rem 0 0' }}>+ {sortedAnomalyData.length - 30} more breach events</p>
                   )}
                 </div>
               )}
@@ -764,12 +772,12 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
           </div>
 
           {/* Event Volume Area Chart */}
-          <div className="chart-container">
+          <div className="chart-container" style={{ paddingBottom: '40px', marginBottom: '40px' }}>
             <div className="chart-title">Event Volume Over Time</div>
             <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>Total events processed per evaluation window. <span style={{ color: '#f85149' }}>Red markers</span> indicate threshold breaches.</div>
-            {/* height:430 + bottom:70 = room for Brush(24) + X-axis labels + gap */}
-            <ResponsiveContainer width="100%" height={430}>
-              <AreaChart data={eventVolumeData} margin={{ top: 10, right: 20, left: 10, bottom: 70 }}>
+            <div style={{ width: '100%', height: 460, paddingBottom: '50px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={eventVolumeData} margin={{ top: 10, right: 20, left: 10, bottom: 70 }}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis dataKey="windowStart" stroke={AXIS_STROKE} tick={{ fontSize: 11 }} tickFormatter={formatTime} minTickGap={30} dy={10} />
                 <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} width={48} />
@@ -788,16 +796,17 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
                 {/* Brush auto-positioned by Recharts within the bottom margin */}
                 <Brush dataKey="windowStart" height={24} stroke="#3b82f6" fill="rgba(15,23,42,0.8)" tickFormatter={formatTime} />
               </AreaChart>
-            </ResponsiveContainer>
+              </ResponsiveContainer>
+            </div>
           </div>
 
           {/* Breach Density by Hour */}
-          <div className="chart-container">
+          <div className="chart-container" style={{ paddingBottom: '30px', marginBottom: '30px' }}>
             <div className="chart-title">Breach Density by Hour (IST)</div>
             <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>Number of threshold breaches per hour of day. Identifies when anomalous activity peaks.</div>
-            {/* height:260 + bottom:60 ensures angled labels (-35deg) don't clip under chart edge */}
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={breachHeatmapData} margin={{ top: 10, right: 20, left: 10, bottom: 60 }}>
+            <div style={{ width: '100%', height: 320, paddingBottom: '30px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={breachHeatmapData} margin={{ top: 10, right: 20, left: 10, bottom: 60 }}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis dataKey="label" stroke={AXIS_STROKE} tick={{ fontSize: 10 }} interval={0} angle={-35} textAnchor="end" />
                 <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} allowDecimals={false} width={40} />
@@ -812,16 +821,18 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
                   ))}
                 </Bar>
               </BarChart>
-            </ResponsiveContainer>
+              </ResponsiveContainer>
+            </div>
           </div>
 
           {/* Aggregation Metric Values Chart */}
           {aggLines.length > 0 && (
-          <div className="chart-container">
+          <div className="chart-container" style={{ paddingBottom: '30px', marginBottom: '30px' }}>
             <div className="chart-title">Computed Metric Values Over Time</div>
             <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>The aggregated metric values (counts, sums, averages) your rules computed for each window.</div>
-            <ResponsiveContainer width="100%" height={340}>
-              <LineChart data={aggData} margin={{ top: 10, right: 20, left: 10, bottom: 40 }}>
+            <div style={{ width: '100%', height: 380, paddingBottom: '30px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={aggData} margin={{ top: 10, right: 20, left: 10, bottom: 40 }}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis dataKey="windowStart" stroke={AXIS_STROKE} tick={{ fontSize: 11 }} tickFormatter={formatTime} minTickGap={30} dy={10} />
                 <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} width={48} />
@@ -834,7 +845,8 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
                   <Line key={line.key} type="monotone" dataKey={line.key} name={line.name} stroke={line.color} strokeWidth={2} strokeDasharray={line.dashArray} dot={false} activeDot={{ r: 3, strokeWidth: 0 }} />
                 ))}
               </LineChart>
-            </ResponsiveContainer>
+              </ResponsiveContainer>
+            </div>
           </div>
           )}
 
