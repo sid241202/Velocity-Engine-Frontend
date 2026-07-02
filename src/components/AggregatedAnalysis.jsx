@@ -63,29 +63,27 @@ function getAggResults(row) {
 
 const TOOLTIP_STYLE = {
   contentStyle: {
-    background: 'rgba(8,12,28,0.97)',
-    border: '1px solid rgba(99,102,241,0.3)',
+    background: 'rgba(13,17,23,0.97)',
+    border: '1px solid rgba(88,101,242,0.3)',
     borderRadius: '10px',
-    color: '#e2e8f0',
-    fontSize: '0.8rem',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-    backdropFilter: 'blur(12px)',
+    color: '#e6edf3',
+    fontSize: '0.79rem',
+    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
   },
-  labelStyle: { color: '#a5b4fc', fontWeight: 700, marginBottom: '0.4rem', fontSize: '0.78rem' },
-  itemStyle: { color: '#cbd5e1' },
+  labelStyle: { color: '#8b949e', marginBottom: '0.25rem', fontWeight: 600 },
 };
 
-const AXIS_STROKE = '#334155';
-const GRID_PROPS = { strokeDasharray: '3 3', stroke: 'rgba(255,255,255,0.05)', vertical: false };
+const AXIS_STROKE = '#545d68';
+const GRID_PROPS = { strokeDasharray: '3 3', stroke: 'rgba(255,255,255,0.06)' };
 const DASH_PATTERNS = ['', '5 5', '8 4', '3 6', '10 3', '4 4 2 4'];
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
-// Semantic colors
-const BREACH_RED   = '#ef4444';
-const BREACH_AMBER = '#f97316';
-const SAFE_GREEN   = '#10b981';
-const ACCENT_BLUE  = '#6366f1';
-const ACCENT_CYAN  = '#06b6d4';
+// Semantic colors — exact match to test-simulation branch
+const BREACH_RED   = '#f85149';
+const BREACH_AMBER = '#ff7b72';
+const SAFE_GREEN   = '#3fb950';
+const ACCENT_BLUE  = '#5865f2';
+const ACCENT_CYAN  = '#2dd4bf';
 
 // formatTime: always display timestamps in IST (short form for chart axes)
 function formatTime(ts) {
@@ -107,6 +105,14 @@ function getBreachColor(rate) {
   if (rate <= 20) return '#e3a008';
   if (rate <= 50) return '#ff7b72';
   return '#f85149';
+}
+
+function getSeverityBadge(sev) {
+  const s = String(sev || '').toUpperCase();
+  if (s === 'CRITICAL') return { bg: 'rgba(248,81,73,0.15)', color: '#f85149', border: 'rgba(248,81,73,0.3)' };
+  if (s === 'HIGH')     return { bg: 'rgba(255,123,114,0.12)', color: '#ff7b72', border: 'rgba(255,123,114,0.25)' };
+  if (s === 'MEDIUM')   return { bg: 'rgba(227,160,8,0.12)', color: '#e3a008', border: 'rgba(227,160,8,0.25)' };
+  return { bg: 'rgba(45,212,191,0.1)', color: '#2dd4bf', border: 'rgba(45,212,191,0.2)' };
 }
 
 function formatHourRange(hour) {
@@ -152,14 +158,29 @@ function EventVolumeTooltip({ active, payload, label, getRuleName }) {
   );
 }
 
-// ─── Gradient defs for charts ───────────────────────────────────────────────
+// ─── Gradient defs for charts (matches test-simulation exactly) ─────────────
 function ChartGradientDefs() {
   return (
     <defs>
-      <linearGradient id="gradEventVolumeAgg" x1="0" y1="0" x2="0" y2="1">
+      <linearGradient id="gradEventVolume" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stopColor={ACCENT_BLUE} stopOpacity={0.35} />
         <stop offset="100%" stopColor={ACCENT_BLUE} stopOpacity={0.02} />
       </linearGradient>
+      <linearGradient id="gradCumBreach" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor={BREACH_RED} stopOpacity={0.4} />
+        <stop offset="100%" stopColor={BREACH_RED} stopOpacity={0.03} />
+      </linearGradient>
+      <linearGradient id="gradAggMetric" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor={ACCENT_CYAN} stopOpacity={0.3} />
+        <stop offset="100%" stopColor={ACCENT_CYAN} stopOpacity={0.02} />
+      </linearGradient>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="2" result="coloredBlur" />
+        <feMerge>
+          <feMergeNode in="coloredBlur" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
     </defs>
   );
 }
@@ -364,7 +385,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
   }, [data, selectedRuleIds, getRuleName, rules]);
 
   /* ───── Consolidated Chart Data: Event Volume + Agg Metrics + Breach Markers ───── */
-  const { comboData, aggLines, breachTs } = useMemo(() => {
+  const { comboData, aggLines } = useMemo(() => {
     const timeMap = {};
     const lines = [];
 
@@ -410,6 +431,12 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
     const sorted = Object.values(timeMap).sort((a, b) => a._tsMs - b._tsMs);
     return { comboData: sorted, aggLines: lines };
   }, [allRows, data, selectedRuleIds, getRuleName, rules]);
+
+  // Breach timestamps for XAxis tick highlighting — derived from comboData
+  const breachTimestamps = useMemo(
+    () => comboData.filter(pt => pt._breached).map(pt => pt.windowStart),
+    [comboData]
+  );
 
   /* ───── Bucketing helper for historical data ─────
      Prevents browser freeze on large queries by grouping raw windows
@@ -1052,7 +1079,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
                         dataKey={`evt_${id}`}
                         stroke={ACCENT_BLUE}
                         strokeWidth={2.5}
-                        fill="url(#gradEventVolumeAgg)"
+                        fill="url(#gradEventVolume)"
                         name={`evt_${id}`}
                         activeDot={{ r: 6, fill: ACCENT_BLUE, stroke: '#fff', strokeWidth: 2 }}
                         isAnimationActive={true}
