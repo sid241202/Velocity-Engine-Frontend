@@ -687,7 +687,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
           ═══════════════════════════════════════════════════════════════════ */}
       <div className="chart-container" style={{ paddingBottom: '40px', marginBottom: '40px' }}>
         <div className="chart-title" style={{ marginBottom: '1.25rem' }}>
-          Event Volume
+          Event Volume, Aggregation Metrics, and Breaches
         </div>
         {/* Fixed height + generous paddingBottom gives the Brush room without overlapping siblings */}
         <div style={{ width: '100%', height: 460, paddingBottom: '50px' }}>
