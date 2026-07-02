@@ -685,7 +685,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
       {/* ═══════════════════════════════════════════════════════════════════
           Chart 1: Event Volume — area + agg metric lines + precise breach markers
           ═══════════════════════════════════════════════════════════════════ */}
-      <div className="chart-container" style={{ marginBottom: '0px', height: 'auto' }}>
+      <div className="chart-container" style={{ marginBottom: '-15px', height: 'auto' }}>
         <div className="chart-title" style={{ marginBottom: '1.25rem' }}>
           Event Volume, Aggregation Metrics, and Breaches
         </div>

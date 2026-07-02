@@ -772,7 +772,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
           </div>
 
           {/* Event Volume Area Chart */}
-          <div className="chart-container" style={{ marginBottom: '5px', height: 'auto' }}>
+          <div className="chart-container" style={{ marginBottom: '-15px', height: 'auto' }}>
             <div className="chart-title">Event Volume Over Time</div>
             <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '1rem' }}>Total events processed per evaluation window. <span style={{ color: '#f85149' }}>Red markers</span> indicate threshold breaches.</div>
             <div style={{ width: '100%', height: 380 }}>
@@ -801,7 +801,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
           </div>
 
           {/* Breach Density by Hour */}
-          <div className="chart-container" style={{ marginBottom: '5px', height: 'auto' }}>
+          <div className="chart-container" style={{ marginBottom: '-15px', height: 'auto' }}>
             <div className="chart-title">Breach Density by Hour (IST)</div>
             <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '1rem' }}>Number of threshold breaches per hour of day. Identifies when anomalous activity peaks.</div>
             <div style={{ width: '100%', height: 300 }}>
@@ -827,7 +827,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
 
           {/* Aggregation Metric Values Chart */}
           {aggLines.length > 0 && (
-          <div className="chart-container" style={{ marginBottom: '5px', height: 'auto' }}>
+          <div className="chart-container" style={{ marginBottom: '-15px', height: 'auto' }}>
             <div className="chart-title">Computed Metric Values Over Time</div>
             <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '1rem' }}>The aggregated metric values (counts, sums, averages) your rules computed for each window.</div>
             <div style={{ width: '100%', height: 320 }}>
