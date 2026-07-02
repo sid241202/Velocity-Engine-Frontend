@@ -4,7 +4,7 @@ import { BarChart3, ArrowUpDown, Loader2, TrendingUp, AlertTriangle, Target, Act
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line, ComposedChart,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, Brush, ReferenceLine, Cell
+  ResponsiveContainer, Brush, ReferenceLine, Cell, Scatter
 } from 'recharts';
 import { getRuleColor } from '../constants';
 import {
@@ -90,6 +90,49 @@ function getISTHour(ts) {
   return ist.getUTCHours();
 }
 
+
+const ACCENT_BLUE = "#5865f2";
+const ACCENT_CYAN = "#2dd4bf";
+const BREACH_RED = "#f85149";
+
+function ChartGradientDefs() {
+  return (
+    <defs>
+      <linearGradient id="gradEventVolume" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor={ACCENT_BLUE} stopOpacity={0.35} />
+        <stop offset="100%" stopColor={ACCENT_BLUE} stopOpacity={0.02} />
+      </linearGradient>
+      <linearGradient id="gradCumBreach" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor={BREACH_RED} stopOpacity={0.4} />
+        <stop offset="100%" stopColor={BREACH_RED} stopOpacity={0.03} />
+      </linearGradient>
+      <linearGradient id="gradAggMetric" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor={ACCENT_CYAN} stopOpacity={0.3} />
+        <stop offset="100%" stopColor={ACCENT_CYAN} stopOpacity={0.02} />
+      </linearGradient>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="2" result="coloredBlur" />
+        <feMerge>
+          <feMergeNode in="coloredBlur" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+    </defs>
+  );
+}
+
+const CustomXAxisTick = (props) => {
+  const { x, y, payload, breachTs } = props;
+  const isBreach = breachTs && breachTs.includes(payload.value);
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text x={0} y={0} dy={16} textAnchor="middle" fill={isBreach ? BREACH_RED : "#64748b"} fontSize={11} fontWeight={isBreach ? 700 : 400}>
+        {formatTime(payload.value)}
+      </text>
+    </g>
+  );
+};
+
 function getBreachColor(rate) {
   if (rate < 5)   return '#3fb950';
   if (rate <= 20) return '#e3a008';
@@ -117,6 +160,11 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
   const [endTs, setEndTs] = useState(() => toISTDatetimeLocal(Date.now()));
   const [data, setData] = useState({});
   const [anomalyData, setAnomalyData] = useState([]);
+  const [hiddenSeries, setHiddenSeries] = useState({});
+  const handleLegendClick = useCallback((e) => {
+    const key = e.dataKey;
+    if (key) setHiddenSeries(prev => ({ ...prev, [key]: !prev[key] }));
+  }, []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [sortCol, setSortCol] = useState('breachRate');
@@ -825,30 +873,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
             </div>
           </div>
 
-          {/* Aggregation Metric Values Chart */}
-          {aggLines.length > 0 && (
-          <div className="chart-container" style={{ marginBottom: '-15px', height: 'auto' }}>
-            <div className="chart-title">Computed Metric Values Over Time</div>
-            <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '1rem' }}>The aggregated metric values (counts, sums, averages) your rules computed for each window.</div>
-            <div style={{ width: '100%', height: 320 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={aggData} margin={{ top: 10, right: 20, left: 10, bottom: 20 }}>
-                <CartesianGrid {...GRID_PROPS} />
-                <XAxis dataKey="windowStart" stroke={AXIS_STROKE} tick={{ fontSize: 11 }} tickFormatter={formatTime} minTickGap={30} dy={10} />
-                <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} width={48} />
-                <Tooltip {...TOOLTIP_STYLE} labelFormatter={ts => `Window: ${formatTime(ts)} IST`} />
-                <Legend verticalAlign="top" wrapperStyle={{ paddingBottom: '8px', fontSize: '0.75rem' }} />
-                {breachTimestamps.slice(0, 50).map((ts, idx) => (
-                  <ReferenceLine key={`aref-${idx}`} x={ts} stroke="#f85149" strokeDasharray="4 3" strokeOpacity={0.4} strokeWidth={1.5} />
-                ))}
-                {aggLines.map(line => (
-                  <Line key={line.key} type="monotone" dataKey={line.key} name={line.name} stroke={line.color} strokeWidth={2} strokeDasharray={line.dashArray} dot={false} activeDot={{ r: 3, strokeWidth: 0 }} />
-                ))}
-              </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          )}
+          
 
           {/* Entity Breach Ranking Table */}
           <div className="chart-container" style={{ height: 'auto' }}>
