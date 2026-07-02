@@ -797,9 +797,9 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
 
       {/* ═══════════════════════════════════════════════════════════════════
           Chart row: Window Intensity + Cumulative Breaches
-          2px top margin enforces the 0.3 cm gap from the chart above.
+          -8px top margin enforces the 0.1 cm gap from the chart above.
           ═══════════════════════════════════════════════════════════════════ */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '1rem', marginTop: '2px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '1rem', marginTop: '-8px' }}>
 
         {/* Chart 2: Breach Intensity — colored bar per window */}
         <div className="chart-container">
