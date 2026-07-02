@@ -2,9 +2,9 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { BarChart3, ArrowUpDown, Loader2, TrendingUp, AlertTriangle, Target, Activity, RefreshCw } from 'lucide-react';
 
 import {
-  AreaChart, Area, BarChart, Bar, LineChart, Line, ComposedChart,
+  AreaChart, Area, BarChart, Bar, Line, ComposedChart,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, Brush, ReferenceLine, Cell
+  ResponsiveContainer, Brush, Cell, Scatter
 } from 'recharts';
 import { getRuleColor } from '../constants';
 import {
@@ -14,6 +14,8 @@ import {
   istDatetimeLocalToEpochMs,
   formatISTDateTime,
 } from '../utils/istUtils';
+
+// ─── Data helpers (schema-agnostic) ─────────────────────────────────────────
 
 function isBreached(row) {
   return row.thresholdBreached === 1 || row.thresholdBreached === true
@@ -57,22 +59,33 @@ function getAggResults(row) {
   return {};
 }
 
+// ─── Design System ─────────────────────────────────────────────────────────
+
 const TOOLTIP_STYLE = {
   contentStyle: {
-    background: 'rgba(13,17,23,0.97)',
-    border: '1px solid rgba(88,101,242,0.3)',
+    background: 'rgba(8,12,28,0.97)',
+    border: '1px solid rgba(99,102,241,0.3)',
     borderRadius: '10px',
-    color: '#e6edf3',
-    fontSize: '0.79rem',
-    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+    color: '#e2e8f0',
+    fontSize: '0.8rem',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+    backdropFilter: 'blur(12px)',
   },
-  labelStyle: { color: '#8b949e', marginBottom: '0.25rem', fontWeight: 600 },
+  labelStyle: { color: '#a5b4fc', fontWeight: 700, marginBottom: '0.4rem', fontSize: '0.78rem' },
+  itemStyle: { color: '#cbd5e1' },
 };
 
-const AXIS_STROKE = '#545d68';
-const GRID_PROPS = { strokeDasharray: '3 3', stroke: 'rgba(255,255,255,0.06)' };
+const AXIS_STROKE = '#334155';
+const GRID_PROPS = { strokeDasharray: '3 3', stroke: 'rgba(255,255,255,0.05)', vertical: false };
 const DASH_PATTERNS = ['', '5 5', '8 4', '3 6', '10 3', '4 4 2 4'];
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+// Semantic colors
+const BREACH_RED   = '#ef4444';
+const BREACH_AMBER = '#f97316';
+const SAFE_GREEN   = '#10b981';
+const ACCENT_BLUE  = '#6366f1';
+const ACCENT_CYAN  = '#06b6d4';
 
 // formatTime: always display timestamps in IST (short form for chart axes)
 function formatTime(ts) {
@@ -96,19 +109,75 @@ function getBreachColor(rate) {
   return '#f85149';
 }
 
-function getSeverityBadge(sev) {
-  const s = String(sev || '').toUpperCase();
-  if (s === 'CRITICAL') return { bg: 'rgba(248,81,73,0.15)', color: '#f85149', border: 'rgba(248,81,73,0.3)' };
-  if (s === 'HIGH')     return { bg: 'rgba(255,123,114,0.12)', color: '#ff7b72', border: 'rgba(255,123,114,0.25)' };
-  if (s === 'MEDIUM')   return { bg: 'rgba(227,160,8,0.12)', color: '#e3a008', border: 'rgba(227,160,8,0.25)' };
-  return { bg: 'rgba(45,212,191,0.1)', color: '#2dd4bf', border: 'rgba(45,212,191,0.2)' };
-}
-
 function formatHourRange(hour) {
   const pad = (n) => String(n).padStart(2, '0');
   const nextHour = (hour + 1) % 24;
   return `${pad(hour)}:00–${pad(nextHour)}:00`;
 }
+
+// ─── Custom Tooltip for the ComposedChart ──────────────────────────────────
+
+function EventVolumeTooltip({ active, payload, label, getRuleName }) {
+  if (!active || !payload || !payload.length) return null;
+  const breached = payload.some(p => p.payload && isBreached(p.payload));
+  return (
+    <div style={{
+      ...TOOLTIP_STYLE.contentStyle,
+      minWidth: 180,
+      borderColor: breached ? 'rgba(239,68,68,0.5)' : 'rgba(99,102,241,0.3)',
+    }}>
+      <div style={{ ...TOOLTIP_STYLE.labelStyle, display: 'flex', alignItems: 'center', gap: 6 }}>
+        {breached && <span style={{ color: BREACH_RED, fontSize: '0.85rem' }}>⚡</span>}
+        {formatTime(label)}
+        {breached && <span style={{ color: BREACH_RED, fontSize: '0.7rem', fontWeight: 700, marginLeft: 4 }}>BREACH</span>}
+      </div>
+      {payload.map((p, i) => {
+        if (p.dataKey === 'breachMarker') return null;
+        let label = 'Events';
+        if (p.dataKey.startsWith('evt_')) label = 'Event Count';
+        else if (p.dataKey.startsWith('agg_')) label = 'Aggregation Count';
+        return (
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 2 }}>
+            <span style={{ color: '#94a3b8' }}>{label}</span>
+            <span style={{ color: p.stroke || p.fill || '#e2e8f0', fontWeight: 700 }}>{p.value}</span>
+          </div>
+        );
+      })}
+      {breached && (
+        <div style={{ marginTop: 6, padding: '4px 8px', background: 'rgba(239,68,68,0.12)', borderRadius: 4, fontSize: '0.72rem', color: BREACH_RED, textAlign: 'center', fontWeight: 700 }}>
+          Threshold Exceeded
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Gradient defs for charts ───────────────────────────────────────────────
+function ChartGradientDefs() {
+  return (
+    <defs>
+      <linearGradient id="gradEventVolumeAgg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor={ACCENT_BLUE} stopOpacity={0.35} />
+        <stop offset="100%" stopColor={ACCENT_BLUE} stopOpacity={0.02} />
+      </linearGradient>
+    </defs>
+  );
+}
+
+// ─── Custom XAxis Tick with breach highlighting ─────────────────────────────
+const CustomXAxisTick = (props) => {
+  const { x, y, payload, breachTs } = props;
+  const isBreach = breachTs && breachTs.includes(payload.value);
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text x={0} y={0} dy={16} textAnchor="middle" fill={isBreach ? BREACH_RED : '#64748b'} fontSize={11} fontWeight={isBreach ? 700 : 400}>
+        {formatTime(payload.value)}
+      </text>
+    </g>
+  );
+};
+
+// ─── Main Component ────────────────────────────────────────────────────────
 
 export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelectedRuleIds }) {
   // Initialize datetime-local values in IST (not browser local time)
@@ -121,6 +190,12 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
   const [sortCol, setSortCol] = useState('breachRate');
   const [sortDir, setSortDir] = useState('desc');
   const [showAnomalyFeed, setShowAnomalyFeed] = useState(true);
+  const [hiddenSeries, setHiddenSeries] = useState({});
+
+  const handleLegendClick = useCallback((e) => {
+    const key = e.dataKey;
+    if (key) setHiddenSeries(prev => ({ ...prev, [key]: !prev[key] }));
+  }, []);
 
   const selectedRules = useMemo(
     () => rules.filter(r => selectedRuleIds.has(r.rule_metadata.rule_id)),
@@ -206,11 +281,9 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
   const breachRate = useMemo(() => totalWindows > 0 ? (totalBreaches / totalWindows * 100) : 0, [totalBreaches, totalWindows]);
   const uniqueGroups = useMemo(() => new Set(allRows.map(r => r.groupKey)).size, [allRows]);
   const totalEvents = useMemo(() => allRows.reduce((s, r) => s + getRowEventCount(r), 0), [allRows]);
-
   const avgEventsPerWindow = useMemo(() => totalWindows > 0 ? (totalEvents / totalWindows).toFixed(1) : '0.0', [totalEvents, totalWindows]);
 
   /* ───── Peak Hour (most activity) ───── */
-  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
   const peakHour = useMemo(() => {
     if (allRows.length === 0) return null;
     const hourMap = {};
@@ -224,26 +297,11 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
       const h = istWall.getUTCHours();
       hourMap[h] = (hourMap[h] || 0) + 1;
     }
-    let maxH = 0;
-    let maxCount = 0;
+    let maxH = 0, maxCount = 0;
     for (const [h, count] of Object.entries(hourMap)) {
-      if (count > maxCount) {
-        maxCount = count;
-        maxH = parseInt(h, 10);
-      }
+      if (count > maxCount) { maxCount = count; maxH = parseInt(h, 10); }
     }
     return { hour: maxH, count: maxCount };
-  }, [allRows]);
-
-  /* ───── Breach timestamps for reference lines ───── */
-  const breachTimestamps = useMemo(() => {
-    const set = new Set();
-    for (const row of allRows) {
-      if (isBreached(row)) {
-        set.add(row.windowStart);
-      }
-    }
-    return [...set];
   }, [allRows]);
 
   /* ───── Auto-Insights ───── */
@@ -256,13 +314,9 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
       const h = getISTHour(row.windowStart);
       hourMap[h] = (hourMap[h] || 0) + 1;
     }
-    let peakH = 0;
-    let peakCount = 0;
+    let peakH = 0, peakCount = 0;
     for (const [h, count] of Object.entries(hourMap)) {
-      if (count > peakCount) {
-        peakCount = count;
-        peakH = parseInt(h, 10);
-      }
+      if (count > peakCount) { peakCount = count; peakH = parseInt(h, 10); }
     }
     return { hour: peakH, count: peakCount };
   }, [allRows]);
@@ -276,15 +330,11 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
       groupMap[gk].total += 1;
       if (isBreached(row)) groupMap[gk].breaches += 1;
     }
-    let bestGroup = null;
-    let bestRate = -1;
+    let bestGroup = null, bestRate = -1;
     for (const [gk, stats] of Object.entries(groupMap)) {
       if (stats.total === 0) continue;
       const rate = stats.breaches / stats.total;
-      if (rate > bestRate) {
-        bestRate = rate;
-        bestGroup = { groupKey: gk, breaches: stats.breaches, total: stats.total, rate };
-      }
+      if (rate > bestRate) { bestRate = rate; bestGroup = { groupKey: gk, breaches: stats.breaches, total: stats.total, rate }; }
     }
     return bestGroup;
   }, [allRows]);
@@ -304,101 +354,162 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
           groupBreachMap[gk] = (groupBreachMap[gk] || 0) + 1;
         }
       }
-      let mostAffected = 'N/A';
-      let maxBreaches = 0;
+      let mostAffected = 'N/A', maxBreaches = 0;
       for (const [gk, count] of Object.entries(groupBreachMap)) {
-        if (count > maxBreaches) {
-          maxBreaches = count;
-          mostAffected = gk;
-        }
+        if (count > maxBreaches) { maxBreaches = count; mostAffected = gk; }
       }
-      comparisons.push({
-        ruleId,
-        ruleName: getRuleName(ruleId),
-        breaches,
-        total,
-        rate,
-        mostAffected,
-        color: getRuleColor(rules, ruleId),
-      });
+      comparisons.push({ ruleId, ruleName: getRuleName(ruleId), breaches, total, rate, mostAffected, color: getRuleColor(rules, ruleId) });
     }
     return comparisons;
   }, [data, selectedRuleIds, getRuleName, rules]);
 
-  /* ───── Event Volume chart data ───── */
-  const eventVolumeData = useMemo(() => {
+  /* ───── Consolidated Chart Data: Event Volume + Agg Metrics + Breach Markers ───── */
+  const { comboData, aggLines, breachTs } = useMemo(() => {
     const timeMap = {};
+    const lines = [];
+
+    // Build event-volume + breach-marker rows from allRows
     for (const row of allRows) {
       const ts = row.windowStart;
-      if (!timeMap[ts]) timeMap[ts] = { windowStart: ts };
-      timeMap[ts][row.ruleId] = (timeMap[ts][row.ruleId] || 0) + getRowEventCount(row);
-    }
-    return Object.values(timeMap).sort((a, b) => new Date(a.windowStart) - new Date(b.windowStart));
-  }, [allRows]);
-
-  /* ───── Breach Density Heatmap Data (by hour) ───── */
-  const breachHeatmapData = useMemo(() => {
-    const hourMap = {};
-    for (let h = 0; h < 24; h++) {
-      hourMap[h] = { hour: h, label: formatHourRange(h), breaches: 0 };
-    }
-    for (const row of allRows) {
+      if (!ts) continue;
+      if (!timeMap[ts]) timeMap[ts] = { windowStart: ts, _tsMs: new Date(ts).getTime(), _breached: false };
+      const evtKey = `evt_${row.ruleId}`;
+      timeMap[ts][evtKey] = (timeMap[ts][evtKey] || 0) + getRowEventCount(row);
       if (isBreached(row)) {
-        const h = getISTHour(row.windowStart);
-        hourMap[h].breaches += 1;
+        timeMap[ts]._breached = true;
+        timeMap[ts].thresholdBreached = true;
+        timeMap[ts].breachMarker = getRowEventCount(row);
       }
     }
-    return Object.values(hourMap);
-  }, [allRows]);
 
-  const maxHourlyBreaches = useMemo(() => {
-    return Math.max(1, ...breachHeatmapData.map(d => d.breaches));
-  }, [breachHeatmapData]);
-
-  /* ───── Aggregation values chart data ───── */
-  const { aggData, aggLines } = useMemo(() => {
-    const lines = [];
-    const timeMap = {};
-
+    // Bake aggregation metric values into the same row map
     for (const ruleId of [...selectedRuleIds]) {
       const rows = data[ruleId] || [];
-      if (rows.length === 0) continue;
-      // Collect alias union from ALL rows (not just rows[0]) so we don't miss
-      // aliases when the first row has an empty aggResult.
+      if (!rows.length) continue;
       const aliasSet = new Set();
       for (const row of rows) {
-        for (const alias of Object.keys(getAggResults(row))) {
-          aliasSet.add(alias);
-        }
+        for (const alias of Object.keys(getAggResults(row))) aliasSet.add(alias);
       }
-      const aliases = [...aliasSet];
       const rName = getRuleName(ruleId);
-      const rColor = getRuleColor(rules, ruleId);
-
-      aliases.forEach((alias, ai) => {
-        const lineKey = `${ruleId}__${alias}`;
+      [...aliasSet].forEach((alias, ai) => {
         lines.push({
-          key: lineKey,
-          name: `${rName} — ${alias}`,
-          color: rColor,
-          dashArray: DASH_PATTERNS[ai % DASH_PATTERNS.length],
+          key: `agg_${ruleId}__${alias}`,
+          name: `${rName} · ${alias}`,
+          dashArray: DASH_PATTERNS[(ai + 1) % DASH_PATTERNS.length],
         });
       });
-
       for (const row of rows) {
         const ts = row.windowStart;
-        if (!timeMap[ts]) timeMap[ts] = { windowStart: ts };
+        if (!timeMap[ts]) timeMap[ts] = { windowStart: ts, _tsMs: new Date(ts).getTime(), _breached: false };
         for (const [alias, val] of Object.entries(getAggResults(row))) {
-          timeMap[ts][`${ruleId}__${alias}`] = val;
+          timeMap[ts][`agg_${ruleId}__${alias}`] = Number(val);
         }
       }
     }
 
-    return {
-      aggData: Object.values(timeMap).sort((a, b) => new Date(a.windowStart) - new Date(b.windowStart)),
-      aggLines: lines,
-    };
-  }, [data, selectedRuleIds, getRuleName, rules]);
+    const sorted = Object.values(timeMap).sort((a, b) => a._tsMs - b._tsMs);
+    const breachTimestamps = sorted.filter(pt => pt._breached).map(pt => pt.windowStart);
+    return { comboData: sorted, aggLines: lines, breachTs: breachTimestamps };
+  }, [allRows, data, selectedRuleIds, getRuleName, rules]);
+
+  /* ───── Bucketing helper for historical data ─────
+     Prevents browser freeze on large queries by grouping raw windows
+     into minute / hour / day buckets based on the queried time range. */
+  const bucketResolution = useMemo(() => {
+    if (!allRows.length) return 'minute';
+    const allTs = allRows.map(r => new Date(r.windowStart).getTime()).filter(t => !isNaN(t));
+    if (!allTs.length) return 'minute';
+    const rangeMs = Math.max(...allTs) - Math.min(...allTs);
+    const rangeHours = rangeMs / (1000 * 60 * 60);
+    if (rangeHours > 72) return 'day';
+    if (rangeHours > 12) return 'hour';
+    return 'minute';
+  }, [allRows]);
+
+  function getBucketKey(ts, resolution) {
+    const raw = String(ts).replace(' ', 'T');
+    const d = new Date(raw.includes('+') || raw.endsWith('Z') ? raw : raw + '+05:30');
+    if (isNaN(d.getTime())) return ts;
+    const istMs = d.getTime() + 5.5 * 60 * 60 * 1000;
+    const istDate = new Date(istMs);
+    if (resolution === 'day') {
+      return `${istDate.getUTCFullYear()}-${String(istDate.getUTCMonth() + 1).padStart(2, '0')}-${String(istDate.getUTCDate()).padStart(2, '0')} 00:00:00`;
+    }
+    if (resolution === 'hour') {
+      return `${istDate.getUTCFullYear()}-${String(istDate.getUTCMonth() + 1).padStart(2, '0')}-${String(istDate.getUTCDate()).padStart(2, '0')} ${String(istDate.getUTCHours()).padStart(2, '0')}:00:00`;
+    }
+    return ts;
+  }
+
+  /* ───── Window Intensity bar data (bucketed) ───── */
+  const breachBarData = useMemo(() => {
+    const bucketMap = {};
+    for (const row of allRows) {
+      const ts = row.windowStart;
+      if (!ts) continue;
+      const key = getBucketKey(ts, bucketResolution);
+      if (!bucketMap[key]) bucketMap[key] = { windowStart: key, count: 0, breached: false };
+      bucketMap[key].count += getRowEventCount(row);
+      if (isBreached(row)) bucketMap[key].breached = true;
+    }
+    return Object.values(bucketMap).sort((a, b) => new Date(a.windowStart) - new Date(b.windowStart));
+  }, [allRows, bucketResolution]);
+
+  /* ───── Cumulative Breaches area data (bucketed) ───── */
+  const cumulativeData = useMemo(() => {
+    const perRule = {};
+    for (const ruleId of [...selectedRuleIds]) {
+      const ruleRows = allRows.filter(r => r.ruleId === ruleId);
+      const bucketMap = {};
+      for (const row of ruleRows) {
+        const ts = row.windowStart;
+        if (!ts) continue;
+        const key = getBucketKey(ts, bucketResolution);
+        if (!bucketMap[key]) bucketMap[key] = { windowStart: key, breaches: 0 };
+        if (isBreached(row)) bucketMap[key].breaches++;
+      }
+      const sorted = Object.values(bucketMap).sort((a, b) => new Date(a.windowStart) - new Date(b.windowStart));
+      let cum = 0;
+      for (const entry of sorted) { cum += entry.breaches; entry.cumBreaches = cum; }
+      perRule[ruleId] = sorted;
+    }
+    const allTimestamps = new Set();
+    for (const arr of Object.values(perRule)) for (const e of arr) allTimestamps.add(e.windowStart);
+    const sortedTs = [...allTimestamps].sort((a, b) => new Date(a) - new Date(b));
+    const lastCum = {};
+    const merged = sortedTs.map(ts => {
+      const point = { windowStart: ts };
+      for (const ruleId of [...selectedRuleIds]) {
+        const entry = (perRule[ruleId] || []).find(e => e.windowStart === ts);
+        if (entry) lastCum[ruleId] = entry.cumBreaches;
+        point[`cum_${ruleId}`] = lastCum[ruleId] || 0;
+      }
+      return point;
+    });
+
+    // Pre-compute which timestamps had a cumulative breach increment (for dot rendering).
+    // Recharts does NOT pass the data array into dot() render props, so we must do
+    // this comparison ahead of time and pass it via closure.
+    const breachIncrementTs = new Set();
+    for (let i = 1; i < merged.length; i++) {
+      for (const ruleId of [...selectedRuleIds]) {
+        const key = `cum_${ruleId}`;
+        if ((merged[i][key] || 0) > (merged[i - 1][key] || 0)) {
+          breachIncrementTs.add(merged[i].windowStart);
+          break;
+        }
+      }
+    }
+    return { merged, breachIncrementTs };
+  }, [allRows, selectedRuleIds, bucketResolution]);
+
+  const sortedAnomalyData = useMemo(() => {
+    return [...anomalyData].sort((a, b) => {
+      const tsA = new Date(a.timestamp || a.producedAt || a.detectedAt || a.windowEnd || 0).getTime();
+      const tsB = new Date(b.timestamp || b.producedAt || b.detectedAt || b.windowEnd || 0).getTime();
+      return tsB - tsA;
+    });
+  }, [anomalyData]);
 
   /* ───── Top group keys table ───── */
   const groupTableData = useMemo(() => {
@@ -476,14 +587,6 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
     color: '#e2e8f0',
     lineHeight: 1.5,
   };
-
-  function getHeatmapColor(breaches, max) {
-    if (breaches === 0) return 'rgba(34,197,94,0.25)';
-    const ratio = breaches / max;
-    if (ratio < 0.33) return '#22c55e';
-    if (ratio < 0.66) return '#f59e0b';
-    return '#ef4444';
-  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -607,7 +710,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
                   {peakBreachPeriod ? (
                     <span><span style={{ color: 'var(--danger)', fontWeight: 700 }}>{formatHourRange(peakBreachPeriod.hour)} IST</span> — {peakBreachPeriod.count} breach{peakBreachPeriod.count !== 1 ? 'es' : ''}</span>
                   ) : (
-                    <span style={{ color: 'var(--success)' }}>✓ No breach spikes detected</span>
+                    <span style={{ color: 'var(--success)' }}>✔ No breach spikes detected</span>
                   )}
                 </div>
               </div>
@@ -674,7 +777,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
           </div>
 
           {/* Anomaly Feed Section */}
-          {anomalyData.length > 0 && (
+          {sortedAnomalyData.length > 0 && (
             <div style={{ background: 'rgba(248,81,73,0.06)', border: '1px solid rgba(248,81,73,0.2)', borderRadius: '12px', overflow: 'hidden' }}>
               <div
                 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.875rem 1.125rem', borderBottom: '1px solid rgba(248,81,73,0.15)', cursor: 'pointer' }}
@@ -683,13 +786,13 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--danger)', boxShadow: '0 0 6px rgba(248,81,73,0.6)', animation: 'pulse-dot 1.5s ease-in-out infinite', flexShrink: 0 }} />
                 <span style={{ color: 'var(--danger)', fontSize: '0.83rem', fontWeight: 600 }}>Live Anomaly Feed</span>
                 <span style={{ marginLeft: '0.5rem', padding: '0.1rem 0.55rem', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 700, background: 'rgba(248,81,73,0.15)', color: 'var(--danger)', border: '1px solid rgba(248,81,73,0.25)' }}>
-                  {anomalyData.length} breach event{anomalyData.length !== 1 ? 's' : ''}
+                  {sortedAnomalyData.length} breach event{sortedAnomalyData.length !== 1 ? 's' : ''}
                 </span>
                 <span style={{ color: 'var(--text-3)', fontSize: '0.72rem', marginLeft: 'auto' }}>{showAnomalyFeed ? '▲ Hide' : '▼ Show'}</span>
               </div>
               {showAnomalyFeed && (
                 <div style={{ maxHeight: 280, overflowY: 'auto', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                  {anomalyData.slice(0, 30).map((ev, i) => {
+                  {sortedAnomalyData.slice(0, 30).map((ev, i) => {
                     const ruleId = ev.ruleId || ev.id || 'unknown';
                     const entity = ev.entityValue || ev.groupKey || ev.entity || '—';
                     const ts     = ev.timestamp || ev.producedAt || ev.detectedAt || ev.windowEnd || '';
@@ -710,8 +813,8 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
                       </div>
                     );
                   })}
-                  {anomalyData.length > 30 && (
-                    <p style={{ color: 'var(--text-3)', fontSize: '0.73rem', textAlign: 'center', margin: '0.25rem 0 0' }}>+ {anomalyData.length - 30} more breach events</p>
+                  {sortedAnomalyData.length > 30 && (
+                    <p style={{ color: 'var(--text-3)', fontSize: '0.73rem', textAlign: 'center', margin: '0.25rem 0 0' }}>+ {sortedAnomalyData.length - 30} more breach events</p>
                   )}
                 </div>
               )}
@@ -752,80 +855,245 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
             </div>
           </div>
 
-          {/* Event Volume Area Chart */}
-          <div className="chart-container">
-            <div className="chart-title">Event Volume Over Time</div>
-            <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>Total events processed per evaluation window. <span style={{ color: '#f85149' }}>Red markers</span> indicate threshold breaches.</div>
-            {/* height:430 + bottom:70 = room for Brush(24) + X-axis labels + gap */}
-            <ResponsiveContainer width="100%" height={430}>
-              <AreaChart data={eventVolumeData} margin={{ top: 10, right: 20, left: 10, bottom: 70 }}>
-                <CartesianGrid {...GRID_PROPS} />
-                <XAxis dataKey="windowStart" stroke={AXIS_STROKE} tick={{ fontSize: 11 }} tickFormatter={formatTime} minTickGap={30} dy={10} />
-                <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} width={48} />
-                <Tooltip {...TOOLTIP_STYLE} labelFormatter={ts => `Window: ${formatTime(ts)} IST`} formatter={(value, name) => [value?.toLocaleString() + ' events', getRuleName(name)]} />
-                <Legend verticalAlign="top" wrapperStyle={{ paddingBottom: '8px' }} formatter={(value) => getRuleName(value)} />
-                {breachTimestamps.map((ts, idx) => (
-                  <ReferenceLine key={`breach-ref-${idx}`} x={ts} stroke="#ef4444" strokeDasharray="4 4" strokeOpacity={0.3} />
-                ))}
-                {selectedRules.map(r => {
-                  const id = r.rule_metadata.rule_id;
-                  const color = getRuleColor(rules, id);
-                  return (
-                    <Area key={id} type="monotone" dataKey={id} stroke={color} fill={color} fillOpacity={0.15} strokeWidth={2} name={id} dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
-                  );
-                })}
-                {/* Brush auto-positioned by Recharts within the bottom margin */}
-                <Brush dataKey="windowStart" height={24} stroke="#3b82f6" fill="rgba(15,23,42,0.8)" tickFormatter={formatTime} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          {/* ═══════════════════════════════════════════════════════════════════
+              Consolidated Chart: Event Volume, Aggregation Metrics, and Breaches
+              ═══════════════════════════════════════════════════════════════════ */}
+          <div className="chart-container" style={{ marginBottom: '-15px', height: 'auto' }}>
+            <div className="chart-title" style={{ marginBottom: '1.25rem' }}>
+              Event Volume, Aggregation Metrics, and Breaches
+            </div>
+            <div style={{ width: '100%', height: 420 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={comboData} margin={{ top: 10, right: 24, bottom: 45, left: 12 }}>
+                  <ChartGradientDefs />
+                  <CartesianGrid {...GRID_PROPS} />
 
-          {/* Breach Density by Hour */}
-          <div className="chart-container">
-            <div className="chart-title">Breach Density by Hour (IST)</div>
-            <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>Number of threshold breaches per hour of day. Identifies when anomalous activity peaks.</div>
-            {/* height:260 + bottom:60 ensures angled labels (-35deg) don't clip under chart edge */}
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={breachHeatmapData} margin={{ top: 10, right: 20, left: 10, bottom: 60 }}>
-                <CartesianGrid {...GRID_PROPS} />
-                <XAxis dataKey="label" stroke={AXIS_STROKE} tick={{ fontSize: 10 }} interval={0} angle={-35} textAnchor="end" />
-                <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} allowDecimals={false} width={40} />
-                <Tooltip
-                  {...TOOLTIP_STYLE}
-                  formatter={(value) => [value, 'Breaches']}
-                  labelFormatter={(label) => `Hour: ${label}`}
-                />
-                <Bar dataKey="breaches" radius={[4, 4, 0, 0]} name="Breaches">
-                  {breachHeatmapData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={getHeatmapColor(entry.breaches, maxHourlyBreaches)} />
+                  <XAxis
+                    dataKey="windowStart"
+                    stroke={AXIS_STROKE}
+                    tick={<CustomXAxisTick breachTs={breachTs} />}
+                    minTickGap={40}
+                    dy={8}
+                  />
+                  <YAxis
+                    stroke={AXIS_STROKE}
+                    tick={{ fontSize: 11, fill: '#64748b' }}
+                    allowDecimals={false}
+                    width={44}
+                    label={{ value: 'Events / Window', angle: -90, position: 'insideLeft', offset: 12, style: { fill: '#64748b', fontSize: 10 } }}
+                  />
+
+                  <Tooltip content={<EventVolumeTooltip getRuleName={getRuleName} />} />
+
+                  <Legend
+                    verticalAlign="top"
+                    wrapperStyle={{ paddingBottom: '0.75rem', fontSize: '0.78rem', cursor: 'pointer' }}
+                    onClick={handleLegendClick}
+                    formatter={(value) => {
+                      if (value.startsWith('evt_')) return `📊 Event Count`;
+                      if (value.startsWith('agg_')) return `〰 Aggregation Count`;
+                      if (value === 'breachMarker') return `🔴 Breaches`;
+                      return value;
+                    }}
+                  />
+
+                  {/* ── Aggregation metric lines (dashed, same Y-axis) ── */}
+                  {aggLines.map((line) => (
+                    <Line
+                      key={line.key}
+                      type="monotone"
+                      dataKey={line.key}
+                      name={line.key}
+                      stroke={ACCENT_CYAN}
+                      strokeWidth={1.8}
+                      strokeDasharray={line.dashArray || '6 3'}
+                      dot={false}
+                      activeDot={{ r: 4, fill: ACCENT_CYAN, stroke: '#fff', strokeWidth: 1.5 }}
+                      isAnimationActive={false}
+                      hide={hiddenSeries[line.key]}
+                    />
                   ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+
+                  {/* ── Event Volume Area with gradient fill ── */}
+                  {selectedRules.map(r => {
+                    const id = r.rule_metadata.rule_id;
+                    return (
+                      <Area
+                        key={`evt_${id}`}
+                        type="monotone"
+                        dataKey={`evt_${id}`}
+                        stroke={ACCENT_BLUE}
+                        strokeWidth={2.5}
+                        fill="url(#gradEventVolumeAgg)"
+                        name={`evt_${id}`}
+                        activeDot={{ r: 6, fill: ACCENT_BLUE, stroke: '#fff', strokeWidth: 2 }}
+                        isAnimationActive={true}
+                        animationDuration={800}
+                        hide={hiddenSeries[`evt_${id}`]}
+                      />
+                    );
+                  })}
+
+                  {/* ── Precise Breach Markers (Scatter with red pointer) ── */}
+                  <Scatter
+                    dataKey="breachMarker"
+                    name="breachMarker"
+                    fill={BREACH_RED}
+                    hide={hiddenSeries['breachMarker']}
+                    shape={(props) => {
+                      const { cx, cy } = props;
+                      if (cx == null || cy == null) return null;
+                      return (
+                        <g>
+                          <circle cx={cx} cy={cy} r={6} fill={BREACH_RED} stroke="#fff" strokeWidth={1.5} />
+                          <path d={`M${cx},${cy + 6} L${cx - 4},${cy + 14} L${cx + 4},${cy + 14} Z`} fill={BREACH_RED} />
+                        </g>
+                      );
+                    }}
+                    isAnimationActive={false}
+                  />
+
+                  <Brush
+                    dataKey="windowStart"
+                    height={22}
+                    stroke="rgba(99,102,241,0.4)"
+                    fill="rgba(8,12,28,0.9)"
+                    tickFormatter={formatTime}
+                    travellerWidth={6}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
           </div>
 
-          {/* Aggregation Metric Values Chart */}
-          {aggLines.length > 0 && (
-          <div className="chart-container">
-            <div className="chart-title">Computed Metric Values Over Time</div>
-            <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>The aggregated metric values (counts, sums, averages) your rules computed for each window.</div>
-            <ResponsiveContainer width="100%" height={340}>
-              <LineChart data={aggData} margin={{ top: 10, right: 20, left: 10, bottom: 40 }}>
-                <CartesianGrid {...GRID_PROPS} />
-                <XAxis dataKey="windowStart" stroke={AXIS_STROKE} tick={{ fontSize: 11 }} tickFormatter={formatTime} minTickGap={30} dy={10} />
-                <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} width={48} />
-                <Tooltip {...TOOLTIP_STYLE} labelFormatter={ts => `Window: ${formatTime(ts)} IST`} />
-                <Legend verticalAlign="top" wrapperStyle={{ paddingBottom: '8px', fontSize: '0.75rem' }} />
-                {breachTimestamps.slice(0, 50).map((ts, idx) => (
-                  <ReferenceLine key={`aref-${idx}`} x={ts} stroke="#f85149" strokeDasharray="4 3" strokeOpacity={0.4} strokeWidth={1.5} />
-                ))}
-                {aggLines.map(line => (
-                  <Line key={line.key} type="monotone" dataKey={line.key} name={line.name} stroke={line.color} strokeWidth={2} strokeDasharray={line.dashArray} dot={false} activeDot={{ r: 3, strokeWidth: 0 }} />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
+          {/* ═══════════════════════════════════════════════════════════════════
+              Window Intensity + Cumulative Breaches (side-by-side)
+              Dynamic bucketing: minute < 12h, hour 12h-3d, day > 3d
+              ═══════════════════════════════════════════════════════════════════ */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '1rem', marginTop: '-8px' }}>
+
+            {/* Window Intensity */}
+            <div className="chart-container">
+              <div className="chart-title" style={{ marginBottom: '1.25rem' }}>
+                Window Intensity
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: 10 }}>
+                  🟥 breach&nbsp;·&nbsp; 🟦 normal
+                </span>
+              </div>
+              <div style={{ width: '100%', height: 280 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={breachBarData} margin={{ top: 10, right: 16, bottom: 36, left: 12 }} barCategoryGap="20%">
+                    <defs>
+                      <linearGradient id="gradBarBreachAgg" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={BREACH_RED} stopOpacity={0.95} />
+                        <stop offset="100%" stopColor="#7f1d1d" stopOpacity={0.8} />
+                      </linearGradient>
+                      <linearGradient id="gradBarNormalAgg" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={ACCENT_BLUE} stopOpacity={0.9} />
+                        <stop offset="100%" stopColor="#1e1b4b" stopOpacity={0.7} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid {...GRID_PROPS} />
+                    <XAxis
+                      dataKey="windowStart"
+                      stroke={AXIS_STROKE}
+                      tick={{ fontSize: 10, fill: '#64748b' }}
+                      tickFormatter={formatTime}
+                      minTickGap={40}
+                      dy={6}
+                    />
+                    <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 10, fill: '#64748b' }} width={36} allowDecimals={false} />
+                    <Tooltip
+                      {...TOOLTIP_STYLE}
+                      labelFormatter={formatTime}
+                      formatter={(value, name, props) => {
+                        const breached = props.payload?.breached;
+                        return [value, breached ? '⚡ Events (BREACH)' : '📊 Events'];
+                      }}
+                    />
+                    <Bar dataKey="count" name="Events" radius={[3, 3, 0, 0]} maxBarSize={32}>
+                      {breachBarData.map((entry, index) => (
+                        <Cell
+                          key={`cell_${index}`}
+                          fill={entry.breached ? 'url(#gradBarBreachAgg)' : 'url(#gradBarNormalAgg)'}
+                          opacity={entry.breached ? 1 : 0.7}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Cumulative Breaches */}
+            <div className="chart-container">
+              <div className="chart-title" style={{ marginBottom: '1.25rem' }}>Cumulative Breaches</div>
+              <div style={{ width: '100%', height: 280 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={cumulativeData.merged} margin={{ top: 10, right: 16, bottom: 36, left: 12 }}>
+                    <defs>
+                      <linearGradient id="gradCumBreachAgg" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={BREACH_RED} stopOpacity={0.45} />
+                        <stop offset="100%" stopColor={BREACH_RED} stopOpacity={0.03} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid {...GRID_PROPS} />
+                    <XAxis
+                      dataKey="windowStart"
+                      stroke={AXIS_STROKE}
+                      tick={{ fontSize: 10, fill: '#64748b' }}
+                      tickFormatter={formatTime}
+                      minTickGap={40}
+                      dy={6}
+                    />
+                    <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 10, fill: '#64748b' }} width={36} allowDecimals={false} />
+                    <Tooltip
+                      {...TOOLTIP_STYLE}
+                      labelFormatter={formatTime}
+                      formatter={(value, name) => [value, `Cumulative Breaches — ${getRuleName(name.replace('cum_', ''))}`]}
+                    />
+                    <Legend
+                      verticalAlign="top"
+                      wrapperStyle={{ paddingBottom: '0.5rem', fontSize: '0.75rem' }}
+                      formatter={(value) => getRuleName(value.replace('cum_', ''))}
+                    />
+                    {selectedRules.map(r => {
+                      const id = r.rule_metadata.rule_id;
+                      return (
+                        <Area
+                          key={`cum_${id}`}
+                          type="monotone"
+                          dataKey={`cum_${id}`}
+                          stroke={BREACH_RED}
+                          strokeWidth={2.5}
+                          fill="url(#gradCumBreachAgg)"
+                          name={`cum_${id}`}
+                          dot={(props) => {
+                            // Show a marker only at timestamps where the cumulative count incremented.
+                            // breachIncrementTs is pre-computed in the useMemo above;
+                            // we never access props.data here to avoid the Recharts undefined crash.
+                            const { cx, cy, payload } = props;
+                            if (!payload || cx == null || cy == null) return null;
+                            if (!cumulativeData.breachIncrementTs.has(payload.windowStart)) return null;
+                            return (
+                              <g key={`dot_${payload.windowStart}`}>
+                                <circle cx={cx} cy={cy} r={10} fill="rgba(239,68,68,0.15)" />
+                                <circle cx={cx} cy={cy} r={5} fill={BREACH_RED} stroke="#fff" strokeWidth={1.5} />
+                              </g>
+                            );
+                          }}
+                          activeDot={{ r: 5, fill: BREACH_RED, stroke: '#fff', strokeWidth: 2 }}
+                          isAnimationActive={true}
+                          animationDuration={900}
+                        />
+                      );
+                    })}
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
           </div>
-          )}
 
           {/* Entity Breach Ranking Table */}
           <div className="chart-container">
