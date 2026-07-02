@@ -150,12 +150,18 @@ function EventVolumeTooltip({ active, payload, label, getRuleName }) {
         {formatTime(label)}
         {breached && <span style={{ color: BREACH_RED, fontSize: '0.7rem', fontWeight: 700, marginLeft: 4 }}>BREACH</span>}
       </div>
-      {payload.map((p, i) => (
-        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 2 }}>
-          <span style={{ color: '#94a3b8' }}>Events</span>
-          <span style={{ color: p.stroke || '#e2e8f0', fontWeight: 700 }}>{p.value}</span>
-        </div>
-      ))}
+      {payload.map((p, i) => {
+        if (p.dataKey === 'breachMarker') return null;
+        let label = 'Events';
+        if (p.dataKey.startsWith('evt_')) label = 'Event Count';
+        else if (p.dataKey.startsWith('agg_')) label = 'Aggregation Count';
+        return (
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 2 }}>
+            <span style={{ color: '#94a3b8' }}>{label}</span>
+            <span style={{ color: p.stroke || p.fill || '#e2e8f0', fontWeight: 700 }}>{p.value}</span>
+          </div>
+        );
+      })}
       {breached && (
         <div style={{ marginTop: 6, padding: '4px 8px', background: 'rgba(239,68,68,0.12)', borderRadius: 4, fontSize: '0.72rem', color: BREACH_RED, textAlign: 'center', fontWeight: 700 }}>
           Threshold Exceeded
@@ -192,6 +198,19 @@ function ChartGradientDefs() {
   );
 }
 
+// ─── Custom XAxis Tick for Event Volume ───────────────────────────────────────
+const CustomXAxisTick = (props) => {
+  const { x, y, payload, breachTs } = props;
+  const isBreach = breachTs && breachTs.includes(payload.value);
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text x={0} y={0} dy={16} textAnchor="middle" fill={isBreach ? BREACH_RED : '#64748b'} fontSize={11} fontWeight={isBreach ? 700 : 400}>
+        {formatTime(payload.value)}
+      </text>
+    </g>
+  );
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleIds, simulationMode }) {
@@ -199,6 +218,13 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
   const [sortCol, setSortCol] = useState('breaches');
   const [sortDir, setSortDir] = useState('desc');
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  const [hiddenSeries, setHiddenSeries] = useState({});
+
+  const handleLegendClick = useCallback((e) => {
+    const key = e.dataKey;
+    if (key) setHiddenSeries(prev => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
   const tableRef = useRef(null);
   const wsRef = useRef(null);
   const reconnectAttemptRef = useRef(0);
@@ -400,6 +426,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
         timeMap[ts]._breached = true;
         timeMap[ts].thresholdBreached = true;
         timeMap[ts].thresholdMet = true;
+        timeMap[ts].breachMarker = getEventCount(row);
       }
 
       // Also bake in agg metric values (for consolidated view)
@@ -660,12 +687,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
           ═══════════════════════════════════════════════════════════════════ */}
       <div className="chart-container" style={{ paddingBottom: '40px', marginBottom: '40px' }}>
         <div className="chart-title" style={{ marginBottom: '1.25rem' }}>
-          Event Volume &amp; Breach Markers
-          {aggLineDescriptors.length > 0 && (
-            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: 12 }}>
-              · aggregation metrics overlaid as dashed lines
-            </span>
-          )}
+          Event Volume
         </div>
         {/* Fixed height + generous paddingBottom gives the Brush room without overlapping siblings */}
         <div style={{ width: '100%', height: 460, paddingBottom: '50px' }}>
@@ -677,8 +699,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
               <XAxis
                 dataKey="windowStart"
                 stroke={AXIS_STROKE}
-                tick={{ fontSize: 11, fill: '#64748b' }}
-                tickFormatter={formatTime}
+                tick={<CustomXAxisTick breachTs={breachTs} />}
                 minTickGap={40}
                 dy={8}
               />
@@ -694,14 +715,12 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
 
               <Legend
                 verticalAlign="top"
-                wrapperStyle={{ paddingBottom: '0.75rem', fontSize: '0.78rem' }}
+                wrapperStyle={{ paddingBottom: '0.75rem', fontSize: '0.78rem', cursor: 'pointer' }}
+                onClick={handleLegendClick}
                 formatter={(value) => {
-                  if (value.startsWith('evt_')) return `📊 ${getRuleName(value.replace('evt_', ''))}`;
-                  if (value.startsWith('agg_')) {
-                    // agg_ruleId__alias → extract alias label
-                    const parts = value.replace('agg_', '').split('__');
-                    return `〰 ${parts[parts.length - 1]}`;
-                  }
+                  if (value.startsWith('evt_')) return `📊 Event Count`;
+                  if (value.startsWith('agg_')) return `〰 Aggregation Count`;
+                  if (value === 'breachMarker') return `🔴 Breaches`;
                   return value;
                 }}
               />
@@ -719,6 +738,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
                   dot={false}
                   activeDot={{ r: 4, fill: ACCENT_CYAN, stroke: '#fff', strokeWidth: 1.5 }}
                   isAnimationActive={false}
+                  hide={hiddenSeries[line.key]}
                 />
               ))}
 
@@ -734,32 +754,33 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
                     strokeWidth={2.5}
                     fill="url(#gradEventVolume)"
                     name={`evt_${id}`}
-                    dot={(props) => <BreachDot {...props} />}
                     activeDot={{ r: 6, fill: ACCENT_BLUE, stroke: '#fff', strokeWidth: 2 }}
                     isAnimationActive={true}
                     animationDuration={800}
+                    hide={hiddenSeries[`evt_${id}`]}
                   />
                 );
               })}
 
-              {/* ── Breach markers: precise vertical ReferenceLine at each breached windowStart ── */}
-              {/* Each line marks exactly where the window closed and the threshold was exceeded.  */}
-              {/* No area bands — the breach belongs to one point on the timeline, not a span.    */}
-              {breachTs.map((ts, i) => (
-                <ReferenceLine
-                  key={`bl_${i}`}
-                  x={ts}
-                  stroke={BREACH_RED}
-                  strokeWidth={2}
-                  strokeOpacity={0.8}
-                  strokeDasharray="4 3"
-                  label={{
-                    value: '⚡',
-                    position: 'top',
-                    style: { fontSize: 11, fill: BREACH_RED },
-                  }}
-                />
-              ))}
+              {/* ── Precise Breach Markers (Scatter with red pointer) ── */}
+              <Scatter
+                dataKey="breachMarker"
+                name="breachMarker"
+                fill={BREACH_RED}
+                hide={hiddenSeries['breachMarker']}
+                shape={(props) => {
+                  const { cx, cy } = props;
+                  if (cx == null || cy == null) return null;
+                  return (
+                    <g>
+                      <circle cx={cx} cy={cy} r={6} fill={BREACH_RED} stroke="#fff" strokeWidth={1.5} />
+                      <path d={`M${cx},${cy + 6} L${cx - 4},${cy + 14} L${cx + 4},${cy + 14} Z`} fill={BREACH_RED} />
+                    </g>
+                  );
+                }}
+                isAnimationActive={false}
+              />
+
 
               <Brush
                 dataKey="windowStart"
