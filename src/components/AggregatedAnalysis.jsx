@@ -772,12 +772,12 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
           </div>
 
           {/* Event Volume Area Chart */}
-          <div className="chart-container" style={{ paddingBottom: '40px', marginBottom: '40px' }}>
+          <div className="chart-container" style={{ marginBottom: '80px' }}>
             <div className="chart-title">Event Volume Over Time</div>
-            <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>Total events processed per evaluation window. <span style={{ color: '#f85149' }}>Red markers</span> indicate threshold breaches.</div>
-            <div style={{ width: '100%', height: 460, paddingBottom: '50px' }}>
+            <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '1rem' }}>Total events processed per evaluation window. <span style={{ color: '#f85149' }}>Red markers</span> indicate threshold breaches.</div>
+            <div style={{ width: '100%', height: 440 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={eventVolumeData} margin={{ top: 10, right: 20, left: 10, bottom: 70 }}>
+                <AreaChart data={eventVolumeData} margin={{ top: 10, right: 20, left: 10, bottom: 90 }}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis dataKey="windowStart" stroke={AXIS_STROKE} tick={{ fontSize: 11 }} tickFormatter={formatTime} minTickGap={30} dy={10} />
                 <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} width={48} />
@@ -801,12 +801,12 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
           </div>
 
           {/* Breach Density by Hour */}
-          <div className="chart-container" style={{ paddingBottom: '30px', marginBottom: '30px' }}>
+          <div className="chart-container" style={{ marginBottom: '80px' }}>
             <div className="chart-title">Breach Density by Hour (IST)</div>
-            <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>Number of threshold breaches per hour of day. Identifies when anomalous activity peaks.</div>
-            <div style={{ width: '100%', height: 320, paddingBottom: '30px' }}>
+            <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '1rem' }}>Number of threshold breaches per hour of day. Identifies when anomalous activity peaks.</div>
+            <div style={{ width: '100%', height: 320 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={breachHeatmapData} margin={{ top: 10, right: 20, left: 10, bottom: 60 }}>
+                <BarChart data={breachHeatmapData} margin={{ top: 10, right: 20, left: 10, bottom: 80 }}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis dataKey="label" stroke={AXIS_STROKE} tick={{ fontSize: 10 }} interval={0} angle={-35} textAnchor="end" />
                 <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} allowDecimals={false} width={40} />
@@ -827,12 +827,12 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
 
           {/* Aggregation Metric Values Chart */}
           {aggLines.length > 0 && (
-          <div className="chart-container" style={{ paddingBottom: '30px', marginBottom: '30px' }}>
+          <div className="chart-container" style={{ marginBottom: '80px' }}>
             <div className="chart-title">Computed Metric Values Over Time</div>
-            <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>The aggregated metric values (counts, sums, averages) your rules computed for each window.</div>
-            <div style={{ width: '100%', height: 380, paddingBottom: '30px' }}>
+            <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '1rem' }}>The aggregated metric values (counts, sums, averages) your rules computed for each window.</div>
+            <div style={{ width: '100%', height: 380 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={aggData} margin={{ top: 10, right: 20, left: 10, bottom: 40 }}>
+                <LineChart data={aggData} margin={{ top: 10, right: 20, left: 10, bottom: 60 }}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis dataKey="windowStart" stroke={AXIS_STROKE} tick={{ fontSize: 11 }} tickFormatter={formatTime} minTickGap={30} dy={10} />
                 <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} width={48} />
