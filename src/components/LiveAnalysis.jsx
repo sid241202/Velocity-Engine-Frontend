@@ -658,7 +658,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
       {/* ═══════════════════════════════════════════════════════════════════
           Chart 1: Event Volume — area + agg metric lines + precise breach markers
           ═══════════════════════════════════════════════════════════════════ */}
-      <div className="chart-container" style={{ paddingBottom: '0.5rem' }}>
+      <div className="chart-container" style={{ paddingBottom: '40px', marginBottom: '40px' }}>
         <div className="chart-title" style={{ marginBottom: '1.25rem' }}>
           Event Volume &amp; Breach Markers
           {aggLineDescriptors.length > 0 && (
@@ -667,8 +667,8 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
             </span>
           )}
         </div>
-        {/* Fixed height + paddingBottom gives the Brush room without overlapping siblings */}
-        <div style={{ width: '100%', height: 440, paddingBottom: '8px' }}>
+        {/* Fixed height + generous paddingBottom gives the Brush room without overlapping siblings */}
+        <div style={{ width: '100%', height: 460, paddingBottom: '50px' }}>
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={comboData} margin={{ top: 10, right: 24, bottom: 72, left: 12 }}>
               <ChartGradientDefs />
