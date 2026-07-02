@@ -95,6 +95,42 @@ const ACCENT_BLUE = "#5865f2";
 const ACCENT_CYAN = "#2dd4bf";
 const BREACH_RED = "#f85149";
 
+
+function EventVolumeTooltip({ active, payload, label, getRuleName }) {
+  if (!active || !payload || !payload.length) return null;
+  const breached = payload.some(p => p.payload && (p.payload._breached || p.payload.thresholdBreached));
+  return (
+    <div style={{
+      ...TOOLTIP_STYLE.contentStyle,
+      minWidth: 180,
+      borderColor: breached ? "rgba(239,68,68,0.5)" : "rgba(99,102,241,0.3)",
+    }}>
+      <div style={{ ...TOOLTIP_STYLE.labelStyle, display: "flex", alignItems: "center", gap: 6 }}>
+        {breached && <span style={{ color: BREACH_RED, fontSize: "0.85rem" }}>⚡</span>}
+        {formatTime(label)}
+        {breached && <span style={{ color: BREACH_RED, fontSize: "0.7rem", fontWeight: 700, marginLeft: 4 }}>BREACH</span>}
+      </div>
+      {payload.map((p, i) => {
+        if (p.dataKey === "breachMarker") return null;
+        let label = "Events";
+        if (String(p.dataKey).startsWith("evt_")) label = "Event Count";
+        else if (String(p.dataKey).startsWith("agg_")) label = "Aggregation Count";
+        return (
+          <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 16, marginTop: 2 }}>
+            <span style={{ color: "#94a3b8" }}>{label}</span>
+            <span style={{ color: p.stroke || p.fill || "#e2e8f0", fontWeight: 700 }}>{p.value}</span>
+          </div>
+        );
+      })}
+      {breached && (
+        <div style={{ marginTop: 6, padding: "4px 8px", background: "rgba(239,68,68,0.12)", borderRadius: 4, fontSize: "0.72rem", color: BREACH_RED, textAlign: "center", fontWeight: 700 }}>
+          Threshold Exceeded
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ChartGradientDefs() {
   return (
     <defs>
