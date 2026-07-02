@@ -420,16 +420,53 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
     return comparisons;
   }, [data, selectedRuleIds, getRuleName, rules]);
 
-  /* ───── Event Volume chart data ───── */
-  const eventVolumeData = useMemo(() => {
+  /* ───── Consolidated Chart Data: Event Volume + Agg Metrics + Breach Markers ───── */
+  const { comboData, aggLines } = useMemo(() => {
     const timeMap = {};
+    const lines = [];
+
+    // Build event-volume + breach-marker rows from allRows
     for (const row of allRows) {
       const ts = row.windowStart;
-      if (!timeMap[ts]) timeMap[ts] = { windowStart: ts };
-      timeMap[ts][row.ruleId] = (timeMap[ts][row.ruleId] || 0) + getRowEventCount(row);
+      if (!ts) continue;
+      if (!timeMap[ts]) timeMap[ts] = { windowStart: ts, _tsMs: new Date(ts).getTime(), _breached: false };
+      const evtKey = `evt_${row.ruleId}`;
+      timeMap[ts][evtKey] = (timeMap[ts][evtKey] || 0) + getRowEventCount(row);
+      if (isBreached(row)) {
+        timeMap[ts]._breached = true;
+        timeMap[ts].thresholdBreached = true;
+        timeMap[ts].breachMarker = getRowEventCount(row);
+      }
     }
-    return Object.values(timeMap).sort((a, b) => new Date(a.windowStart) - new Date(b.windowStart));
-  }, [allRows]);
+
+    // Bake aggregation metric values into the same row map
+    for (const ruleId of [...selectedRuleIds]) {
+      const rows = data[ruleId] || [];
+      if (!rows.length) continue;
+      const aliasSet = new Set();
+      for (const row of rows) {
+        for (const alias of Object.keys(getAggResults(row))) aliasSet.add(alias);
+      }
+      const rName = getRuleName(ruleId);
+      [...aliasSet].forEach((alias, ai) => {
+        lines.push({
+          key: `agg_${ruleId}__${alias}`,
+          name: `${rName} · ${alias}`,
+          dashArray: DASH_PATTERNS[(ai + 1) % DASH_PATTERNS.length],
+        });
+      });
+      for (const row of rows) {
+        const ts = row.windowStart;
+        if (!timeMap[ts]) timeMap[ts] = { windowStart: ts, _tsMs: new Date(ts).getTime(), _breached: false };
+        for (const [alias, val] of Object.entries(getAggResults(row))) {
+          timeMap[ts][`agg_${ruleId}__${alias}`] = Number(val);
+        }
+      }
+    }
+
+    const sorted = Object.values(timeMap).sort((a, b) => a._tsMs - b._tsMs);
+    return { comboData: sorted, aggLines: lines };
+  }, [allRows, data, selectedRuleIds, getRuleName, rules]);
 
   /* ───── Breach Density Heatmap Data (by hour) ───── */
   const breachHeatmapData = useMemo(() => {
@@ -457,51 +494,6 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
       return tsB - tsA;
     });
   }, [anomalyData]);
-
-  /* ───── Aggregation values chart data ───── */
-  const { aggData, aggLines } = useMemo(() => {
-    const lines = [];
-    const timeMap = {};
-
-    for (const ruleId of [...selectedRuleIds]) {
-      const rows = data[ruleId] || [];
-      if (rows.length === 0) continue;
-      // Collect alias union from ALL rows (not just rows[0]) so we don't miss
-      // aliases when the first row has an empty aggResult.
-      const aliasSet = new Set();
-      for (const row of rows) {
-        for (const alias of Object.keys(getAggResults(row))) {
-          aliasSet.add(alias);
-        }
-      }
-      const aliases = [...aliasSet];
-      const rName = getRuleName(ruleId);
-      const rColor = getRuleColor(rules, ruleId);
-
-      aliases.forEach((alias, ai) => {
-        const lineKey = `${ruleId}__${alias}`;
-        lines.push({
-          key: lineKey,
-          name: `${rName} — ${alias}`,
-          color: rColor,
-          dashArray: DASH_PATTERNS[ai % DASH_PATTERNS.length],
-        });
-      });
-
-      for (const row of rows) {
-        const ts = row.windowStart;
-        if (!timeMap[ts]) timeMap[ts] = { windowStart: ts };
-        for (const [alias, val] of Object.entries(getAggResults(row))) {
-          timeMap[ts][`${ruleId}__${alias}`] = val;
-        }
-      }
-    }
-
-    return {
-      aggData: Object.values(timeMap).sort((a, b) => new Date(a.windowStart) - new Date(b.windowStart)),
-      aggLines: lines,
-    };
-  }, [data, selectedRuleIds, getRuleName, rules]);
 
   /* ───── Top group keys table ───── */
   const groupTableData = useMemo(() => {
@@ -855,31 +847,111 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
             </div>
           </div>
 
-          {/* Event Volume Area Chart */}
+          {/* ═══ Consolidated Chart: Event Volume, Aggregation Metrics, and Breaches ═══ */}
           <div className="chart-container" style={{ marginBottom: '-15px', height: 'auto' }}>
-            <div className="chart-title">Event Volume Over Time</div>
-            <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '1rem' }}>Total events processed per evaluation window. <span style={{ color: '#f85149' }}>Red markers</span> indicate threshold breaches.</div>
-            <div style={{ width: '100%', height: 380 }}>
+            <div className="chart-title" style={{ marginBottom: '1.25rem' }}>
+              Event Volume, Aggregation Metrics, and Breaches
+            </div>
+            <div style={{ width: '100%', height: 420 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={eventVolumeData} margin={{ top: 10, right: 20, left: 10, bottom: 40 }}>
-                <CartesianGrid {...GRID_PROPS} />
-                <XAxis dataKey="windowStart" stroke={AXIS_STROKE} tick={{ fontSize: 11 }} tickFormatter={formatTime} minTickGap={30} dy={10} />
-                <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} width={48} />
-                <Tooltip {...TOOLTIP_STYLE} labelFormatter={ts => `Window: ${formatTime(ts)} IST`} formatter={(value, name) => [value?.toLocaleString() + ' events', getRuleName(name)]} />
-                <Legend verticalAlign="top" wrapperStyle={{ paddingBottom: '8px' }} formatter={(value) => getRuleName(value)} />
-                {breachTimestamps.map((ts, idx) => (
-                  <ReferenceLine key={`breach-ref-${idx}`} x={ts} stroke="#ef4444" strokeDasharray="4 4" strokeOpacity={0.3} />
-                ))}
-                {selectedRules.map(r => {
-                  const id = r.rule_metadata.rule_id;
-                  const color = getRuleColor(rules, id);
-                  return (
-                    <Area key={id} type="monotone" dataKey={id} stroke={color} fill={color} fillOpacity={0.15} strokeWidth={2} name={id} dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
-                  );
-                })}
-                {/* Brush auto-positioned by Recharts within the bottom margin */}
-                <Brush dataKey="windowStart" height={24} stroke="#3b82f6" fill="rgba(15,23,42,0.8)" tickFormatter={formatTime} />
-              </AreaChart>
+                <ComposedChart data={comboData} margin={{ top: 10, right: 24, bottom: 45, left: 12 }}>
+                  <ChartGradientDefs />
+                  <CartesianGrid {...GRID_PROPS} />
+
+                  <XAxis
+                    dataKey="windowStart"
+                    stroke={AXIS_STROKE}
+                    tick={<CustomXAxisTick breachTs={breachTimestamps} />}
+                    minTickGap={40}
+                    dy={8}
+                  />
+                  <YAxis
+                    stroke={AXIS_STROKE}
+                    tick={{ fontSize: 11, fill: '#64748b' }}
+                    allowDecimals={false}
+                    width={44}
+                    label={{ value: 'Events / Window', angle: -90, position: 'insideLeft', offset: 12, style: { fill: '#64748b', fontSize: 10 } }}
+                  />
+
+                  <Tooltip content={<EventVolumeTooltip getRuleName={getRuleName} />} />
+
+                  <Legend
+                    verticalAlign="top"
+                    wrapperStyle={{ paddingBottom: '0.75rem', fontSize: '0.78rem', cursor: 'pointer' }}
+                    onClick={handleLegendClick}
+                    formatter={(value) => {
+                      if (String(value).startsWith('evt_')) return `📊 Event Count`;
+                      if (String(value).startsWith('agg_')) return `〰 Aggregation Count`;
+                      if (value === 'breachMarker') return `🔴 Breaches`;
+                      return value;
+                    }}
+                  />
+
+                  {/* Aggregation metric lines (dashed, teal, same Y-axis) */}
+                  {aggLines.map((line) => (
+                    <Line
+                      key={line.key}
+                      type="monotone"
+                      dataKey={line.key}
+                      name={line.key}
+                      stroke={ACCENT_CYAN}
+                      strokeWidth={1.8}
+                      strokeDasharray={line.dashArray || '6 3'}
+                      dot={false}
+                      activeDot={{ r: 4, fill: ACCENT_CYAN, stroke: '#fff', strokeWidth: 1.5 }}
+                      isAnimationActive={false}
+                      hide={hiddenSeries[line.key]}
+                    />
+                  ))}
+
+                  {/* Event Volume Area with gradient fill */}
+                  {selectedRules.map(r => {
+                    const id = r.rule_metadata.rule_id;
+                    return (
+                      <Area
+                        key={`evt_${id}`}
+                        type="monotone"
+                        dataKey={`evt_${id}`}
+                        stroke={ACCENT_BLUE}
+                        strokeWidth={2.5}
+                        fill="url(#gradEventVolume)"
+                        name={`evt_${id}`}
+                        activeDot={{ r: 6, fill: ACCENT_BLUE, stroke: '#fff', strokeWidth: 2 }}
+                        isAnimationActive={true}
+                        animationDuration={800}
+                        hide={hiddenSeries[`evt_${id}`]}
+                      />
+                    );
+                  })}
+
+                  {/* Precise Breach Markers (red circle + downward pointer) */}
+                  <Scatter
+                    dataKey="breachMarker"
+                    name="breachMarker"
+                    fill={BREACH_RED}
+                    hide={hiddenSeries['breachMarker']}
+                    shape={(props) => {
+                      const { cx, cy } = props;
+                      if (cx == null || cy == null) return null;
+                      return (
+                        <g>
+                          <circle cx={cx} cy={cy} r={6} fill={BREACH_RED} stroke="#fff" strokeWidth={1.5} />
+                          <path d={`M${cx},${cy + 6} L${cx - 4},${cy + 14} L${cx + 4},${cy + 14} Z`} fill={BREACH_RED} />
+                        </g>
+                      );
+                    }}
+                    isAnimationActive={false}
+                  />
+
+                  <Brush
+                    dataKey="windowStart"
+                    height={22}
+                    stroke="rgba(99,102,241,0.4)"
+                    fill="rgba(8,12,28,0.9)"
+                    tickFormatter={formatTime}
+                    travellerWidth={6}
+                  />
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
           </div>
