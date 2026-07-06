@@ -55,12 +55,16 @@ function parseAsIST(ts) {
 function formatTime(ts) { return formatISTTime(ts); }
 
 function formatTimeShort(ts) {
-  // parseAsIST already appends +05:30 and returns a correct UTC Date.
-  // Read UTC hours/minutes/seconds directly — do NOT add IST_OFFSET_MS again.
+  // parseAsIST returns a Date whose absolute instant is correct, but its
+  // getUTC* accessors read the UTC wall clock, not IST — reading them
+  // directly showed UTC time mislabeled as IST. Shift by IST_OFFSET_MS first
+  // (same double-shift pattern as getISTHour/epochToISTWall) so getUTC*
+  // recovers the true IST wall-clock digits.
   const d = parseAsIST(ts);
   if (!d) return ts ? String(ts) : '';
+  const ist = new Date(d.getTime() + IST_OFFSET_MS);
   const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+  return `${pad(ist.getUTCHours())}:${pad(ist.getUTCMinutes())}:${pad(ist.getUTCSeconds())}`;
 }
 
 function timeAgo(ts) {
@@ -233,12 +237,36 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
   const fallbackIntervalRef = useRef(null);
   const usingFallbackRef = useRef(false);
 
+  // ─── Live throughput tracking ───────────────────────────────────────────
+  // Counts every delta pushed from the server (partial + final ticks both
+  // count — this measures update throughput, not distinct windows). Batched
+  // into a ref and flushed on a timer instead of setState-per-delta so a
+  // bursty rule doesn't trigger a re-render on every single message.
+  const deltaCountRef = useRef(0);
+  const [throughputHistory, setThroughputHistory] = useState([]);
+  const THROUGHPUT_BUCKET_SEC = 2;
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const count = deltaCountRef.current;
+      deltaCountRef.current = 0;
+      const rate = count / THROUGHPUT_BUCKET_SEC;
+      setThroughputHistory(prev => [...prev, { t: Date.now(), rate }].slice(-30));
+    }, THROUGHPUT_BUCKET_SEC * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const currentThroughput = throughputHistory.length > 0
+    ? throughputHistory[throughputHistory.length - 1].rate
+    : 0;
+
   const selectedRules = useMemo(
     () => rules.filter(r => selectedRuleIds.has(r.rule_metadata.rule_id)),
     [rules, selectedRuleIds]
   );
 
   const handleDelta = useCallback((ruleId, row) => {
+    deltaCountRef.current += 1;
     const normRow = normalizeRow(row);
     setData(prev => {
       const next = { ...prev };
@@ -656,6 +684,9 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     }
   };
 
+  const statusColor = STATUS_COLORS[connectionStatus] || STATUS_COLORS.disconnected;
+  const statusLabel = usingFallbackRef.current ? 'Polling (fallback)' : connectionStatus;
+
   // ─── Empty State ───────────────────────────────────────────────────────────
 
   if (selectedRuleIds.size === 0) {
@@ -679,6 +710,50 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     );
   }
 
+  // ─── Idle State: rule(s) selected, connected, but no events yet ────────────
+  // Distinct from "no rule selected" above — the connection is live, we're
+  // just genuinely waiting for the first event. A shimmering skeleton in the
+  // exact shape of the real dashboard keeps this feeling active/premium
+  // instead of looking broken, and avoids a layout jump when data arrives.
+  if (totalWindows === 0) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <span style={{
+            display: 'inline-block', width: 10, height: 10, borderRadius: '50%',
+            background: statusColor, boxShadow: `0 0 6px ${statusColor}`,
+            animation: connectionStatus === 'connected' ? 'pulse-dot 1.5s ease-in-out infinite' : 'none',
+            flexShrink: 0,
+          }} />
+          <span style={{ fontSize: '0.75rem', color: statusColor, textTransform: 'capitalize', fontWeight: 600 }}>{statusLabel}</span>
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: 4 }}>· waiting for the first live event…</span>
+        </div>
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="metric-card" style={{ flex: 1, minWidth: 130 }}>
+              <div className="skeleton" style={{ height: 11, width: '55%', marginBottom: 8 }} />
+              <div className="skeleton" style={{ height: 22, width: '40%' }} />
+            </div>
+          ))}
+        </div>
+        <div className="chart-container" style={{ height: 'auto' }}>
+          <div className="skeleton" style={{ height: 14, width: 240, marginBottom: '1.25rem' }} />
+          <div className="skeleton" style={{ width: '100%', height: 380 }} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '1rem' }}>
+          <div className="chart-container">
+            <div className="skeleton" style={{ height: 14, width: 160, marginBottom: '1.25rem' }} />
+            <div className="skeleton" style={{ width: '100%', height: 240 }} />
+          </div>
+          <div className="chart-container">
+            <div className="skeleton" style={{ height: 14, width: 160, marginBottom: '1.25rem' }} />
+            <div className="skeleton" style={{ width: '100%', height: 240 }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const thStyle = {
     textAlign: 'left', padding: '0.6rem 0.8rem', color: 'var(--text-muted)', fontWeight: 600,
     fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em',
@@ -686,9 +761,6 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     whiteSpace: 'nowrap',
   };
   const tdStyle = { padding: '0.55rem 0.8rem', fontSize: '0.82rem', borderBottom: '1px solid rgba(255,255,255,0.04)', verticalAlign: 'middle' };
-
-  const statusColor = STATUS_COLORS[connectionStatus] || STATUS_COLORS.disconnected;
-  const statusLabel = usingFallbackRef.current ? 'Polling (fallback)' : connectionStatus;
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
@@ -746,6 +818,20 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
         <div className="metric-card" style={{ flex: 1, minWidth: 130 }}>
           <h3 style={{ display: 'flex', alignItems: 'center', gap: 6 }}><breachTrend.Icon size={13} style={{ opacity: 0.7 }} /> Trend</h3>
           <div className="value" style={{ color: breachTrend.color, fontSize: '1.1rem', fontWeight: 700 }}>{breachTrend.text}</div>
+        </div>
+
+        {/* Live Throughput — updates/sec with an inline sparkline, fed by every
+            delta pushed from the server (partial + final ticks both count). */}
+        <div className="metric-card" style={{ flex: 1, minWidth: 150 }}>
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Zap size={13} style={{ opacity: 0.7 }} /> Live Throughput</h3>
+          <div className="value" style={{ fontSize: '1.1rem' }}>{currentThroughput.toFixed(1)} <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 400 }}>upd/s</span></div>
+          <div style={{ width: '100%', height: 28, marginTop: 2 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={throughputHistory} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+                <Area type="monotone" dataKey="rate" stroke={ACCENT_CYAN} strokeWidth={1.5} fill={ACCENT_CYAN} fillOpacity={0.15} isAnimationActive={false} dot={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
 

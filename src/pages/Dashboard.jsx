@@ -9,6 +9,7 @@ import AggregatedAnalysis from '../components/AggregatedAnalysis';
 import HistoricalAnalysis from '../components/HistoricalAnalysis';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { API_BASE } from '../config/appConfig';
+import { toISTDatetimeLocal, parseISTStringToEpochMs } from '../utils/istUtils';
 
 /**
  * Dashboard — all five panels are always mounted (display:none when inactive).
@@ -32,6 +33,7 @@ export default function Dashboard() {
   const [summaryRuleId, setSummaryRuleId] = useState(null);
   const [backendStatus, setBackendStatus] = useState('connecting');
   const [editingRule, setEditingRule]     = useState(null);
+  const [historicalPrefill, setHistoricalPrefill] = useState(null);
 
   // Track which tabs have been visited so we can lazy-mount panels
   const visitedTabsRef = useRef(new Set(['live']));
@@ -82,6 +84,33 @@ export default function Dashboard() {
 
   const handleEditComplete = () => {
     setEditingRule(null);
+  };
+
+  // Cross-panel drill-through: jump from an anomaly to Historical Analysis,
+  // pre-selecting the rule that fired and a date range bracketing when it
+  // happened, so the analyst lands on the right context in one click.
+  // (Historical replay has no ad hoc "filter to this entity" capability today
+  // — this gets you to the right rule + right time window, not a pre-applied
+  // entity filter.)
+  const drillToHistorical = (ruleId, aroundTs) => {
+    setSelectedRuleIds(prev => {
+      const next = new Set(prev);
+      next.add(ruleId);
+      return next;
+    });
+    const centerEpoch = parseISTStringToEpochMs(aroundTs);
+    const nowEpoch = Date.now();
+    const sevenDaysAgo = nowEpoch - 7 * 24 * 60 * 60 * 1000;
+    const safeCenterEpoch = isNaN(centerEpoch) ? nowEpoch : Math.min(Math.max(centerEpoch, sevenDaysAgo), nowEpoch);
+    const startEpoch = Math.max(safeCenterEpoch - 60 * 60 * 1000, sevenDaysAgo);
+    const endEpoch = Math.min(safeCenterEpoch + 15 * 60 * 1000, nowEpoch);
+    setHistoricalPrefill({
+      ruleId,
+      startTs: toISTDatetimeLocal(startEpoch),
+      endTs: toISTDatetimeLocal(endEpoch),
+      nonce: Date.now(), // forces HistoricalAnalysis's effect to re-fire even if ruleId/times repeat
+    });
+    handleTabChange('historical');
   };
 
   const navItems = [
@@ -199,7 +228,7 @@ export default function Dashboard() {
           <div style={{ display: activeTab === 'agg' ? 'block' : 'none' }}
                className={activeTab === 'agg' ? 'animate-fade-in' : ''}>
             <ErrorBoundary label="Aggregated Analysis">
-              <AggregatedAnalysis rules={rules} selectedRuleIds={prodSelectedIds} allSelectedRuleIds={selectedRuleIds} />
+              <AggregatedAnalysis rules={rules} selectedRuleIds={prodSelectedIds} allSelectedRuleIds={selectedRuleIds} onDrillToHistorical={drillToHistorical} />
             </ErrorBoundary>
           </div>
 
@@ -207,7 +236,7 @@ export default function Dashboard() {
           <div style={{ display: activeTab === 'historical' ? 'block' : 'none' }}
                className={activeTab === 'historical' ? 'animate-fade-in' : ''}>
             <ErrorBoundary label="Historical Analysis">
-              <HistoricalAnalysis rules={rules} selectedRuleIds={analysisSelectedIds} />
+              <HistoricalAnalysis rules={rules} selectedRuleIds={analysisSelectedIds} prefill={historicalPrefill} />
             </ErrorBoundary>
           </div>
 
