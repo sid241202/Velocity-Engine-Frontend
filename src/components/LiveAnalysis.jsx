@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Activity, ArrowUpDown, TrendingUp, TrendingDown, Minus, Clock, AlertTriangle, Zap, Shield, BarChart2 } from 'lucide-react';
 import {
-  ComposedChart, AreaChart, Area, BarChart, Bar, LineChart, Line,
+  ComposedChart, AreaChart, Area, BarChart, Bar, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, Brush, ReferenceLine, ReferenceDot, ReferenceArea, Cell, ScatterChart, Scatter
+  ResponsiveContainer, Brush, Cell, Scatter
 } from 'recharts';
 import { getRuleColor } from '../constants';
 import { formatISTTime, formatISTDateTime } from '../utils/istUtils';
-import { MockLiveTicker, MOCK_RULE_ID } from '../simulation/mockEngine';
+import { MockLiveTicker } from '../simulation/mockEngine';
 
 // ─── Design System ────────────────────────────────────────────────────────────
 
@@ -56,10 +56,16 @@ function parseAsIST(ts) {
 function formatTime(ts) { return formatISTTime(ts); }
 
 function formatTimeShort(ts) {
+  // parseAsIST returns a Date whose absolute instant is correct, but its
+  // getUTC* accessors read the UTC wall clock, not IST — reading them
+  // directly showed UTC time mislabeled as IST. Shift by IST_OFFSET_MS first
+  // (same double-shift pattern as getISTHour/epochToISTWall) so getUTC*
+  // recovers the true IST wall-clock digits.
   const d = parseAsIST(ts);
   if (!d) return ts ? String(ts) : '';
+  const ist = new Date(d.getTime() + IST_OFFSET_MS);
   const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+  return `${pad(ist.getUTCHours())}:${pad(ist.getUTCMinutes())}:${pad(ist.getUTCSeconds())}`;
 }
 
 function timeAgo(ts) {
@@ -104,35 +110,35 @@ function normalizeRow(row) {
 }
 
 function getEventCount(row) {
-  if (row.eventCount != null) return Number(row.eventCount) || 0;
+  // Explicit field (old schema / ClickHouse rows)
+  if (row.eventCount != null && row.eventCount !== undefined) return Number(row.eventCount) || 0;
+
+  // New Flink schema: aggResult contains the alias→value map, e.g. {"count": 5, "txnAmount": 2500}
+  // The first numeric value in aggResult is used as the canonical event count for visualization.
+  // For multi-aggregation rules we sum all values as a rough proxy.
   const aggObj = row.aggResult && typeof row.aggResult === 'object' ? row.aggResult
     : row.aggregationResults && typeof row.aggregationResults === 'object' ? row.aggregationResults
     : null;
   if (aggObj) {
+    // Try known count aliases first
     for (const alias of ['count', 'eventCount', 'event_count', 'txnCount', 'total']) {
       if (aggObj[alias] != null) return Number(aggObj[alias]) || 0;
     }
+    // Fall back to sum of all numeric values
     let sum = 0;
-    for (const val of Object.values(aggObj)) { const n = Number(val); if (!isNaN(n)) sum += n; }
+    for (const val of Object.values(aggObj)) {
+      const n = Number(val);
+      if (!isNaN(n)) sum += n;
+    }
     if (sum > 0) return sum;
   }
+
+  // Legacy metricValues field
   const mv = parseMetricValues(row.metricValues);
   if (mv.eventCount != null) return Number(mv.eventCount) || 0;
   if (mv.event_count != null) return Number(mv.event_count) || 0;
   if (mv.count != null) return Number(mv.count) || 0;
   return 0;
-}
-
-// ─── Custom SVG Dot — only renders on breach points ───────────────────────────
-function BreachDot(props) {
-  const { cx, cy, payload, ruleId } = props;
-  if (!payload || !isBreached(payload) || cx == null || cy == null) return null;
-  return (
-    <g>
-      <circle cx={cx} cy={cy} r={9} fill="rgba(239,68,68,0.18)" />
-      <circle cx={cx} cy={cy} r={5} fill={BREACH_RED} stroke="#fff" strokeWidth={1.5} />
-    </g>
-  );
 }
 
 // ─── Custom Tooltip for Event Volume chart ────────────────────────────────────
@@ -233,17 +239,54 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
   const usingFallbackRef = useRef(false);
   const mockTickerRef = useRef(null);
 
+  // ─── Live throughput tracking ───────────────────────────────────────────
+  // Counts every delta pushed from the server (partial + final ticks both
+  // count — this measures update throughput, not distinct windows). Batched
+  // into a ref and flushed on a timer instead of setState-per-delta so a
+  // bursty rule doesn't trigger a re-render on every single message.
+  const deltaCountRef = useRef(0);
+  const [throughputHistory, setThroughputHistory] = useState([]);
+  const THROUGHPUT_BUCKET_SEC = 2;
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const count = deltaCountRef.current;
+      deltaCountRef.current = 0;
+      const rate = count / THROUGHPUT_BUCKET_SEC;
+      setThroughputHistory(prev => [...prev, { t: Date.now(), rate }].slice(-30));
+    }, THROUGHPUT_BUCKET_SEC * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const currentThroughput = throughputHistory.length > 0
+    ? throughputHistory[throughputHistory.length - 1].rate
+    : 0;
+
   const selectedRules = useMemo(
     () => rules.filter(r => selectedRuleIds.has(r.rule_metadata.rule_id)),
     [rules, selectedRuleIds]
   );
 
   const handleDelta = useCallback((ruleId, row) => {
+    deltaCountRef.current += 1;
     const normRow = normalizeRow(row);
     setData(prev => {
       const next = { ...prev };
-      if (!next[ruleId]) next[ruleId] = [];
-      next[ruleId] = [...next[ruleId], normRow];
+      const existing = next[ruleId] || [];
+      // Upsert by (groupKey, windowStart): a Flink early-fire (partial) row and
+      // the eventual final row for the same window share that key, so the
+      // later tick replaces the row in place instead of piling up a duplicate
+      // entry per partial tick — mirrors LiveStore.Add on the backend.
+      const idx = existing.findIndex(
+        r => r.groupKey === normRow.groupKey && r.windowStart === normRow.windowStart
+      );
+      if (idx >= 0) {
+        const updated = [...existing];
+        updated[idx] = normRow;
+        next[ruleId] = updated;
+      } else {
+        next[ruleId] = [...existing, normRow];
+      }
       const cutoffEpoch = Date.now() - 24 * 60 * 60 * 1000;
       const istWall = new Date(cutoffEpoch + IST_OFFSET_MS);
       const pad = (n) => String(n).padStart(2, '0');
@@ -262,14 +305,22 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
         const json = await res.json();
         setData(json.results || {});
       }
-    } catch (e) { console.error('Live fetch error:', e); }
+    } catch (e) {
+      console.error('Live fetch error:', e);
+    }
   }, [selectedRuleIds]);
 
   const closeWebSocket = useCallback(() => {
-    if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
     if (wsRef.current) {
-      wsRef.current.onclose = null; wsRef.current.onerror = null;
-      wsRef.current.onmessage = null; wsRef.current.close(); wsRef.current = null;
+      wsRef.current.onclose = null;
+      wsRef.current.onerror = null;
+      wsRef.current.onmessage = null;
+      wsRef.current.close();
+      wsRef.current = null;
     }
   }, []);
 
@@ -283,44 +334,67 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
 
   const stopFallbackPolling = useCallback(() => {
     usingFallbackRef.current = false;
-    if (fallbackIntervalRef.current) { clearInterval(fallbackIntervalRef.current); fallbackIntervalRef.current = null; }
+    if (fallbackIntervalRef.current) {
+      clearInterval(fallbackIntervalRef.current);
+      fallbackIntervalRef.current = null;
+    }
   }, []);
 
   const connectWebSocket = useCallback(() => {
     if (selectedRuleIds.size === 0) return;
+
     closeWebSocket();
     stopFallbackPolling();
     setConnectionStatus('reconnecting');
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/api/ws/live-analysis`;
+
     try {
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
+
       ws.onopen = () => {
         reconnectAttemptRef.current = 0;
         setConnectionStatus('connected');
         ws.send(JSON.stringify({ type: 'subscribe', rule_ids: [...selectedRuleIds] }));
       };
+
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
-          if (msg.type === 'bootstrap') setData(msg.data || {});
-          else if (msg.type === 'delta') handleDelta(msg.rule_id, msg.row);
-        } catch { /* ignore malformed messages */ }
+          if (msg.type === 'bootstrap') {
+            setData(msg.data || {});
+          } else if (msg.type === 'delta') {
+            handleDelta(msg.rule_id, msg.row);
+          }
+        } catch {
+          // ignore malformed messages
+        }
       };
+
       ws.onclose = () => {
         wsRef.current = null;
         reconnectAttemptRef.current += 1;
-        if (reconnectAttemptRef.current >= 3) { startFallbackPolling(); return; }
+
+        if (reconnectAttemptRef.current >= 3) {
+          startFallbackPolling();
+          return;
+        }
+
         setConnectionStatus('reconnecting');
         const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current), 30000);
         reconnectTimerRef.current = setTimeout(connectWebSocket, delay);
       };
-      ws.onerror = () => { ws.close(); };
+
+      ws.onerror = () => {
+        ws.close();
+      };
     } catch {
       reconnectAttemptRef.current += 1;
-      if (reconnectAttemptRef.current >= 3) startFallbackPolling();
-      else {
+      if (reconnectAttemptRef.current >= 3) {
+        startFallbackPolling();
+      } else {
         setConnectionStatus('reconnecting');
         const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current), 30000);
         reconnectTimerRef.current = setTimeout(connectWebSocket, delay);
@@ -328,11 +402,16 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     }
   }, [selectedRuleIds, closeWebSocket, stopFallbackPolling, startFallbackPolling, handleDelta]);
 
-  // ── Simulation mode: MockLiveTicker replaces WebSocket ──────────────────────
+  // ── Simulation mode: MockLiveTicker replaces the WebSocket ──────────────────
+  // Runs entirely in-browser: bootstraps the last 10 completed windows, then
+  // emits early-fire partials + a settled final tick every IST minute,
+  // exercising the exact same handleDelta upsert-by-key path the real
+  // WebSocket delta would.
   useEffect(() => {
     if (!simulationMode) return;
     if (mockTickerRef.current) { mockTickerRef.current.stop(); mockTickerRef.current = null; }
     if (selectedRuleIds.size === 0) { setData({}); setConnectionStatus('disconnected'); return; }
+
     setConnectionStatus('connected');
     const ticker = new MockLiveTicker(
       (ruleId, rows) => setData(prev => ({ ...prev, [ruleId]: rows.map(r => normalizeRow(r)) })),
@@ -343,17 +422,31 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     return () => { ticker.stop(); mockTickerRef.current = null; };
   }, [simulationMode, selectedRuleIds, handleDelta]);
 
-  // ── Real WebSocket / HTTP fallback (only when NOT in simulation mode) ────────
+  // ── Real WebSocket / HTTP fallback (only when NOT in simulation mode) ───────
   useEffect(() => {
     if (simulationMode) return;
     if (selectedRuleIds.size === 0) {
-      setData({}); closeWebSocket(); stopFallbackPolling(); setConnectionStatus('disconnected'); return;
+      setData({});
+      closeWebSocket();
+      stopFallbackPolling();
+      setConnectionStatus('disconnected');
+      return;
     }
-    if (usingFallbackRef.current) { stopFallbackPolling(); startFallbackPolling(); }
-    else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+
+    if (usingFallbackRef.current) {
+      stopFallbackPolling();
+      startFallbackPolling();
+    } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'subscribe', rule_ids: [...selectedRuleIds] }));
-    } else { reconnectAttemptRef.current = 0; connectWebSocket(); }
-    return () => { closeWebSocket(); stopFallbackPolling(); };
+    } else {
+      reconnectAttemptRef.current = 0;
+      connectWebSocket();
+    }
+
+    return () => {
+      closeWebSocket();
+      stopFallbackPolling();
+    };
   }, [simulationMode, selectedRuleIds, connectWebSocket, closeWebSocket, stopFallbackPolling, startFallbackPolling]);
 
   const getRuleName = useCallback((ruleId) => {
@@ -399,6 +492,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     const twoHoursAgo = now - 7200000;
     let lastHour = 0, prevHour = 0;
     for (const row of allRows.filter(r => isBreached(r))) {
+      // Use parseAsIST — naive new Date() on space-separated IST strings is browser-dependent
       const d = parseAsIST(row.windowStart || row.evaluatedAt);
       if (!d) continue;
       const ts = d.getTime();
@@ -411,7 +505,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     return { text: 'Stable', color: '#f59e0b', Icon: Minus };
   }, [allRows]);
 
-  // Chart 1: Event Volume — also bakes in agg metric values and breach markers
+  // Chart 1: Event Volume — bakes in agg metric values AND breach markers
   const { comboData, breachTs } = useMemo(() => {
     const timeMap = {};
     for (const row of allRows) {
@@ -438,6 +532,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
           if (!isNaN(numVal)) timeMap[ts][`agg_${row.ruleId}__${alias}`] = numVal;
         }
       }
+      // Also read from legacy metricValues field
       const mv = parseMetricValues(row.metricValues);
       for (const [alias, val] of Object.entries(mv)) {
         const numVal = Number(val);
@@ -445,10 +540,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
       }
     }
     const sorted = Object.values(timeMap).sort((a, b) => a._tsMs - b._tsMs);
-
-    // Collect exact breach timestamps (windowStart of each breached window)
     const breachTimestamps = sorted.filter(pt => pt._breached).map(pt => pt.windowStart);
-
     return { comboData: sorted, breachTs: breachTimestamps };
   }, [allRows]);
 
@@ -478,7 +570,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     return lines;
   }, [data, selectedRuleIds, getRuleName]);
 
-  // Chart 2: Cumulative Breaches — area gradient
+  // Chart 2: Cumulative Breaches — area gradient with incremental dot markers
   const cumulativeData = useMemo(() => {
     const perRule = {};
     for (const ruleId of [...selectedRuleIds]) {
@@ -539,8 +631,6 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     return Object.values(timeMap).sort((a, b) => new Date(a.windowStart) - new Date(b.windowStart));
   }, [allRows]);
 
-  // (aggData / aggLines removed — aggregation metrics are now merged into the primary ComposedChart)
-
   const currentlyBreaching = useMemo(() => {
     const set = new Set();
     let latestTs = null;
@@ -551,7 +641,9 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     if (!latestTs) return set;
     for (const row of allRows) {
       const d = new Date(row.windowStart);
-      if (d.getTime() === latestTs.getTime() && isBreached(row)) set.add(`${row.groupKey}||${row.ruleId}`);
+      if (d.getTime() === latestTs.getTime() && isBreached(row)) {
+        set.add(`${row.groupKey}||${row.ruleId}`);
+      }
     }
     return set;
   }, [allRows]);
@@ -562,37 +654,67 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
       const gk = row.groupKey || 'N/A';
       const key = `${gk}||${row.ruleId}`;
       if (!groupMap[key]) {
-        groupMap[key] = { groupKey: gk, entityName: row.entityName || '', ruleId: row.ruleId, totalEvents: 0, breaches: 0, windows: 0, lastWindow: row.windowEnd || row.windowStart };
+        groupMap[key] = {
+          groupKey: gk,
+          entityName: row.entityName || '',
+          ruleId: row.ruleId,
+          totalEvents: 0,
+          breaches: 0,
+          windows: 0,
+          lastWindow: row.windowEnd || row.windowStart,
+          liveNow: row.isFinal === false,
+        };
       }
       groupMap[key].totalEvents += getEventCount(row);
       groupMap[key].windows += 1;
       if (isBreached(row)) groupMap[key].breaches += 1;
       const rowEnd = row.windowEnd || row.windowStart;
-      if (rowEnd > groupMap[key].lastWindow) groupMap[key].lastWindow = rowEnd;
+      if (rowEnd >= groupMap[key].lastWindow) {
+        groupMap[key].lastWindow = rowEnd;
+        // Only the row currently holding the latest window can still be partial —
+        // every earlier window has already closed on the Flink side.
+        groupMap[key].liveNow = row.isFinal === false;
+      }
     }
     const arr = Object.values(groupMap).map(g => ({
-      ...g, breachRate: g.windows > 0 ? ((g.breaches / g.windows) * 100).toFixed(1) : '0.0',
+      ...g,
+      breachRate: g.windows > 0 ? ((g.breaches / g.windows) * 100).toFixed(1) : '0.0',
     }));
+
     arr.sort((a, b) => {
-      const aVal = a[sortCol], bVal = b[sortCol];
+      const aVal = a[sortCol];
+      const bVal = b[sortCol];
       if (typeof aVal === 'number' && typeof bVal === 'number') {
-        const r = sortDir === 'desc' ? bVal - aVal : aVal - bVal;
-        return r !== 0 ? r : (sortCol !== 'breaches' ? b.breaches - a.breaches : b.totalEvents - a.totalEvents);
+        const result = sortDir === 'desc' ? bVal - aVal : aVal - bVal;
+        if (result !== 0) return result;
+        if (sortCol !== 'breaches') return b.breaches - a.breaches;
+        return b.totalEvents - a.totalEvents;
       }
-      const r = sortDir === 'desc' ? String(bVal).localeCompare(String(aVal)) : String(aVal).localeCompare(String(bVal));
-      return r !== 0 ? r : b.breaches - a.breaches;
+      const result = sortDir === 'desc'
+        ? String(bVal).localeCompare(String(aVal))
+        : String(aVal).localeCompare(String(bVal));
+      if (result !== 0) return result;
+      return b.breaches - a.breaches;
     });
     return arr.slice(0, 20);
   }, [allRows, sortCol, sortDir]);
 
   const handleSort = (col) => {
-    if (sortCol === col) setSortDir(d => d === 'desc' ? 'asc' : 'desc');
-    else { setSortCol(col); setSortDir('desc'); }
+    if (sortCol === col) {
+      setSortDir(d => d === 'desc' ? 'asc' : 'desc');
+    } else {
+      setSortCol(col);
+      setSortDir('desc');
+    }
   };
+
+  const statusColor = STATUS_COLORS[connectionStatus] || STATUS_COLORS.disconnected;
+  const statusLabel = usingFallbackRef.current ? 'Polling (fallback)' : connectionStatus;
 
   // ─── Empty State ───────────────────────────────────────────────────────────
 
   if (selectedRuleIds.size === 0) {
+    // Check if DRAFT rules were selected (allSelectedRuleIds has entries but selectedRuleIds is empty)
     const hasDraftOnly = allSelectedRuleIds && allSelectedRuleIds.size > 0 && selectedRuleIds.size === 0;
     return (
       <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '500px', gap: '1.5rem' }}>
@@ -612,6 +734,50 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     );
   }
 
+  // ─── Idle State: rule(s) selected, connected, but no events yet ────────────
+  // Distinct from "no rule selected" above — the connection is live, we're
+  // just genuinely waiting for the first event. A shimmering skeleton in the
+  // exact shape of the real dashboard keeps this feeling active/premium
+  // instead of looking broken, and avoids a layout jump when data arrives.
+  if (totalWindows === 0) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <span style={{
+            display: 'inline-block', width: 10, height: 10, borderRadius: '50%',
+            background: statusColor, boxShadow: `0 0 6px ${statusColor}`,
+            animation: connectionStatus === 'connected' ? 'pulse-dot 1.5s ease-in-out infinite' : 'none',
+            flexShrink: 0,
+          }} />
+          <span style={{ fontSize: '0.75rem', color: statusColor, textTransform: 'capitalize', fontWeight: 600 }}>{statusLabel}</span>
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: 4 }}>· waiting for the first live event…</span>
+        </div>
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="metric-card" style={{ flex: 1, minWidth: 130 }}>
+              <div className="skeleton" style={{ height: 11, width: '55%', marginBottom: 8 }} />
+              <div className="skeleton" style={{ height: 22, width: '40%' }} />
+            </div>
+          ))}
+        </div>
+        <div className="chart-container" style={{ height: 'auto' }}>
+          <div className="skeleton" style={{ height: 14, width: 240, marginBottom: '1.25rem' }} />
+          <div className="skeleton" style={{ width: '100%', height: 380 }} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '1rem' }}>
+          <div className="chart-container">
+            <div className="skeleton" style={{ height: 14, width: 160, marginBottom: '1.25rem' }} />
+            <div className="skeleton" style={{ width: '100%', height: 240 }} />
+          </div>
+          <div className="chart-container">
+            <div className="skeleton" style={{ height: 14, width: 160, marginBottom: '1.25rem' }} />
+            <div className="skeleton" style={{ width: '100%', height: 240 }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const thStyle = {
     textAlign: 'left', padding: '0.6rem 0.8rem', color: 'var(--text-muted)', fontWeight: 600,
     fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em',
@@ -619,9 +785,6 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     whiteSpace: 'nowrap',
   };
   const tdStyle = { padding: '0.55rem 0.8rem', fontSize: '0.82rem', borderBottom: '1px solid rgba(255,255,255,0.04)', verticalAlign: 'middle' };
-
-  const statusColor = STATUS_COLORS[connectionStatus] || STATUS_COLORS.disconnected;
-  const statusLabel = usingFallbackRef.current ? 'Polling (fallback)' : connectionStatus;
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
@@ -680,11 +843,25 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
           <h3 style={{ display: 'flex', alignItems: 'center', gap: 6 }}><breachTrend.Icon size={13} style={{ opacity: 0.7 }} /> Trend</h3>
           <div className="value" style={{ color: breachTrend.color, fontSize: '1.1rem', fontWeight: 700 }}>{breachTrend.text}</div>
         </div>
+
+        {/* Live Throughput — updates/sec with an inline sparkline, fed by every
+            delta pushed from the server (partial + final ticks both count). */}
+        <div className="metric-card" style={{ flex: 1, minWidth: 150 }}>
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Zap size={13} style={{ opacity: 0.7 }} /> Live Throughput</h3>
+          <div className="value" style={{ fontSize: '1.1rem' }}>{currentThroughput.toFixed(1)} <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 400 }}>upd/s</span></div>
+          <div style={{ width: '100%', height: 28, marginTop: 2 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={throughputHistory} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+                <Area type="monotone" dataKey="rate" stroke={ACCENT_CYAN} strokeWidth={1.5} fill={ACCENT_CYAN} fillOpacity={0.15} isAnimationActive={false} dot={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════
+      {/* ═══════════════════════════════════════════════════════════════════════
           Chart 1: Event Volume — area + agg metric lines + precise breach markers
-          ═══════════════════════════════════════════════════════════════════ */}
+          ═══════════════════════════════════════════════════════════════════════ */}
       <div className="chart-container" style={{ marginBottom: '-15px', height: 'auto' }}>
         <div className="chart-title" style={{ marginBottom: '1.25rem' }}>
           Event Volume, Aggregation Metrics, and Breaches
@@ -781,7 +958,6 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
                 isAnimationActive={false}
               />
 
-
               <Brush
                 dataKey="windowStart"
                 height={22}
@@ -795,18 +971,18 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════
+      {/* ═══════════════════════════════════════════════════════════════════════
           Chart row: Window Intensity + Cumulative Breaches
           -8px top margin enforces the 0.1 cm gap from the chart above.
-          ═══════════════════════════════════════════════════════════════════ */}
+          ═══════════════════════════════════════════════════════════════════════ */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '1rem', marginTop: '-8px' }}>
 
-        {/* Chart 2: Breach Intensity — colored bar per window */}
+        {/* Chart 2: Window Intensity — colored bar per window */}
         <div className="chart-container">
           <div className="chart-title" style={{ marginBottom: '1.25rem' }}>
             Window Intensity
             <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: 10 }}>
-              🟥 breach &nbsp;·&nbsp; 🟦 normal
+              🟥 breach&nbsp;·&nbsp; 🟦 normal
             </span>
           </div>
           <div style={{ width: '100%', height: 280 }}>
@@ -923,11 +1099,9 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
         </div>
       </div>
 
-      {/* Standalone Aggregation Metrics chart removed — now merged into Event Volume chart above */}
-
-      {/* ═══════════════════════════════════════════════════════════════════
+      {/* ═══════════════════════════════════════════════════════════════════════
           Table: Top Groups by Breach Activity
-          ═══════════════════════════════════════════════════════════════════ */}
+          ═══════════════════════════════════════════════════════════════════════ */}
       <div className="chart-container" style={{ height: 'auto' }}>
         <div className="chart-title" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1rem' }}>
           <AlertTriangle size={15} style={{ opacity: 0.7 }} />
@@ -972,8 +1146,16 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
                     <td style={{ ...tdStyle, color: 'var(--text-muted)', width: 32 }}>{i + 1}</td>
                     <td style={{ ...tdStyle, fontFamily: 'monospace', color: '#93c5fd' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
-                        {isCurrentlyBreaching && (
-                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: BREACH_RED, boxShadow: `0 0 6px ${BREACH_RED}`, animation: 'pulse-dot 1.5s ease-in-out infinite', flexShrink: 0 }} />
+                        {(isCurrentlyBreaching || g.liveNow) && (
+                          <span
+                            title={isCurrentlyBreaching ? 'Currently breaching' : 'Live — window still updating'}
+                            style={{
+                              width: 7, height: 7, borderRadius: '50%',
+                              background: isCurrentlyBreaching ? BREACH_RED : ACCENT_CYAN,
+                              boxShadow: `0 0 6px ${isCurrentlyBreaching ? BREACH_RED : ACCENT_CYAN}`,
+                              animation: 'pulse-dot 1.5s ease-in-out infinite', flexShrink: 0,
+                            }}
+                          />
                         )}
                         <span>
                           {g.entityName && g.entityName !== 'group' && <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block' }}>{g.entityName}</span>}

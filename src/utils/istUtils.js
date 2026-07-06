@@ -152,6 +152,23 @@ export function toISTDatetimeLocalFromOffset(offsetMs) {
 }
 
 /**
+ * Parses a timestamp — naive "YYYY-MM-DD HH:MM:SS" (assumed IST, the
+ * backend's convention), ISO string with an explicit offset/Z, or epoch ms —
+ * into UTC epoch milliseconds. Shared so every panel resolves naive backend
+ * timestamps the same way instead of re-deriving this logic locally.
+ *
+ * @param {string|number} ts
+ * @returns {number} epoch ms, or NaN if unparseable.
+ */
+export function parseISTStringToEpochMs(ts) {
+  if (!ts) return NaN;
+  if (typeof ts === 'number') return ts;
+  const raw = String(ts).replace(' ', 'T');
+  const withZone = raw.includes('+') || raw.endsWith('Z') ? raw : raw + '+05:30';
+  return Date.parse(withZone);
+}
+
+/**
  * Validates a datetime-local string (IST) range.
  * Returns an error string or '' if valid.
  *

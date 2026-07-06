@@ -9,12 +9,15 @@ import AggregatedAnalysis from '../components/AggregatedAnalysis';
 import HistoricalAnalysis from '../components/HistoricalAnalysis';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { API_BASE } from '../config/appConfig';
-import { MOCK_RULE, MOCK_RULE_ID } from '../simulation/mockEngine';
+import { toISTDatetimeLocal, parseISTStringToEpochMs } from '../utils/istUtils';
+import { MOCK_RULE, MOCK_RULE_ID, THRESHOLD } from '../simulation/mockEngine';
 
 // ── SIMULATION MODE ──────────────────────────────────────────────────────────
-// This branch (test-simulation) runs entirely in-browser.
-// All backend/WebSocket calls are replaced by the mock engine.
-// To disable, remove this constant and restore original fetchRules / LiveAnalysis.
+// This branch (test-simulation) runs entirely in-browser so every panel,
+// graph, and interaction can be visually verified without a running backend,
+// Flink cluster, Kafka, ClickHouse, or Iceberg. All backend/WebSocket calls
+// are replaced by src/simulation/mockEngine.js. To disable, remove this
+// constant and restore the original fetchRules body / panel props below.
 const SIMULATION_MODE = true;
 
 /**
@@ -39,6 +42,7 @@ export default function Dashboard() {
   const [summaryRuleId, setSummaryRuleId] = useState(null);
   const [backendStatus, setBackendStatus] = useState('connecting');
   const [editingRule, setEditingRule]     = useState(null);
+  const [historicalPrefill, setHistoricalPrefill] = useState(null);
 
   // Track which tabs have been visited so we can lazy-mount panels
   const visitedTabsRef = useRef(new Set(['live']));
@@ -49,12 +53,14 @@ export default function Dashboard() {
 
   const fetchRules = useCallback(async () => {
     if (SIMULATION_MODE) {
-      // In simulation mode: inject the single mock rule and mark backend as up.
+      // Inject the single mock rule and mark the (nonexistent) backend as up.
       setRules([MOCK_RULE]);
       setBackendStatus('up');
       return;
     }
     const controller = new AbortController();
+    // 10-second timeout: if the backend is hanging (no response, not closed),
+    // transition to 'down' state so the offline banner is shown promptly.
     const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
       const res = await fetch(`${API_BASE}/rules`, { signal: controller.signal });
@@ -100,6 +106,33 @@ export default function Dashboard() {
 
   const handleEditComplete = () => {
     setEditingRule(null);
+  };
+
+  // Cross-panel drill-through: jump from an anomaly to Historical Analysis,
+  // pre-selecting the rule that fired and a date range bracketing when it
+  // happened, so the analyst lands on the right context in one click.
+  // (Historical replay has no ad hoc "filter to this entity" capability today
+  // — this gets you to the right rule + right time window, not a pre-applied
+  // entity filter.)
+  const drillToHistorical = (ruleId, aroundTs) => {
+    setSelectedRuleIds(prev => {
+      const next = new Set(prev);
+      next.add(ruleId);
+      return next;
+    });
+    const centerEpoch = parseISTStringToEpochMs(aroundTs);
+    const nowEpoch = Date.now();
+    const sevenDaysAgo = nowEpoch - 7 * 24 * 60 * 60 * 1000;
+    const safeCenterEpoch = isNaN(centerEpoch) ? nowEpoch : Math.min(Math.max(centerEpoch, sevenDaysAgo), nowEpoch);
+    const startEpoch = Math.max(safeCenterEpoch - 60 * 60 * 1000, sevenDaysAgo);
+    const endEpoch = Math.min(safeCenterEpoch + 15 * 60 * 1000, nowEpoch);
+    setHistoricalPrefill({
+      ruleId,
+      startTs: toISTDatetimeLocal(startEpoch),
+      endTs: toISTDatetimeLocal(endEpoch),
+      nonce: Date.now(), // forces HistoricalAnalysis's effect to re-fire even if ruleId/times repeat
+    });
+    handleTabChange('historical');
   };
 
   const navItems = [
@@ -165,7 +198,7 @@ export default function Dashboard() {
           fontWeight: 500,
         }}>
           <FlaskConical size={14} />
-          <span><strong>Simulation Mode</strong> — Backend &amp; Flink are not required. Auth events (6–10/min) are generated in-browser (Rule: count ≥ {8} triggers breach), and Historical Replay uses synthesized Iceberg-style backtest data across 5 mock auth-source channels.</span>
+          <span><strong>Simulation Mode</strong> — Backend &amp; Flink are not required. Live Analysis ticks a mock Flink pipeline in-browser (early-fire partial updates + a settled tick every IST minute, threshold ≥ {THRESHOLD} triggers a breach across 5 mock entities); Historical Replay and its forensic breakdowns use synthesized Iceberg-style backtest data.</span>
         </div>
       )}
 
@@ -229,12 +262,7 @@ export default function Dashboard() {
           <div style={{ display: activeTab === 'live' ? 'block' : 'none' }}
                className={activeTab === 'live' ? 'animate-fade-in' : ''}>
             <ErrorBoundary label="Live Analysis" showDetails={true}>
-              <LiveAnalysis
-                rules={rules}
-                selectedRuleIds={prodSelectedIds}
-                allSelectedRuleIds={selectedRuleIds}
-                simulationMode={SIMULATION_MODE}
-              />
+              <LiveAnalysis rules={rules} selectedRuleIds={prodSelectedIds} allSelectedRuleIds={selectedRuleIds} simulationMode={SIMULATION_MODE} />
             </ErrorBoundary>
           </div>
 
@@ -242,12 +270,7 @@ export default function Dashboard() {
           <div style={{ display: activeTab === 'agg' ? 'block' : 'none' }}
                className={activeTab === 'agg' ? 'animate-fade-in' : ''}>
             <ErrorBoundary label="Aggregated Analysis">
-              <AggregatedAnalysis
-                rules={rules}
-                selectedRuleIds={prodSelectedIds}
-                allSelectedRuleIds={selectedRuleIds}
-                simulationMode={SIMULATION_MODE}
-              />
+              <AggregatedAnalysis rules={rules} selectedRuleIds={prodSelectedIds} allSelectedRuleIds={selectedRuleIds} onDrillToHistorical={drillToHistorical} simulationMode={SIMULATION_MODE} />
             </ErrorBoundary>
           </div>
 
@@ -255,7 +278,7 @@ export default function Dashboard() {
           <div style={{ display: activeTab === 'historical' ? 'block' : 'none' }}
                className={activeTab === 'historical' ? 'animate-fade-in' : ''}>
             <ErrorBoundary label="Historical Analysis">
-              <HistoricalAnalysis rules={rules} selectedRuleIds={analysisSelectedIds} simulationMode={SIMULATION_MODE} />
+              <HistoricalAnalysis rules={rules} selectedRuleIds={analysisSelectedIds} prefill={historicalPrefill} simulationMode={SIMULATION_MODE} />
             </ErrorBoundary>
           </div>
 

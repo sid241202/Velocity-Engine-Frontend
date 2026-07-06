@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useCallback, useRef } from 'react';
-import { History, Loader2, ArrowUpDown, Database, XCircle } from 'lucide-react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { History, Loader2, ArrowUpDown, Database, XCircle, Fingerprint, MapPin, ShieldCheck } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer
+  ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts';
 import { getRuleColor, RULE_COLORS } from '../constants';
 import {
@@ -13,7 +13,7 @@ import {
   istDatetimeLocalToBackendStr,
   formatISTDateTime,
 } from '../utils/istUtils';
-import { generateHistoricalAnalysisData } from '../simulation/mockEngine';
+import { generateHistoricalAnalysisData, generateHistoricalBreakdown } from '../simulation/mockEngine';
 
 const TOOLTIP_STYLE = {
   contentStyle: {
@@ -28,17 +28,22 @@ const TOOLTIP_STYLE = {
 
 const AXIS_STROKE = '#94a3b8';
 const GRID_PROPS = { strokeDasharray: '3 3', stroke: '#334155' };
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+const BREACH_RED = '#ef4444';
+const ACCENT_BLUE = '#6366f1';
+const DONUT_PALETTE = ['#6366f1', '#06b6d4', '#f59e0b', '#ef4444', '#10b981', '#a855f7'];
 
 // formatTime: always display timestamps in IST
 function formatTime(ts) {
   return formatISTDateTime(ts);
 }
 
-export default function HistoricalAnalysis({ rules, selectedRuleIds, simulationMode }) {
+export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill, simulationMode }) {
   // Initialize datetime-local values in IST (not browser local time)
   const [startTs, setStartTs] = useState(() => toISTDatetimeLocal(Date.now() - 24 * 60 * 60 * 1000));
   const [endTs, setEndTs] = useState(() => toISTDatetimeLocal(Date.now()));
   const [data, setData] = useState([]);
+  const [breakdown, setBreakdown] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [sortCol, setSortCol] = useState('totalValue');
@@ -100,19 +105,18 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, simulationM
     setError('');
     setLoading(true);
     setData([]);
+    setBreakdown(null);
 
-    // ── SIMULATION MODE: generate data in-browser (test-simulation branch) ──
-    // Historical Analysis previously always hit the real backend even when
-    // SIMULATION_MODE was on, so this panel errored out with no backend
-    // running. It now mirrors the pattern already used by Live/Aggregated
-    // Analysis. See src/simulation/mockEngine.js for the generator.
+    // ── SIMULATION MODE: generate data in-browser, no backend/Iceberg call ────
     if (simulationMode) {
       const controller = new AbortController();
       abortRef.current = controller;
       await new Promise(resolve => setTimeout(resolve, 500)); // artificial delay for realism
       if (controller.signal.aborted) return; // user hit Stop during the delay
       const { results } = generateHistoricalAnalysisData(selectedRule, startTs, endTs);
+      const mockBreakdown = generateHistoricalBreakdown(selectedRule, startTs, endTs);
       setData(results);
+      setBreakdown(mockBreakdown);
       setLoading(false);
       abortRef.current = null;
       return;
@@ -129,37 +133,70 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, simulationM
     // parseIST() function expects: "YYYY-MM-DD HH:MM:SS"
     const sFormatted = istDatetimeLocalToBackendStr(startTs);
     const eFormatted = istDatetimeLocalToBackendStr(endTs);
+    const qs = `start_ts=${encodeURIComponent(sFormatted)}&end_ts=${encodeURIComponent(eFormatted)}`;
 
     try {
-      const res = await fetch(
-        `/api/rules/historical-analysis?start_ts=${encodeURIComponent(sFormatted)}&end_ts=${encodeURIComponent(eFormatted)}`,
-        {
+      // Fetch the windowed replay and the forensic breakdown in parallel —
+      // the breakdown is supplementary drill-down context, so its failure
+      // shouldn't block the primary replay result from showing.
+      const [analysisRes, breakdownRes] = await Promise.allSettled([
+        fetch(`/api/rules/historical-analysis?${qs}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(selectedRule),
           signal: controller.signal,
-        }
-      );
-      if (res.ok) {
-        const json = await res.json();
+        }),
+        fetch(`/api/rules/historical-breakdown?${qs}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(selectedRule),
+          signal: controller.signal,
+        }),
+      ]);
+
+      if (analysisRes.status === 'fulfilled' && analysisRes.value.ok) {
+        const json = await analysisRes.value.json();
         setData(json.results || []);
-      } else {
-        const errJson = await res.json().catch(() => ({}));
+      } else if (analysisRes.status === 'fulfilled') {
+        const errJson = await analysisRes.value.json().catch(() => ({}));
         setError(errJson.detail || 'Server returned an error. Check backend logs.');
-      }
-    } catch (e) {
-      if (e.name === 'AbortError') {
-        setError('');
-        // loading already cleared below
-      } else {
-        console.error('Historical fetch error:', e);
+      } else if (analysisRes.reason?.name !== 'AbortError') {
+        console.error('Historical fetch error:', analysisRes.reason);
         setError('Network error fetching data.');
       }
+
+      if (breakdownRes.status === 'fulfilled' && breakdownRes.value.ok) {
+        const json = await breakdownRes.value.json();
+        setBreakdown(json.result || null);
+      }
+      // Breakdown failure is non-critical — silently continue with the primary result.
     } finally {
       setLoading(false);
       abortRef.current = null;
     }
-  }, [selectedRule, startTs, endTs, simulationMode]);
+  }, [simulationMode, selectedRule, startTs, endTs]);
+
+  // Cross-panel drill-through from the Anomaly feed: apply the prefilled
+  // rule + date range, then auto-run the query exactly once per prefill
+  // instance (nonce) once the derived state has actually settled to match —
+  // avoids firing on stale chosenRuleId/startTs/endTs from the previous tab.
+  const prefillAppliedNonceRef = useRef(null);
+
+  useEffect(() => {
+    if (!prefill) return;
+    setChosenRuleId(prefill.ruleId);
+    setStartTs(prefill.startTs);
+    setEndTs(prefill.endTs);
+  }, [prefill]);
+
+  useEffect(() => {
+    if (!prefill) return;
+    if (prefillAppliedNonceRef.current === prefill.nonce) return;
+    if (effectiveRuleId !== prefill.ruleId) return;
+    if (startTs !== prefill.startTs || endTs !== prefill.endTs) return;
+    prefillAppliedNonceRef.current = prefill.nonce;
+    fetchData();
+  }, [prefill, effectiveRuleId, startTs, endTs, fetchData]);
 
   const handleStop = useCallback(() => {
     if (abortRef.current) {
@@ -215,6 +252,30 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, simulationM
     });
     return arr.slice(0, 20);
   }, [data, sortCol, sortDir, aggAliases]);
+
+  /* Breach density heatmap: IST day x hour grid. Cell value = matched-window
+     count; cell is flagged breached if any window in that hour breached
+     (threshold_met, returned by the historical-analysis query). Built
+     client-side from data already fetched — no backend dependency. */
+  const heatmapData = useMemo(() => {
+    const grid = {}; // dayKey -> [{count, breached}] x24
+    for (const row of data) {
+      const ts = row.window_start;
+      if (!ts) continue;
+      const raw = String(ts).replace(' ', 'T');
+      const d = new Date(raw.includes('+') || raw.endsWith('Z') ? raw : raw + '+05:30');
+      if (isNaN(d.getTime())) continue;
+      const istDate = new Date(d.getTime() + IST_OFFSET_MS);
+      const dayKey = `${istDate.getUTCFullYear()}-${String(istDate.getUTCMonth() + 1).padStart(2, '0')}-${String(istDate.getUTCDate()).padStart(2, '0')}`;
+      const hour = istDate.getUTCHours();
+      if (!grid[dayKey]) grid[dayKey] = Array.from({ length: 24 }, () => ({ count: 0, breached: false }));
+      grid[dayKey][hour].count += 1;
+      if (row.threshold_met === true || row.threshold_met === 1) grid[dayKey][hour].breached = true;
+    }
+    const dayKeys = Object.keys(grid).sort();
+    const maxCount = Math.max(1, ...dayKeys.flatMap(dk => grid[dk].map(c => c.count)));
+    return { dayKeys, grid, maxCount };
+  }, [data]);
 
   /* Bar chart: group key distribution */
   const groupBarData = useMemo(() => {
@@ -273,6 +334,30 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, simulationM
           Replay a rule against historical data from Iceberg (via DuckDB) to see how it would have performed. Max lookback: 7 days.
         </p>
       </div>
+
+      {/* Historical replay always windows/filters by the Iceberg event_timestamp
+          column, regardless of a rule's live windowing.timestamp_field — see
+          RunHistoricalAnalysis in the backend. Surface that divergence here so
+          analysts aren't confused when a custom-timestamp rule's replay doesn't
+          match its live behavior. */}
+      {selectedRule &&
+        selectedRule.windowing?.time_type === 'EVENT_TIME' &&
+        !selectedRule.windowing?.use_kafka_timestamp &&
+        selectedRule.windowing?.timestamp_field &&
+        selectedRule.windowing.timestamp_field !== '_event_timestamp_epoch_ms' && (
+        <div style={{
+          background: 'rgba(234,179,8,0.1)',
+          border: '1px solid rgba(234,179,8,0.3)',
+          borderRadius: '8px',
+          padding: '0.6rem 1rem',
+          color: '#fde68a',
+          fontSize: '0.78rem',
+        }}>
+          This rule windows live traffic by <strong>{selectedRule.windowing.timestamp_field}</strong>, but historical
+          replay always windows and filters by the Iceberg ingestion timestamp (<strong>event_timestamp</strong>) —
+          results may differ from live behavior for this rule.
+        </div>
+      )}
 
       {/* Rule Picker + Date Range */}
       <div className="date-picker-row">
@@ -507,6 +592,142 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, simulationM
               </table>
             </div>
           </div>
+
+          {/* Breach Density Heatmap — IST day x hour grid, built client-side
+              from the replay data already fetched above. Multi-day queries
+              make this far more useful here than on Live's rolling 24h view. */}
+          {heatmapData.dayKeys.length > 0 && (
+            <div className="chart-container" style={{ height: 'auto' }}>
+              <div className="chart-title">
+                Breach Density Heatmap
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: 10 }}>IST hour of day × date</span>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '70px repeat(24, 1fr)', gap: 2, minWidth: 620 }}>
+                  <div />
+                  {Array.from({ length: 24 }).map((_, h) => (
+                    <div key={h} style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textAlign: 'center' }}>{h}</div>
+                  ))}
+                  {heatmapData.dayKeys.map(dayKey => (
+                    <React.Fragment key={dayKey}>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-2)', display: 'flex', alignItems: 'center' }}>{dayKey.slice(5)}</div>
+                      {heatmapData.grid[dayKey].map((cell, h) => {
+                        const intensity = cell.count > 0 ? 0.15 + 0.75 * (cell.count / heatmapData.maxCount) : 0;
+                        const bg = cell.count === 0
+                          ? 'rgba(255,255,255,0.03)'
+                          : cell.breached
+                            ? `rgba(239,68,68,${intensity})`
+                            : `rgba(99,102,241,${intensity})`;
+                        return (
+                          <div
+                            key={h}
+                            title={`${dayKey} ${String(h).padStart(2, '0')}:00 IST — ${cell.count} matched window${cell.count !== 1 ? 's' : ''}${cell.breached ? ' (breach)' : ''}`}
+                            style={{ height: 16, borderRadius: 3, background: bg }}
+                          />
+                        );
+                      })}
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: '0.75rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(99,102,241,0.7)' }} /> Normal</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(239,68,68,0.7)' }} /> Breach present</span>
+              </div>
+            </div>
+          )}
+
+          {/* Forensic Breakdown — modality mix, auth outcome, geographic
+              hotspot, fingerprint match-score histogram — computed over the
+              exact same matched rows as the replay above, via the
+              historical-breakdown endpoint. Supplementary context, so it's
+              simply absent (not an error state) if that call didn't return. */}
+          {breakdown && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '1rem' }}>
+              {breakdown.modality_mix && breakdown.modality_mix.length > 0 && (
+                <div className="chart-container" style={{ height: 300 }}>
+                  <div className="chart-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}><ShieldCheck size={13} style={{ opacity: 0.7 }} /> Modality Mix</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', height: 240 }}>
+                    <div style={{ width: 140, height: 140, flexShrink: 0 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={breakdown.modality_mix} dataKey="count" nameKey="label" innerRadius={38} outerRadius={65} paddingAngle={2} isAnimationActive={false}>
+                            {breakdown.modality_mix.map((_, i) => <Cell key={i} fill={DONUT_PALETTE[i % DONUT_PALETTE.length]} />)}
+                          </Pie>
+                          <Tooltip {...TOOLTIP_STYLE} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, overflowY: 'auto', maxHeight: 220 }}>
+                      {breakdown.modality_mix.map((m, i) => (
+                        <div key={m.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.76rem' }}>
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: DONUT_PALETTE[i % DONUT_PALETTE.length], flexShrink: 0 }} />
+                          <span style={{ color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.label}</span>
+                          <span style={{ color: 'var(--text-muted)', marginLeft: 'auto', fontWeight: 600 }}>{m.count.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {breakdown.auth_outcome && breakdown.auth_outcome.length > 0 && (
+                <div className="chart-container" style={{ height: 300 }}>
+                  <div className="chart-title">Auth Outcome Breakdown</div>
+                  <ResponsiveContainer width="100%" height={240}>
+                    <BarChart data={breakdown.auth_outcome} layout="vertical">
+                      <CartesianGrid {...GRID_PROPS} />
+                      <XAxis type="number" stroke={AXIS_STROKE} tick={{ fontSize: 11 }} allowDecimals={false} />
+                      <YAxis type="category" dataKey="label" stroke={AXIS_STROKE} tick={{ fontSize: 10 }} width={100} />
+                      <Tooltip {...TOOLTIP_STYLE} />
+                      <Bar dataKey="count" fill={ACCENT_BLUE} radius={[0, 4, 4, 0]} name="Matched Events" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {breakdown.geo_hotspot && breakdown.geo_hotspot.length > 0 && (
+                <div className="chart-container" style={{ height: 'auto' }}>
+                  <div className="chart-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}><MapPin size={13} style={{ opacity: 0.7 }} /> Geographic Hotspot — Top States</div>
+                  <div style={{ overflowX: 'auto', maxHeight: 260, overflowY: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr>
+                          <th style={thStyle}>#</th>
+                          <th style={thStyle}>State Code</th>
+                          <th style={thStyle}>Matched Events</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {breakdown.geo_hotspot.map((g, i) => (
+                          <tr key={g.label}>
+                            <td style={tdStyle}>{i + 1}</td>
+                            <td style={{ ...tdStyle, fontFamily: 'monospace', color: '#93c5fd' }}>{g.label}</td>
+                            <td style={{ ...tdStyle, fontWeight: 600 }}>{g.count.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {breakdown.match_score_histogram && breakdown.match_score_histogram.length > 0 && (
+                <div className="chart-container" style={{ height: 300 }}>
+                  <div className="chart-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Fingerprint size={13} style={{ opacity: 0.7 }} /> Fingerprint Match-Score Distribution</div>
+                  <ResponsiveContainer width="100%" height={240}>
+                    <BarChart data={breakdown.match_score_histogram}>
+                      <CartesianGrid {...GRID_PROPS} />
+                      <XAxis dataKey="label" stroke={AXIS_STROKE} tick={{ fontSize: 10 }} />
+                      <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} allowDecimals={false} />
+                      <Tooltip {...TOOLTIP_STYLE} />
+                      <Bar dataKey="count" fill={BREACH_RED} radius={[3, 3, 0, 0]} name="Events" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>

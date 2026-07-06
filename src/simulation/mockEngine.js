@@ -70,17 +70,56 @@ function randInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+// ─── Multi-entity enrichment (Live/Agg/Anomaly) ───────────────────────────────
+//
+// MOCK_RULE itself declares group_by_fields: [] (ungrouped) — in real
+// production an ungrouped rule always produces a single server-side groupKey.
+// Same precedent as MOCK_HISTORICAL_GROUPS below: this simulation synthesizes
+// a handful of plausible entities purely so the "Top Groups" table, repeat-
+// offender grouping, severity mix, and penalty-TTL countdown (all of which
+// are meaningless with a single constant groupKey) have something real to
+// render. Not a literal reflection of MOCK_RULE's declared (ungrouped) shape.
+const MOCK_LIVE_ENTITIES = [
+  { key: 'aua-mobile-app-01',      weight: 0.35, severity: 'LOW' },
+  { key: 'aua-web-portal-02',      weight: 0.25, severity: 'MEDIUM' },
+  { key: 'asa-partner-gateway-03', weight: 0.20, severity: 'HIGH' },
+  { key: 'aua-kiosk-cluster-04',   weight: 0.12, severity: 'CRITICAL' },
+  { key: 'asa-batch-uploader-05',  weight: 0.08, severity: 'MEDIUM' },
+];
+
+// Redis penalty TTL by severity — mirrors AuthDemoConfig.REDIS_DEFAULT_TTL_SECONDS
+// being scaled up for more severe breaches in a real rule's penalty_ttl_seconds.
+const SEVERITY_PENALTY_TTL_SECONDS = { LOW: 300, MEDIUM: 900, HIGH: 1800, CRITICAL: 3600 };
+
+function pickWeightedEntity() {
+  const r = Math.random();
+  let acc = 0;
+  for (const e of MOCK_LIVE_ENTITIES) {
+    acc += e.weight;
+    if (r <= acc) return e;
+  }
+  return MOCK_LIVE_ENTITIES[MOCK_LIVE_ENTITIES.length - 1];
+}
+
 // ─── Row factory ─────────────────────────────────────────────────────────────
 
 /**
  * Build one AggregationResult row for a given 1-minute window.
  * @param {number} winStartEpochMs — UTC epoch ms of window start
  * @param {number} [forceCount]    — override random count (for seeding)
+ * @param {boolean} [isFinal]      — true = authoritative end-of-window row
+ *                                   (default); false = early-fire partial
+ *                                   preview, mirroring the Flink pipeline's
+ *                                   isFinal field.
+ * @param {object} [entity]        — override the picked entity (keeps a
+ *                                   window's partial+final ticks on the same
+ *                                   groupKey — see MockLiveTicker).
  */
-export function buildMockRow(winStartEpochMs, forceCount) {
+export function buildMockRow(winStartEpochMs, forceCount, isFinal = true, entity) {
   const count           = forceCount !== undefined ? forceCount : randInt(6, 10);
   const winEndEpochMs   = winStartEpochMs + 60000;
   const breached        = count >= THRESHOLD;
+  const ent             = entity || pickWeightedEntity();
 
   return {
     id:                MOCK_RULE_ID,
@@ -88,15 +127,17 @@ export function buildMockRow(winStartEpochMs, forceCount) {
     windowStart:       epochToISTString(winStartEpochMs),
     windowEnd:         epochToISTString(winEndEpochMs),
     entityName:        'auth_source',
-    groupKey:          'auth_source',
-    entityValue:       'auth_source',
+    groupKey:          ent.key,
+    entityValue:       ent.key,
     aggResult:         { count },
     aggregationResults: { count },
     producedAt:        epochToISTString(winEndEpochMs),
     evaluatedAt:       epochToISTString(winEndEpochMs),
     thresholdBreached: breached,
     thresholdMet:      breached,
+    isFinal,
     event_type:        'agg',
+    _entitySeverity:   ent.severity, // consumed by anomaly generation below, not sent by the real backend
   };
 }
 
@@ -127,13 +168,18 @@ export function generateHistoricalData(startStr, endStr) {
     const row = buildMockRow(winStart);
     rows.push(row);
     if (row.thresholdBreached) {
+      const severity = row._entitySeverity || 'MEDIUM';
       anomalies.push({
-        ruleId:     MOCK_RULE_ID,
-        groupKey:   'auth_source',
-        entityValue: 'auth_source',
-        detectedAt: row.windowEnd,
-        producedAt: row.windowEnd,
-        timestamp:  row.windowEnd,
+        ruleId:      MOCK_RULE_ID,
+        id:          MOCK_RULE_ID,
+        groupKey:    row.groupKey,
+        entityValue: row.groupKey,
+        severity,
+        severityLevel: severity,
+        penaltyTtlSeconds: SEVERITY_PENALTY_TTL_SECONDS[severity] || 900,
+        detectedAt:  row.windowEnd,
+        producedAt:  row.windowEnd,
+        timestamp:   row.windowEnd,
       });
     }
     winStart += 60000;
@@ -304,28 +350,118 @@ export function generateHistoricalAnalysisData(rule, startStr, endStr) {
   return { results: rows };
 }
 
+// ─── Historical Breakdown mock generator (forensic drill-down simulation) ────
+//
+// Mirrors the shape of RunHistoricalBreakdown / POST /rules/historical-breakdown
+// (see internal/services/duckdb.go and internal/handlers/analysis.go on the
+// backend): { modality_mix, auth_outcome, geo_hotspot, match_score_histogram },
+// each an array of { label, count }. SIMULATED DATA — no Iceberg/DuckDB call
+// is made. Scaled by the queried range's total mock activity so a 1-hour
+// query and a 7-day query don't look identically sized.
+
+const MOCK_MODALITY_SHARE = [
+  { label: 'OTP', share: 0.42 },
+  { label: 'PIN', share: 0.23 },
+  { label: 'Biometric — Fingerprint', share: 0.18 },
+  { label: 'Biometric — Iris', share: 0.06 },
+  { label: 'Face', share: 0.07 },
+  { label: 'Demographic', share: 0.04 },
+];
+
+const MOCK_AUTH_OUTCOME_SHARE = [
+  { label: 'Y', share: 0.87 },  // success
+  { label: 'N', share: 0.11 },  // failure
+  { label: 'E', share: 0.02 },  // error
+];
+
+const MOCK_GEO_STATE_SHARE = [
+  { label: 'MH', share: 0.19 }, { label: 'UP', share: 0.16 }, { label: 'KA', share: 0.12 },
+  { label: 'TN', share: 0.10 }, { label: 'DL', share: 0.09 }, { label: 'GJ', share: 0.08 },
+  { label: 'RJ', share: 0.07 }, { label: 'WB', share: 0.07 }, { label: 'MP', share: 0.06 },
+  { label: 'BR', share: 0.06 },
+];
+
+// Bell-shaped-ish distribution of fingerprint match scores, 10-point buckets —
+// genuine matches cluster high (80-100), with a thin tail down near the
+// having-threshold region so the histogram looks like real biometric data.
+const MOCK_SCORE_BUCKET_SHARE = [
+  { bucket: 0, share: 0.01 }, { bucket: 10, share: 0.01 }, { bucket: 20, share: 0.02 },
+  { bucket: 30, share: 0.02 }, { bucket: 40, share: 0.03 }, { bucket: 50, share: 0.05 },
+  { bucket: 60, share: 0.08 }, { bucket: 70, share: 0.13 }, { bucket: 80, share: 0.28 },
+  { bucket: 90, share: 0.37 },
+];
+
+function distributeByShare(shares, total, labelKey, extraFormat) {
+  return shares
+    .map(s => ({
+      label: extraFormat ? extraFormat(s[labelKey]) : s[labelKey],
+      count: Math.max(0, Math.round(total * s.share * (0.85 + Math.random() * 0.3))),
+    }))
+    .filter(row => row.count > 0)
+    .sort((a, b) => b.count - a.count);
+}
+
+/**
+ * Generate a mock historical-breakdown response for the given rule/range.
+ * SIMULATED DATA — no backend or Iceberg call is made.
+ *
+ * @param {object} rule     — VelocityRule-shaped object (unused today, kept for parity with the real endpoint's signature)
+ * @param {string} startStr — "YYYY-MM-DDTHH:MM" IST datetime-local value
+ * @param {string} endStr   — "YYYY-MM-DDTHH:MM" IST datetime-local value
+ */
+export function generateHistoricalBreakdown(rule, startStr, endStr) {
+  console.log('[simulation] Generating mock Historical Breakdown data — test-simulation branch, no backend/Iceberg call made.');
+
+  const startEpoch = Date.parse(String(startStr).replace(' ', 'T') + '+05:30');
+  const endEpoch   = Date.parse(String(endStr).replace(' ', 'T') + '+05:30');
+  if (isNaN(startEpoch) || isNaN(endEpoch) || startEpoch >= endEpoch) {
+    return { modality_mix: [], auth_outcome: [], geo_hotspot: [], match_score_histogram: [] };
+  }
+
+  // Rough total matched-event estimate for this range: sum of every mock
+  // group's baseline activity per minute, scaled by range length. Same
+  // baselines as MOCK_HISTORICAL_GROUPS so the breakdown's magnitude is
+  // roughly consistent with the replay chart above it.
+  const rangeMinutes = Math.max(1, (endEpoch - startEpoch) / 60000);
+  const perMinuteBaseline = MOCK_HISTORICAL_GROUPS.reduce((sum, g) => sum + g.baseline, 0);
+  const totalEvents = Math.round(perMinuteBaseline * rangeMinutes * 0.9);
+
+  return {
+    modality_mix: distributeByShare(MOCK_MODALITY_SHARE, totalEvents, 'label'),
+    auth_outcome: distributeByShare(MOCK_AUTH_OUTCOME_SHARE, totalEvents, 'label'),
+    geo_hotspot: distributeByShare(MOCK_GEO_STATE_SHARE, totalEvents, 'label').slice(0, 10),
+    match_score_histogram: distributeByShare(MOCK_SCORE_BUCKET_SHARE, totalEvents, 'bucket', (b) => `${b}-${b + 10}`),
+  };
+}
+
 // ─── Live ticker ─────────────────────────────────────────────────────────────
 
 /**
  * MockLiveTicker — replaces the WebSocket for the Live Analysis panel.
  *
  * Usage:
- *   const ticker = new MockLiveTicker((ruleId, row) => handleDelta(ruleId, row));
+ *   const ticker = new MockLiveTicker((ruleId, rows) => ..., (ruleId, row) => handleDelta(ruleId, row));
  *   ticker.start();
  *   // on cleanup:
  *   ticker.stop();
  *
  * Behaviour:
- *   - Immediately emits the last 10 completed windows as a "bootstrap" dataset.
- *   - Then fires once at the boundary of every real-clock IST minute, emitting
- *     the just-closed window as a live delta — exactly matching the real Flink
- *     tumbling window timing.
+ *   - Immediately emits the last 10 completed windows as a "bootstrap" dataset
+ *     (each a settled, isFinal:true row across a mix of mock entities).
+ *   - For the currently-open window, fires two early-fire partial ticks
+ *     (isFinal:false, count converging toward the eventual total) at roughly
+ *     1/3 and 2/3 through the window, then the authoritative final tick
+ *     (isFinal:true) at the minute boundary — mirroring the real Flink
+ *     pipeline's tryEarlyFireAgg + onTimer split. All ticks for one window
+ *     share the same entity/groupKey so the frontend's upsert-by-
+ *     (ruleId, groupKey, windowStart) logic has something real to exercise.
  */
 export class MockLiveTicker {
   constructor(onBootstrap, onDelta) {
     this._onBootstrap = onBootstrap; // (ruleId, rows[]) => void
     this._onDelta     = onDelta;     // (ruleId, row)  => void
     this._timerId     = null;
+    this._partialTimerIds = [];
   }
 
   start() {
@@ -336,13 +472,13 @@ export class MockLiveTicker {
 
     for (let i = 10; i >= 1; i--) {
       const winStart = currentWinStart - i * 60000;
-      bootstrapRows.push(buildMockRow(winStart));
+      bootstrapRows.push(buildMockRow(winStart, undefined, true));
     }
 
     this._onBootstrap(MOCK_RULE_ID, bootstrapRows);
 
-    // 2. Schedule the next tick at the exact start of the next IST minute
-    this._scheduleNext();
+    // 2. Schedule partial + final ticks for the currently-open window
+    this._scheduleWindow(currentWinStart);
   }
 
   stop() {
@@ -350,25 +486,32 @@ export class MockLiveTicker {
       clearTimeout(this._timerId);
       this._timerId = null;
     }
+    this._partialTimerIds.forEach(id => clearTimeout(id));
+    this._partialTimerIds = [];
   }
 
-  _scheduleNext() {
-    const nowEpoch       = Date.now();
-    const nowInIST       = nowEpoch + IST_OFFSET_MS;
-    // ms until the next IST minute boundary
-    const msUntilNextMin = 60000 - (nowInIST % 60000);
+  /** Schedule early-fire partials + the final tick for the window starting at winStart, then recurse to the next window. */
+  _scheduleWindow(winStart) {
+    const finalCount  = randInt(6, 10);
+    const entity      = pickWeightedEntity(); // same entity for every tick of this window
+    const msIntoWindow = (Date.now() + IST_OFFSET_MS) % 60000;
 
+    [0.33, 0.66].forEach(frac => {
+      const fireInMs = frac * 60000 - msIntoWindow;
+      if (fireInMs <= 0) return; // already past this checkpoint (e.g. ticker started mid-window)
+      const id = setTimeout(() => {
+        const partialCount = Math.min(finalCount, Math.max(1, Math.round(finalCount * frac * (0.85 + Math.random() * 0.3))));
+        this._onDelta(MOCK_RULE_ID, buildMockRow(winStart, partialCount, false, entity));
+      }, fireInMs);
+      this._partialTimerIds.push(id);
+    });
+
+    const msUntilBoundary = Math.max(0, 60000 - msIntoWindow);
     this._timerId = setTimeout(() => {
-      this._tick();
-      // After the first tick, schedule subsequent ticks every 60 seconds
-      this._timerId = setInterval(() => this._tick(), 60000);
-    }, msUntilNextMin);
-  }
-
-  _tick() {
-    // The window that just closed started 60 seconds ago
-    const closedWinStart = floorToISTMinute(Date.now()) - 60000;
-    const row = buildMockRow(closedWinStart);
-    this._onDelta(MOCK_RULE_ID, row);
+      this._onDelta(MOCK_RULE_ID, buildMockRow(winStart, finalCount, true, entity));
+      this._partialTimerIds.forEach(id => clearTimeout(id));
+      this._partialTimerIds = [];
+      this._scheduleWindow(winStart + 60000);
+    }, msUntilBoundary);
   }
 }
