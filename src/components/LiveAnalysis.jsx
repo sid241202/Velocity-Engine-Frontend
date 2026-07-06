@@ -242,8 +242,21 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     const normRow = normalizeRow(row);
     setData(prev => {
       const next = { ...prev };
-      if (!next[ruleId]) next[ruleId] = [];
-      next[ruleId] = [...next[ruleId], normRow];
+      const existing = next[ruleId] || [];
+      // Upsert by (groupKey, windowStart): a Flink early-fire (partial) row and
+      // the eventual final row for the same window share that key, so the
+      // later tick replaces the row in place instead of piling up a duplicate
+      // entry per partial tick — mirrors LiveStore.Add on the backend.
+      const idx = existing.findIndex(
+        r => r.groupKey === normRow.groupKey && r.windowStart === normRow.windowStart
+      );
+      if (idx >= 0) {
+        const updated = [...existing];
+        updated[idx] = normRow;
+        next[ruleId] = updated;
+      } else {
+        next[ruleId] = [...existing, normRow];
+      }
       const cutoffEpoch = Date.now() - 24 * 60 * 60 * 1000;
       const istWall = new Date(cutoffEpoch + IST_OFFSET_MS);
       const pad = (n) => String(n).padStart(2, '0');
@@ -597,13 +610,19 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
           breaches: 0,
           windows: 0,
           lastWindow: row.windowEnd || row.windowStart,
+          liveNow: row.isFinal === false,
         };
       }
       groupMap[key].totalEvents += getEventCount(row);
       groupMap[key].windows += 1;
       if (isBreached(row)) groupMap[key].breaches += 1;
       const rowEnd = row.windowEnd || row.windowStart;
-      if (rowEnd > groupMap[key].lastWindow) groupMap[key].lastWindow = rowEnd;
+      if (rowEnd >= groupMap[key].lastWindow) {
+        groupMap[key].lastWindow = rowEnd;
+        // Only the row currently holding the latest window can still be partial —
+        // every earlier window has already closed on the Flink side.
+        groupMap[key].liveNow = row.isFinal === false;
+      }
     }
     const arr = Object.values(groupMap).map(g => ({
       ...g,
@@ -1017,8 +1036,16 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
                     <td style={{ ...tdStyle, color: 'var(--text-muted)', width: 32 }}>{i + 1}</td>
                     <td style={{ ...tdStyle, fontFamily: 'monospace', color: '#93c5fd' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
-                        {isCurrentlyBreaching && (
-                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: BREACH_RED, boxShadow: `0 0 6px ${BREACH_RED}`, animation: 'pulse-dot 1.5s ease-in-out infinite', flexShrink: 0 }} />
+                        {(isCurrentlyBreaching || g.liveNow) && (
+                          <span
+                            title={isCurrentlyBreaching ? 'Currently breaching' : 'Live — window still updating'}
+                            style={{
+                              width: 7, height: 7, borderRadius: '50%',
+                              background: isCurrentlyBreaching ? BREACH_RED : ACCENT_CYAN,
+                              boxShadow: `0 0 6px ${isCurrentlyBreaching ? BREACH_RED : ACCENT_CYAN}`,
+                              animation: 'pulse-dot 1.5s ease-in-out infinite', flexShrink: 0,
+                            }}
+                          />
                         )}
                         <span>
                           {g.entityName && g.entityName !== 'group' && <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block' }}>{g.entityName}</span>}
