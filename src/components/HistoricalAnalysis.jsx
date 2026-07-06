@@ -242,7 +242,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       {/* Header */}
       <div className="glass-panel" style={{ paddingBottom: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
@@ -252,9 +252,33 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
           <h2 style={{ color: 'var(--text-1)', margin: 0, fontSize: '0.95rem', fontWeight: 700, letterSpacing: '-0.02em' }}>Historical Rule Replay</h2>
         </div>
         <p style={{ color: 'var(--text-3)', fontSize: '0.73rem', margin: 0 }}>
-          Replay a rule against historical data from ClickHouse to see how it would have performed. Max lookback: 7 days.
+          Replay a rule against historical data from Iceberg (via DuckDB) to see how it would have performed. Max lookback: 7 days.
         </p>
       </div>
+
+      {/* Historical replay always windows/filters by the Iceberg event_timestamp
+          column, regardless of a rule's live windowing.timestamp_field — see
+          RunHistoricalAnalysis in the backend. Surface that divergence here so
+          analysts aren't confused when a custom-timestamp rule's replay doesn't
+          match its live behavior. */}
+      {selectedRule &&
+        selectedRule.windowing?.time_type === 'EVENT_TIME' &&
+        !selectedRule.windowing?.use_kafka_timestamp &&
+        selectedRule.windowing?.timestamp_field &&
+        selectedRule.windowing.timestamp_field !== '_event_timestamp_epoch_ms' && (
+        <div style={{
+          background: 'rgba(234,179,8,0.1)',
+          border: '1px solid rgba(234,179,8,0.3)',
+          borderRadius: '8px',
+          padding: '0.6rem 1rem',
+          color: '#fde68a',
+          fontSize: '0.78rem',
+        }}>
+          This rule windows live traffic by <strong>{selectedRule.windowing.timestamp_field}</strong>, but historical
+          replay always windows and filters by the Iceberg ingestion timestamp (<strong>event_timestamp</strong>) —
+          results may differ from live behavior for this rule.
+        </div>
+      )}
 
       {/* Rule Picker + Date Range */}
       <div className="date-picker-row">
@@ -330,7 +354,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
         <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', gap: '1rem' }}>
           <Database size={48} color="var(--text-muted)" style={{ opacity: 0.4 }} />
           <p style={{ color: 'var(--text-muted)', fontSize: '1rem', textAlign: 'center' }}>
-            Select a time range and click <strong>Run Replay</strong> to query historical data from ClickHouse.
+            Select a time range and click <strong>Run Replay</strong> to query historical data from Iceberg.
           </p>
         </div>
       )}
@@ -376,15 +400,23 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
           </div>
 
           {/* Aggregation Values Area Chart */}
-          <div className="chart-container">
+          {/* height set explicitly: the shared .chart-container CSS class is a
+              fixed 280px, but this chart's ResponsiveContainer is 350px tall —
+              left at the CSS default, the chart content overflowed the box and
+              visually overlapped the "Top Group Keys" row below it. Spacing
+              below this container (and every sibling in this panel) comes
+              from the single `gap: '2rem'` on the outer flex column above —
+              intentionally not adding a one-off margin here, so every gap in
+              the panel stays equal instead of stacking and drifting apart. */}
+          <div className="chart-container" style={{ height: 410 }}>
             <div className="chart-title">Aggregation Values Over Time</div>
             <ResponsiveContainer width="100%" height={350}>
-              <AreaChart data={areaChartData}>
+              <AreaChart data={areaChartData} margin={{ top: 8 }}>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis dataKey="window_start" stroke={AXIS_STROKE} tick={{ fontSize: 11 }} tickFormatter={formatTime} />
                 <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 11 }} />
                 <Tooltip {...TOOLTIP_STYLE} labelFormatter={formatTime} />
-                <Legend />
+                <Legend verticalAlign="top" align="left" wrapperStyle={{ paddingBottom: '0.75rem', fontSize: '0.78rem' }} />
                 {aggAliases.map((alias, i) => (
                   <Area
                     key={alias}
@@ -402,10 +434,12 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
             </ResponsiveContainer>
           </div>
 
-          {/* Two side-by-side */}
+          {/* Two side-by-side — spacing above comes from the outer flex
+              column's gap (see comment above), kept equal with every other
+              gap in this panel rather than adding a one-off margin here. */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             {/* Left: Top Group Keys Bar Chart */}
-            <div className="chart-container">
+            <div className="chart-container" style={{ height: 340 }}>
               <div className="chart-title">Top Group Keys by Matches</div>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={groupBarData} layout="vertical">
@@ -419,7 +453,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
             </div>
 
             {/* Right: Aggregation per alias bar chart */}
-            <div className="chart-container">
+            <div className="chart-container" style={{ height: 340 }}>
               <div className="chart-title">Aggregation Totals by Group</div>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={groupBarData} layout="vertical">
@@ -433,8 +467,11 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds }) {
             </div>
           </div>
 
-          {/* Group Keys Table */}
-          <div className="chart-container">
+          {/* Group Keys Table — height:'auto' overrides the shared
+              .chart-container's fixed 280px so a variable-length table (up to
+              20 rows) isn't clipped/overflowed the same way the charts above
+              were. Spacing above comes from the outer flex column's gap. */}
+          <div className="chart-container" style={{ height: 'auto' }}>
             <div className="chart-title">Group Key Details</div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
