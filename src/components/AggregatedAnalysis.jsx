@@ -68,6 +68,14 @@ const TOOLTIP_STYLE = {
     boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
   },
   labelStyle: { color: '#8b949e', marginBottom: '0.25rem', fontWeight: 600 },
+  // Recharts renders each tooltip row with an inline color pulled from that
+  // series' resolved stroke/fill. The Window Intensity bars use per-cell
+  // gradient fills (url(#gradBarBreachAgg) / url(#gradBarNormalAgg)), which
+  // Recharts can't resolve to a text color, so it silently falls back to
+  // black — unreadable against the dark tooltip background. itemStyle
+  // overrides that per-row color explicitly for every Tooltip using
+  // TOOLTIP_STYLE in this file.
+  itemStyle: { color: '#e6edf3' },
 };
 
 const AXIS_STROKE = '#545d68';

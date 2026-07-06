@@ -145,6 +145,165 @@ export function generateHistoricalData(startStr, endStr) {
   };
 }
 
+// ─── Historical Analysis mock generator (DuckDB/Iceberg backtest simulation) ──
+//
+// This section is SIMULATED — no backend, DuckDB, or Iceberg call is made.
+// It exists because, unlike Live/Aggregated Analysis, Historical Analysis was
+// previously left wired to the real `/api/rules/historical-analysis` endpoint
+// and would error out with no backend running (see HistoricalAnalysis.jsx).
+//
+// Schema note: the historical/DuckDB response shape is NOT the same as the
+// Live/Agg Kafka shape used above (buildMockRow). Per the Go backend
+// (internal/services/duckdb.go), historical rows are flat maps:
+//   { window_start: "YYYY-MM-DD HH:MM:SS", groupKey: string,
+//     threshold_met: bool, <alias1>: number, <alias2>: number, ... }
+// i.e. aggregation values are their own top-level columns, not nested under
+// an `aggResult` object like the Live/Agg rows are.
+
+/**
+ * Pseudo entities for the Historical Analysis panel. MOCK_RULE itself has no
+ * grouping configured (group_by_fields: []), so in a byte-for-byte replay it
+ * would only ever produce one group ('__GLOBAL__' server-side). Historical
+ * Analysis's UI has group-key visualizations (Top Group Keys bar charts + a
+ * sortable table) that are meaningless with a single row, so this simulation
+ * synthesizes a handful of plausible auth_source channel names purely to
+ * exercise those views. This is a simulation-only enrichment, not a literal
+ * reflection of MOCK_RULE's real (ungrouped) configuration.
+ */
+const MOCK_HISTORICAL_GROUPS = [
+  { key: 'auth-source-mobile-app',   baseline: 26, trend:  0.35, spikeChance: 0.05 },
+  { key: 'auth-source-web-portal',   baseline: 14, trend:  0.10, spikeChance: 0.04 },
+  { key: 'auth-source-partner-api',  baseline: 9,  trend: -0.20, spikeChance: 0.07 },
+  { key: 'auth-source-kiosk',        baseline: 4,  trend:  0.05, spikeChance: 0.02 },
+  { key: 'auth-source-batch-upload', baseline: 2,  trend:  0.00, spikeChance: 0.015 },
+];
+
+// Mirrors the Go backend's `LIMIT 5000` in duckdb.go's historical query.
+const HISTORICAL_ROW_CAP = 5000;
+
+/** Floor a UTC epoch ms to the start of the IST bucket of size `sizeMs`. */
+function floorToISTBoundary(epochMs, sizeMs) {
+  const istMs = epochMs + IST_OFFSET_MS;
+  const floored = istMs - (istMs % sizeMs);
+  return floored - IST_OFFSET_MS;
+}
+
+/** Simple daily-activity curve: quiet overnight, busy through the day. */
+function hourlyActivityFactor(hourIST) {
+  const curve = [
+    0.35, 0.30, 0.28, 0.30, 0.40, 0.55, 0.75, 0.95, 1.10, 1.20, 1.25, 1.30,
+    1.30, 1.25, 1.20, 1.15, 1.10, 1.05, 0.95, 0.80, 0.65, 0.55, 0.45, 0.38,
+  ];
+  return curve[hourIST] ?? 1;
+}
+
+/**
+ * Compute one aggregation value for a given group/window, blending a
+ * baseline, a slow trend across the queried range, a daily activity cycle,
+ * occasional spikes (simulated anomalies), and random noise.
+ */
+function computeAggValue(group, progress, hourIST, aggFn) {
+  const trendFactor = 1 + group.trend * progress;
+  const cycleFactor  = hourlyActivityFactor(hourIST);
+  const isSpike      = Math.random() < group.spikeChance;
+  const spikeFactor  = isSpike ? 2.2 + Math.random() * 1.8 : 1;
+  const noise        = 0.85 + Math.random() * 0.3;
+
+  const raw = group.baseline * trendFactor * cycleFactor * spikeFactor * noise;
+
+  switch (String(aggFn || 'COUNT').toUpperCase()) {
+    case 'SUM':
+      return Math.round(raw * 45.5 * 100) / 100;
+    case 'AVG':
+      return Math.round((raw / 3 + 5) * 100) / 100;
+    case 'MIN':
+      return Math.max(0, Math.round(raw * 0.4));
+    case 'MAX':
+      return Math.round(raw * 1.6);
+    case 'COUNT':
+    case 'COUNT_DISTINCT':
+    default:
+      return Math.max(0, Math.round(raw));
+  }
+}
+
+/** Evaluate a rule's having_thresholds against one generated row. */
+function evaluateThreshold(row, thresholds) {
+  if (!Array.isArray(thresholds) || thresholds.length === 0) return false;
+  return thresholds.every(t => {
+    const val = row[t.alias];
+    if (val == null) return false;
+    switch (t.operator) {
+      case '>':  return val >  t.value;
+      case '>=': return val >= t.value;
+      case '<':  return val <  t.value;
+      case '<=': return val <= t.value;
+      case '==': return val === t.value;
+      case '!=': return val !== t.value;
+      default:   return false;
+    }
+  });
+}
+
+/**
+ * Generate mock rows for the Historical Analysis panel, matching the exact
+ * shape the Go backend's DuckDB/Iceberg query returns.
+ *
+ * SIMULATED DATA — no backend or Iceberg call is made.
+ *
+ * @param {object} rule     — VelocityRule-shaped object (uses .windowing, .aggregations, .having_thresholds)
+ * @param {string} startStr — "YYYY-MM-DDTHH:MM" IST datetime-local value
+ * @param {string} endStr   — "YYYY-MM-DDTHH:MM" IST datetime-local value
+ * @returns {{ results: Array }}
+ */
+export function generateHistoricalAnalysisData(rule, startStr, endStr) {
+  console.log('[simulation] Generating mock Historical Analysis data — test-simulation branch, no backend/Iceberg call made.');
+
+  const startEpoch = Date.parse(String(startStr).replace(' ', 'T') + '+05:30');
+  const endEpoch   = Date.parse(String(endStr).replace(' ', 'T') + '+05:30');
+  if (isNaN(startEpoch) || isNaN(endEpoch) || startEpoch >= endEpoch) {
+    return { results: [] };
+  }
+
+  const windowMs = (rule && rule.windowing && rule.windowing.size_ms) || 60000;
+  const aggregations = (rule && Array.isArray(rule.aggregations) && rule.aggregations.length > 0)
+    ? rule.aggregations
+    : [{ alias: 'count', function: 'COUNT' }];
+  const thresholds = (rule && rule.having_thresholds) || [];
+
+  const rangeMs = endEpoch - startEpoch;
+  const rows = [];
+
+  let winStart = floorToISTBoundary(startEpoch, windowMs);
+  while (winStart < endEpoch) {
+    const progress = rangeMs > 0 ? Math.min(1, Math.max(0, (winStart - startEpoch) / rangeMs)) : 0;
+    const hourIST  = new Date(winStart + IST_OFFSET_MS).getUTCHours();
+
+    for (const group of MOCK_HISTORICAL_GROUPS) {
+      const row = {
+        window_start: epochToISTString(winStart),
+        groupKey:     group.key,
+      };
+      for (const agg of aggregations) {
+        row[agg.alias] = computeAggValue(group, progress, hourIST, agg.function);
+      }
+      row.threshold_met = evaluateThreshold(row, thresholds);
+      rows.push(row);
+    }
+    winStart += windowMs;
+  }
+
+  // Mirror the backend's `ORDER BY window_start DESC LIMIT 5000` truncation
+  // so wide date ranges behave the same way they would against real Iceberg
+  // data (see internal/services/duckdb.go).
+  if (rows.length > HISTORICAL_ROW_CAP) {
+    console.log(`[simulation] Historical result set (${rows.length} rows) exceeds the backend's 5000-row cap — truncating to the most recent ${HISTORICAL_ROW_CAP}, matching duckdb.go behavior.`);
+    return { results: rows.slice(rows.length - HISTORICAL_ROW_CAP) };
+  }
+
+  return { results: rows };
+}
+
 // ─── Live ticker ─────────────────────────────────────────────────────────────
 
 /**

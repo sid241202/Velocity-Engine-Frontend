@@ -165,7 +165,7 @@ export default function Dashboard() {
           fontWeight: 500,
         }}>
           <FlaskConical size={14} />
-          <span><strong>Simulation Mode</strong> — Backend &amp; Flink are not required. Auth events (6–10/min) are generated in-browser. Rule: count ≥ {8} triggers breach.</span>
+          <span><strong>Simulation Mode</strong> — Backend &amp; Flink are not required. Auth events (6–10/min) are generated in-browser (Rule: count ≥ {8} triggers breach), and Historical Replay uses synthesized Iceberg-style backtest data across 5 mock auth-source channels.</span>
         </div>
       )}
 
@@ -255,7 +255,7 @@ export default function Dashboard() {
           <div style={{ display: activeTab === 'historical' ? 'block' : 'none' }}
                className={activeTab === 'historical' ? 'animate-fade-in' : ''}>
             <ErrorBoundary label="Historical Analysis">
-              <HistoricalAnalysis rules={rules} selectedRuleIds={analysisSelectedIds} />
+              <HistoricalAnalysis rules={rules} selectedRuleIds={analysisSelectedIds} simulationMode={SIMULATION_MODE} />
             </ErrorBoundary>
           </div>
 
