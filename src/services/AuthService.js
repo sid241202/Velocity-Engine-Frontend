@@ -1,5 +1,5 @@
 import { UserManager, WebStorageStateStore, Log } from 'oidc-client-ts';
-import authConfig from '../config/authConfig';
+import { authConfig } from '../config/appConfig';
 
 // Enable OIDC logging for debugging (disable in production)
 Log.setLogger(console);
