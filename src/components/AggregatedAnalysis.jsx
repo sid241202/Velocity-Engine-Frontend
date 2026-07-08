@@ -150,8 +150,8 @@ function EventVolumeTooltip({ active, payload, label, getRuleName }) {
       {payload.map((p, i) => {
         if (p.dataKey === 'breachMarker') return null;
         let label = 'Events';
-        if (p.dataKey.startsWith('evt_')) label = 'Event Count';
-        else if (p.dataKey.startsWith('agg_')) label = 'Aggregation Count';
+        if (p.dataKey.startsWith('evt_')) label = 'Events';
+        else if (p.dataKey.startsWith('agg_')) label = 'Metric Value';
         return (
           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 2 }}>
             <span style={{ color: '#94a3b8' }}>{label}</span>
@@ -721,7 +721,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
           <h2 style={{ color: 'var(--text-1)', margin: 0, fontSize: '0.95rem', fontWeight: 700, letterSpacing: '-0.02em' }}>Aggregated Rule Analysis</h2>
         </div>
         <p style={{ color: 'var(--text-3)', fontSize: '0.73rem', margin: 0 }}>
-          Query up to 7 days of ClickHouse data. Breach events from the anomaly feed are overlaid on all charts (red markers).
+          Analyze up to 7 days of historical results for the selected rules. Breach events are overlaid on every chart as red markers.
         </p>
       </div>
 
@@ -776,7 +776,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
       {loading && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4rem', gap: '0.75rem', flexDirection: 'column' }}>
           <Loader2 size={32} color="var(--violet)" style={{ animation: 'spin 1s linear infinite' }} />
-          <span style={{ color: 'var(--text-2)', fontSize: '0.88rem', fontWeight: 500 }}>Querying ClickHouse & anomaly feed…</span>
+          <span style={{ color: 'var(--text-2)', fontSize: '0.88rem', fontWeight: 500 }}>Loading results…</span>
           <span style={{ color: 'var(--text-3)', fontSize: '0.75rem' }}>This may take a moment for large time ranges</span>
         </div>
       )}
@@ -787,17 +787,17 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
           <div style={{ textAlign: 'center' }}>
             {allSelectedRuleIds && allSelectedRuleIds.size > 0 && selectedRuleIds.size === 0 ? (
               <>
-                <p style={{ color: 'var(--amber)', fontSize: '0.9rem', fontWeight: 600, margin: '0 0 0.3rem' }}>Selected rules are in DRAFT status</p>
+                <p style={{ color: 'var(--amber)', fontSize: '0.9rem', fontWeight: 600, margin: '0 0 0.3rem' }}>Selected rules are still in Draft</p>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: 0, maxWidth: 360 }}>
-                  DRAFT rules have not been published to Flink and have no aggregated data in ClickHouse.
-                  Publish the rule to ACTIVE status, or use Historical Analysis to test it against raw event data.
+                  Draft rules aren't live yet, so there's no historical data to show.
+                  Publish the rule to make it Active, or use Historical Replay to test it against past traffic instead.
                 </p>
               </>
             ) : (
               <>
                 <p style={{ color: 'var(--text-2)', fontSize: '0.9rem', fontWeight: 600, margin: '0 0 0.3rem' }}>No data yet</p>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: 0, maxWidth: 320 }}>
-                  Select one or more rules from the sidebar, pick a time range, and click "Load Analytics" to query results from ClickHouse.
+                  Select one or more rules from the sidebar, pick a time range, and click "Load Analytics".
                 </p>
               </>
             )}
@@ -906,7 +906,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
                 onClick={() => setShowAnomalyFeed(v => !v)}
               >
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--danger)', boxShadow: '0 0 6px rgba(248,81,73,0.6)', animation: 'pulse-dot 1.5s ease-in-out infinite', flexShrink: 0 }} />
-                <span style={{ color: 'var(--danger)', fontSize: '0.83rem', fontWeight: 600 }}>Live Anomaly Feed</span>
+                <span style={{ color: 'var(--danger)', fontSize: '0.83rem', fontWeight: 600 }}>Breach Events</span>
                 <span style={{ marginLeft: '0.5rem', padding: '0.1rem 0.55rem', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 700, background: 'rgba(248,81,73,0.15)', color: 'var(--danger)', border: '1px solid rgba(248,81,73,0.25)' }}>
                   {sortedAnomalyData.length} breach event{sortedAnomalyData.length !== 1 ? 's' : ''}
                 </span>
@@ -978,7 +978,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
                               <span style={{ color: 'var(--danger)', fontWeight: 700, flexShrink: 0 }}>×{g.count}</span>
                               {ttl && (
                                 <span
-                                  title="Penalty TTL — time remaining before this entity's Redis penalty entry expires"
+                                  title="Cooldown remaining — time left before this entity could be flagged again"
                                   style={{
                                     flexShrink: 0, fontSize: '0.66rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: 4,
                                     color: ttl.active ? '#e3a008' : 'var(--text-3)',
@@ -1042,7 +1042,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
           {/* Row 1: KPI Metric Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '0.875rem' }}>
             <div className="metric-card" style={{ minWidth: 0 }}>
-              <h3>Total Windows</h3>
+              <h3>Checks Performed</h3>
               <div className="value">{totalWindows.toLocaleString()}</div>
               <div style={{ fontSize: '0.7rem', color: 'var(--text-3)', marginTop: 2 }}>Evaluation periods</div>
             </div>
@@ -1067,7 +1067,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
               <div style={{ fontSize: '0.7rem', color: 'var(--text-3)', marginTop: 2 }}>{peakHour ? `IST · ${peakHour.count} windows` : ''}</div>
             </div>
             <div className="metric-card" style={{ minWidth: 0 }}>
-              <h3>Avg Events / Window</h3>
+              <h3>Avg Events per Check</h3>
               <div className="value">{avgEventsPerWindow}</div>
               <div style={{ fontSize: '0.7rem', color: 'var(--text-3)', marginTop: 2 }}>Mean event rate</div>
             </div>
@@ -1237,8 +1237,8 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
                     wrapperStyle={{ paddingBottom: '0.75rem', fontSize: '0.78rem', cursor: 'pointer' }}
                     onClick={handleLegendClick}
                     formatter={(value) => {
-                      if (String(value).startsWith('evt_')) return `📊 Event Count`;
-                      if (String(value).startsWith('agg_')) return `〰 Aggregation Count`;
+                      if (String(value).startsWith('evt_')) return `📊 Events`;
+                      if (String(value).startsWith('agg_')) return `〰 Metric Value`;
                       if (value === 'breachMarker') return `🔴 Breaches`;
                       return value;
                     }}

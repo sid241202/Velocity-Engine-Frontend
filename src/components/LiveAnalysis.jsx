@@ -159,8 +159,8 @@ function EventVolumeTooltip({ active, payload, label, getRuleName }) {
       {payload.map((p, i) => {
         if (p.dataKey === 'breachMarker') return null;
         let label = 'Events';
-        if (p.dataKey.startsWith('evt_')) label = 'Event Count';
-        else if (p.dataKey.startsWith('agg_')) label = 'Aggregation Count';
+        if (p.dataKey.startsWith('evt_')) label = 'Events';
+        else if (p.dataKey.startsWith('agg_')) label = 'Metric Value';
         return (
           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 2 }}>
             <span style={{ color: '#94a3b8' }}>{label}</span>
@@ -216,6 +216,23 @@ const CustomXAxisTick = (props) => {
     </g>
   );
 };
+
+// ─── Panel header — matches the header style used on Analytics / Historical ──
+function LiveHeader() {
+  return (
+    <div className="glass-panel" style={{ paddingBottom: '1rem', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
+        <div style={{ width: 30, height: 30, borderRadius: 8, background: 'linear-gradient(135deg, #6366f1, #06b6d4)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Activity size={16} color="#fff" strokeWidth={2.2} />
+        </div>
+        <h2 style={{ color: 'var(--text-1)', margin: 0, fontSize: '0.95rem', fontWeight: 700, letterSpacing: '-0.02em' }}>Live Stream</h2>
+      </div>
+      <p style={{ color: 'var(--text-3)', fontSize: '0.73rem', margin: 0 }}>
+        Watch selected rules evaluate authentication traffic as it happens — this updates automatically, no need to refresh.
+      </p>
+    </div>
+  );
+}
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -717,20 +734,23 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     // Check if DRAFT rules were selected (allSelectedRuleIds has entries but selectedRuleIds is empty)
     const hasDraftOnly = allSelectedRuleIds && allSelectedRuleIds.size > 0 && selectedRuleIds.size === 0;
     return (
-      <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '500px', gap: '1.5rem' }}>
-        <Activity size={64} color="var(--text-muted)" style={{ opacity: 0.4 }} />
-        {hasDraftOnly ? (
-          <>
-            <p style={{ color: '#f59e0b', fontSize: '1rem', textAlign: 'center', maxWidth: 440, fontWeight: 600 }}>Selected rules are in DRAFT status</p>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', maxWidth: 440 }}>DRAFT rules are not processed by Flink and cannot stream live data. Publish the rule to make it ACTIVE, or use Historical Analysis to test it against past data.</p>
-          </>
-        ) : (
-          <>
-            <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', textAlign: 'center', maxWidth: 400 }}>Select one or more rules from the sidebar to see live analysis</p>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', opacity: 0.7, textAlign: 'center' }}>WebSocket streaming · 24-hour rolling window</p>
-          </>
-        )}
-      </div>
+      <>
+        <LiveHeader />
+        <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '500px', gap: '1.5rem' }}>
+          <Activity size={64} color="var(--text-muted)" style={{ opacity: 0.4 }} />
+          {hasDraftOnly ? (
+            <>
+              <p style={{ color: '#f59e0b', fontSize: '1rem', textAlign: 'center', maxWidth: 440, fontWeight: 600 }}>Selected rules are still in Draft</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', maxWidth: 440 }}>Draft rules aren't live yet, so there's no real-time traffic to show. Publish the rule to make it Active, or use Historical Replay to test it against past data first.</p>
+            </>
+          ) : (
+            <>
+              <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', textAlign: 'center', maxWidth: 400 }}>Select one or more rules from the sidebar to see them running live</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', opacity: 0.7, textAlign: 'center' }}>Updates arrive automatically · showing the last 24 hours</p>
+            </>
+          )}
+        </div>
+      </>
     );
   }
 
@@ -742,6 +762,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
   if (totalWindows === 0) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <LiveHeader />
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
           <span style={{
             display: 'inline-block', width: 10, height: 10, borderRadius: '50%',
@@ -790,6 +811,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      <LiveHeader />
 
       {/* ── Connection status pill ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
@@ -806,7 +828,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
       <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
         {/* Total Windows */}
         <div className="metric-card" style={{ flex: 1, minWidth: 130 }}>
-          <h3 style={{ display: 'flex', alignItems: 'center', gap: 6 }}><BarChart2 size={13} style={{ opacity: 0.7 }} /> Total Windows</h3>
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: 6 }}><BarChart2 size={13} style={{ opacity: 0.7 }} /> Checks Performed</h3>
           <div className="value">{totalWindows.toLocaleString()}</div>
         </div>
 
@@ -847,8 +869,8 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
         {/* Live Throughput — updates/sec with an inline sparkline, fed by every
             delta pushed from the server (partial + final ticks both count). */}
         <div className="metric-card" style={{ flex: 1, minWidth: 150 }}>
-          <h3 style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Zap size={13} style={{ opacity: 0.7 }} /> Live Throughput</h3>
-          <div className="value" style={{ fontSize: '1.1rem' }}>{currentThroughput.toFixed(1)} <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 400 }}>upd/s</span></div>
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Zap size={13} style={{ opacity: 0.7 }} /> Updates Per Second</h3>
+          <div className="value" style={{ fontSize: '1.1rem' }}>{currentThroughput.toFixed(1)} <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 400 }}>updates/sec</span></div>
           <div style={{ width: '100%', height: 28, marginTop: 2 }}>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={throughputHistory} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
@@ -895,8 +917,8 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
                 wrapperStyle={{ paddingBottom: '0.75rem', fontSize: '0.78rem', cursor: 'pointer' }}
                 onClick={handleLegendClick}
                 formatter={(value) => {
-                  if (value.startsWith('evt_')) return `📊 Event Count`;
-                  if (value.startsWith('agg_')) return `〰 Aggregation Count`;
+                  if (value.startsWith('evt_')) return `📊 Events`;
+                  if (value.startsWith('agg_')) return `〰 Metric Value`;
                   if (value === 'breachMarker') return `🔴 Breaches`;
                   return value;
                 }}

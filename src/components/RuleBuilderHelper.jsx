@@ -4,18 +4,18 @@ import { BookOpen, Lightbulb, Zap } from 'lucide-react';
 const HELP_CONTENT = {
   rule_name: {
     title: 'Rule Name',
-    description: 'Give your rule a descriptive, human-readable name. This name appears in ClickHouse results, alert notifications, and the sidebar.',
+    description: 'Give your rule a descriptive, human-readable name. This is what shows up in the rule list, alert notifications, and reports — pick something a teammate could recognize at a glance.',
     tip: 'Use a naming convention like: "[Severity] [What it detects] [Entity]" — e.g., "HIGH Velocity OTP Ring SA"'
   },
   severity: {
     title: 'Severity Level',
-    description: 'Classifies the urgency of alerts triggered by this rule. Stored with every breach event in ClickHouse.',
+    description: 'Classifies the urgency of alerts triggered by this rule. Shown alongside every breach in the alert feed and reports.',
     tip: 'Use CRITICAL for fraud patterns, HIGH for anomalies, MEDIUM for rate monitoring, LOW for informational.'
   },
   penalty_ttl: {
-    title: 'Penalty TTL (seconds)',
-    description: 'After a threshold breach, suppress duplicate alerts for this many seconds. Prevents alert storms during sustained anomalies.',
-    tip: 'Set to 3600 (1 hour) for most rules. Use shorter TTLs (300s) for rapidly changing patterns.'
+    title: 'Cooldown Period',
+    description: 'After this rule flags an entity, wait this long before flagging that same entity again. Prevents one ongoing issue from spamming repeat alerts.',
+    tip: 'Set to 1 hour for most rules. Use shorter cooldowns (5 minutes) for rapidly changing patterns.'
   },
   grouping_keys: {
     title: 'Grouping Keys',
@@ -23,14 +23,14 @@ const HELP_CONTENT = {
     tip: 'Group by _data.aua to monitor each Authentication User Agency independently. Add multiple keys like _data.aua + _data.sa for finer granularity.'
   },
   global_key: {
-    title: 'Global Aggregation',
-    description: 'No grouping — a single counter aggregates ALL events regardless of field values. Useful for system-wide rate monitoring.',
+    title: 'Track All Events Together',
+    description: 'No grouping — a single counter aggregates ALL events regardless of who sent them. Useful for system-wide rate monitoring rather than per-entity detection.',
     tip: 'Use this to monitor total authentication throughput across the entire system.'
   },
-  continuous: {
-    title: 'Continuous Counting',
-    description: 'Disables window resets — counters grow indefinitely from engine startup. Internally uses a very large window with periodic output intervals.',
-    tip: 'Use for cumulative monitoring like "total auths since deployment" or detecting ever-growing distinct entity counts.'
+  anomaly_entity_field: {
+    title: 'Alert Identifier Field',
+    description: "By default, the value you're grouping by is what gets flagged in an alert. This option lets you flag a different field instead — useful when you group by one thing (e.g. Sub-AUA) but want the alert to name another (e.g. the specific Reference ID).",
+    tip: "If this field is missing on a given event, the engine falls back to the group-by value automatically."
   },
   event_time: {
     title: 'Event Time',
@@ -43,8 +43,8 @@ const HELP_CONTENT = {
     tip: 'Use only when payload timestamps are unreliable or when you want purely real-time (wall-clock) windowing.'
   },
   kafka_timestamp: {
-    title: 'Kafka Arrival Timestamp',
-    description: 'Uses the timestamp recorded when the message arrived in the queue. A reliable default choice.',
+    title: 'Message Arrival Time',
+    description: 'Uses the timestamp recorded when the event arrived in our system. A reliable default choice.',
     tip: 'Good default choice. Always present and consistent across events.'
   },
   custom_ts_field: {
@@ -88,9 +88,9 @@ const HELP_CONTENT = {
     tip: 'Use filters to focus on specific scenarios — e.g., only OTP auths (_data.otpUsesFlag EQUALS 1.0) or only failed auths (_data.authResult EQUALS n).'
   },
   aggregations: {
-    title: 'Aggregations (max 3)',
-    description: 'Define what to compute inside each window. Each aggregation has an alias (used in thresholds), a target field, and a function (COUNT, SUM, AVG, MIN, MAX, COUNT_DISTINCT).',
-    tip: 'The alias becomes a column in ClickHouse and a variable name in your threshold expression. Choose meaningful names like "total_otp" or "unique_auas".'
+    title: 'Metrics to Compute (max 3)',
+    description: 'Define what to measure inside each window. Each metric has a name (used in the alert condition below), a target field, and a function (Count, Sum, Average, Minimum, Maximum, Count Unique).',
+    tip: 'The name you choose becomes what you reference in your alert condition below, and appears as a column in reports. Choose meaningful names like "total_otp" or "unique_auas".'
   },
   count_distinct_LOW: {
     title: 'COUNT_DISTINCT — Low Cardinality',
@@ -103,9 +103,14 @@ const HELP_CONTENT = {
     tip: 'Use for UIDs, transaction IDs, or enrollment reference IDs — any field with potentially millions of unique values.'
   },
   having_thresholds: {
-    title: 'Alert Threshold Logic',
-    description: 'A logical expression evaluated against your metric names. When the expression evaluates to TRUE, the engine flags the result as a breach and fires an alert.',
-    tip: 'Reference aggregation aliases by name. Combine with && (AND) and || (OR). Example: (total_otp > 15) && (unique_auas >= 3)'
+    title: 'Alert Condition',
+    description: 'The condition checked against your metrics above. When it’s true, the engine flags the result as a breach and fires an alert.',
+    tip: 'Reference your metric names, combined with AND / OR. Example: total_otp is greater than 15 AND unique_auas is at least 3'
+  },
+  sinks: {
+    title: 'Outputs',
+    description: 'Choose where this rule’s results go: saved summary data for trend dashboards, real-time breach alerts, and/or a penalty flag other services can check. At least one must stay on.',
+    tip: 'Most rules should keep all three on. Turn off "Save Summary Data" only for very high-volume rules where you just need alerts, not historical trend charts.'
   }
 };
 

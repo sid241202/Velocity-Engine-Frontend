@@ -28,6 +28,28 @@ const NULL_OPERATORS = ['IS_NULL', 'IS_NOT_NULL'];
 const DATE_OPERATORS = ['DATE_BEFORE', 'DATE_AFTER', 'DATE_EQUALS'];
 const ALL_OPERATORS  = [...STANDARD_OPERATORS, ...NULL_OPERATORS, ...DATE_OPERATORS];
 
+// Plain-English display text for each operator — the underlying value sent
+// to the backend is unchanged, this only affects what the dropdown shows.
+const OPERATOR_LABELS = {
+  EQUALS: 'equals',
+  NOT_EQUALS: 'does not equal',
+  GREATER_THAN: 'is greater than',
+  GREATER_THAN_EQUAL: 'is at least',
+  LESS_THAN: 'is less than',
+  LESS_THAN_EQUAL: 'is at most',
+  IN: 'is one of (comma-separated list)',
+  REGEX: 'matches pattern (regex)',
+  CONTAINS: 'contains',
+  NOT_CONTAINS: 'does not contain',
+  STARTS_WITH: 'starts with',
+  ENDS_WITH: 'ends with',
+  IS_NULL: 'is empty or missing',
+  IS_NOT_NULL: 'is present',
+  DATE_BEFORE: 'is before',
+  DATE_AFTER: 'is after',
+  DATE_EQUALS: 'is exactly',
+};
+
 const isNullOp = (op) => NULL_OPERATORS.includes(op?.toUpperCase());
 const isDateOp = (op) => DATE_OPERATORS.includes(op?.toUpperCase());
 
@@ -207,6 +229,7 @@ export default function VisualFilterBuilder({ filterTree, setFilterTree }) {
             placeholder="Event field (e.g. _data.aua)"
             value={node.field || ''}
             onChange={e => updateNode(path, { field: e.target.value })}
+            list="common-event-fields"
             style={{
               flex: 2, minWidth: '120px', margin: 0,
               border: node.field === '' ? '1px solid rgba(239,68,68,0.4)' : undefined,
@@ -227,13 +250,13 @@ export default function VisualFilterBuilder({ filterTree, setFilterTree }) {
             style={{ flex: 1, minWidth: '140px', margin: 0 }}
           >
             <optgroup label="── Standard ──">
-              {STANDARD_OPERATORS.map(o => <option key={o} value={o}>{o}</option>)}
+              {STANDARD_OPERATORS.map(o => <option key={o} value={o}>{OPERATOR_LABELS[o] || o}</option>)}
             </optgroup>
             <optgroup label="── Null Checks ──">
-              {NULL_OPERATORS.map(o => <option key={o} value={o}>{o}</option>)}
+              {NULL_OPERATORS.map(o => <option key={o} value={o}>{OPERATOR_LABELS[o] || o}</option>)}
             </optgroup>
             <optgroup label="── Date / Time (IST) ──">
-              {DATE_OPERATORS.map(o => <option key={o} value={o}>{o.replace('DATE_', '')}</option>)}
+              {DATE_OPERATORS.map(o => <option key={o} value={o}>{OPERATOR_LABELS[o] || o.replace('DATE_', '')}</option>)}
             </optgroup>
           </select>
 
