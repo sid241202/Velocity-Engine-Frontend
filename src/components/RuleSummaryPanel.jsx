@@ -252,7 +252,7 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
       ? `, it computes: ${aggDescs.join('; ')}.`
       : '.';
 
-    return `This rule monitors ${groupDesc}. Using ${windowDesc} based on ${timeDesc}${aggPart}${filterDesc} ${thresholdDesc} Severity: ${meta.severity_level}. Alerts are suppressed for ${meta.penalty_ttl_seconds} seconds after each breach.`;
+    return `This rule monitors ${groupDesc}. Using ${windowDesc} based on ${timeDesc}${aggPart}${filterDesc} ${thresholdDesc} Severity: ${meta.severity_level}. After a breach, the same entity won't trigger another alert for ${formatTtl(meta.penalty_ttl_seconds)} (its cooldown period).`;
   };
 
   return (
@@ -271,6 +271,18 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
           </div>
         </div>
         <Shield size={28} color="var(--primary)" />
+      </div>
+
+      {/* What This Rule Does — plain-English summary, shown first because
+          it's what a reader actually wants to know before the raw config
+          tables below. */}
+      <div style={sectionStyle}>
+        <div style={sectionHeaderStyle}>
+          <Zap size={16} color="var(--success)" /> What This Rule Does
+        </div>
+        <div style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '8px', padding: '1rem', fontSize: '0.84rem', color: 'var(--text-main)', lineHeight: 1.7 }}>
+          {generateSummary(rule)}
+        </div>
       </div>
 
       {/* Section 1 — Rule Configuration */}
@@ -294,7 +306,7 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
             <input style={{ ...readOnlyInputStyle, color: sevStyle.color }} value={meta.severity_level || ''} disabled />
           </div>
           <div style={{ flex: 1 }}>
-            <label style={fieldLabelStyle}>Redis Key TTL</label>
+            <label style={fieldLabelStyle}>Cooldown Period</label>
             <input style={readOnlyInputStyle} value={meta.penalty_ttl_seconds ? formatTtl(meta.penalty_ttl_seconds) : 'N/A'} disabled />
           </div>
         </div>
@@ -307,7 +319,7 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
         </div>
         <div style={{ display: 'flex', gap: '1rem' }}>
           <div style={{ flex: 1 }}>
-            <label style={fieldLabelStyle}>Source Topic</label>
+            <label style={fieldLabelStyle}>Data Source</label>
             <input style={readOnlyMonoInputStyle} value={routing.target_source_topic || routing.source_topic || 'Default'} disabled />
           </div>
         </div>
@@ -432,16 +444,6 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
         </div>
       </div>
 
-      {/* Section 2 — Plain English Summary */}
-      <div style={sectionStyle}>
-        <div style={sectionHeaderStyle}>
-          <Zap size={16} color="var(--success)" /> What This Rule Does
-        </div>
-        <div style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '8px', padding: '1rem', fontSize: '0.84rem', color: 'var(--text-main)', lineHeight: 1.7 }}>
-          {generateSummary(rule)}
-        </div>
-      </div>
-
       {/* Section 3 — Actions */}
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', paddingTop: '0.5rem' }}>
 
@@ -455,9 +457,9 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
                   style={{ flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
                   onClick={() => publishRule(meta.rule_id)}
                   disabled={isActioning || !allowed}
-                  title={!allowed ? "Your role doesn't have permission to publish rules (requires rules:publish)" : undefined}
+                  title={!allowed ? "Your role doesn't have permission to publish rules (requires rules:publish)" : "Makes this rule live — it will start evaluating real traffic."}
                 >
-                  <Send size={16} /> {isActioning ? 'Publishing…' : 'Move to Prod'}
+                  <Send size={16} /> {isActioning ? 'Publishing…' : 'Publish Rule'}
                 </button>
               )}
             </RequirePermission>

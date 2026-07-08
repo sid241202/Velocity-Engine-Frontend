@@ -44,6 +44,24 @@ function tryParseExpression(expr) {
   }
 }
 
+const OP_WORDS = { '>': 'is greater than', '<': 'is less than', '>=': 'is at least', '<=': 'is at most', '==': 'equals', '!=': 'is not equal to' };
+
+/** Turn the same tree used to compile JEXL into a plain-English sentence fragment. */
+function describeNode(node) {
+  if (!node) return null;
+  if (node.type === 'RULE') {
+    if (!node.alias || node.value === '' || node.value == null || isNaN(parseFloat(node.value))) return null;
+    return `${node.alias} ${OP_WORDS[node.operator] || node.operator} ${node.value}`;
+  }
+  if (node.type === 'GROUP') {
+    const parts = (node.children || []).map(describeNode).filter(Boolean);
+    if (parts.length === 0) return null;
+    if (parts.length === 1) return parts[0];
+    return parts.join(node.logic === '&&' ? ' and ' : ' or ');
+  }
+  return null;
+}
+
 export default function VisualThresholdBuilder({ expression, setExpression, aggregations }) {
   const [parseError, setParseError] = React.useState(false);
 
@@ -200,8 +218,17 @@ export default function VisualThresholdBuilder({ expression, setExpression, aggr
         </div>
       )}
       {renderNode(tree, [])}
-      
-      <div style={{ marginTop: '1rem', padding: '0.5rem', background: 'rgba(0,0,0,0.4)', borderRadius: '4px', fontFamily: 'monospace', color: '#a78bfa', fontSize: '0.85rem' }}>
+
+      {(() => {
+        const plain = describeNode(tree);
+        return plain ? (
+          <div style={{ marginTop: '1rem', padding: '0.6rem 0.75rem', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '6px', fontSize: '0.82rem', color: 'var(--text-1)', lineHeight: 1.5 }}>
+            <strong>In plain terms:</strong> alert when {plain}.
+          </div>
+        ) : null;
+      })()}
+
+      <div style={{ marginTop: '0.6rem', padding: '0.5rem', background: 'rgba(0,0,0,0.4)', borderRadius: '4px', fontFamily: 'monospace', color: '#a78bfa', fontSize: '0.85rem' }}>
         <strong>Compiled Expression:</strong> {expression || 'None (No Alerts)'}
       </div>
     </div>
