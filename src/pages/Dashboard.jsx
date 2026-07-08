@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './Dashboard.css';
-import { Zap, History, PlusSquare, Activity, BarChart3, Shield, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Zap, History, PlusSquare, Activity, BarChart3, Shield, AlertTriangle, RefreshCw, Send, ArrowRight, X } from 'lucide-react';
 import RuleBuilderPage from '../components/RuleBuilderPage';
 import SavedRulesSidebar from '../components/SavedRulesSidebar';
 import RuleSummaryPanel from '../components/RuleSummaryPanel';
@@ -34,6 +34,16 @@ export default function Dashboard() {
   const [backendStatus, setBackendStatus] = useState('connecting');
   const [editingRule, setEditingRule]     = useState(null);
   const [historicalPrefill, setHistoricalPrefill] = useState(null);
+
+  // First-run onboarding card — dismissed permanently once closed, persisted
+  // across sessions since there's no user-account backing this yet.
+  const [showOnboarding, setShowOnboarding] = useState(
+    () => typeof window !== 'undefined' && localStorage.getItem('ve_onboarding_dismissed') !== 'true'
+  );
+  const dismissOnboarding = () => {
+    localStorage.setItem('ve_onboarding_dismissed', 'true');
+    setShowOnboarding(false);
+  };
 
   // Track which tabs have been visited so we can lazy-mount panels
   const visitedTabsRef = useRef(new Set(['live']));
@@ -115,7 +125,7 @@ export default function Dashboard() {
 
   const navItems = [
     { key: 'live',       label: 'Live Stream',       icon: Activity,   tip: 'Real-time event stream & breach detection' },
-    { key: 'agg',        label: 'Analytics',         icon: BarChart3,   tip: 'Aggregated rule analysis from ClickHouse' },
+    { key: 'agg',        label: 'Analytics',         icon: BarChart3,   tip: 'Aggregated rule analysis over a custom date range' },
     { key: 'historical', label: 'Historical Replay', icon: History,     tip: 'Replay and test rules on historical data' },
     { key: 'build',      label: 'Create Rule',       icon: PlusSquare,  tip: 'Build a new anomaly detection rule' },
     { key: 'summary',    label: 'Rule Summary',      icon: Shield,      tip: 'View and manage a specific rule' },
@@ -159,6 +169,50 @@ export default function Dashboard() {
           </span>
         </div>
       </header>
+
+      {/* First-run onboarding — explains the Create → Publish → Monitor
+          workflow once, dismissible, remembered via localStorage. */}
+      {showOnboarding && (
+        <div style={{
+          background: 'linear-gradient(90deg, rgba(99,102,241,0.12), rgba(45,212,191,0.05))',
+          border: '1px solid rgba(99,102,241,0.3)',
+          borderRadius: '8px',
+          margin: '0.5rem 1rem',
+          padding: '0.75rem 2.25rem 0.75rem 1rem',
+          position: 'relative',
+        }}>
+          <button
+            onClick={dismissOnboarding}
+            title="Dismiss"
+            style={{ position: 'absolute', top: '0.6rem', right: '0.6rem', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: 4, display: 'flex' }}
+          >
+            <X size={14} />
+          </button>
+          <p style={{ margin: '0 0 0.65rem', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-1)' }}>
+            New here? This is a fraud-detection tool for Aadhaar authentication traffic. Here's how it works:
+          </p>
+          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            {[
+              { icon: PlusSquare, label: '1. Create a Rule', desc: 'Describe what unusual activity looks like' },
+              { icon: Send, label: '2. Publish It', desc: 'Make it live so it starts watching real traffic' },
+              { icon: Activity, label: '3. Monitor Results', desc: 'See it work in Live Stream, Analytics & Historical Replay' },
+            ].map(({ icon: Icon, label, desc }, i, arr) => (
+              <React.Fragment key={label}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 200 }}>
+                  <div style={{ width: 26, height: 26, borderRadius: 7, background: 'rgba(99,102,241,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Icon size={13} color="var(--violet-light)" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-1)' }}>{label}</div>
+                    <div style={{ fontSize: '0.68rem', color: 'var(--text-3)' }}>{desc}</div>
+                  </div>
+                </div>
+                {i < arr.length - 1 && <ArrowRight size={13} color="var(--text-3)" style={{ flexShrink: 0 }} />}
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Offline banner */}
       {backendStatus === 'down' && (

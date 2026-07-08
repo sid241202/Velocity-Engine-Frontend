@@ -297,7 +297,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill }) 
         <div style={{ textAlign: 'center' }}>
           <p style={{ color: 'var(--text-2)', fontSize: '1rem', fontWeight: 600, margin: '0 0 0.4rem' }}>Select a rule to begin</p>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0, maxWidth: 380 }}>
-            Choose a rule from the sidebar, pick a time range, and run a historical query against Iceberg to see how that rule would have performed.
+            Choose a rule from the sidebar, pick a time range, and run a replay to see how that rule would have performed against real past traffic.
           </p>
         </div>
       </div>
@@ -315,11 +315,11 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill }) 
           <h2 style={{ color: 'var(--text-1)', margin: 0, fontSize: '0.95rem', fontWeight: 700, letterSpacing: '-0.02em' }}>Historical Rule Replay</h2>
         </div>
         <p style={{ color: 'var(--text-3)', fontSize: '0.73rem', margin: 0 }}>
-          Replay a rule against historical data from Iceberg (via DuckDB) to see how it would have performed. Max lookback: 7 days.
+          Test how this rule would have performed against real past traffic — no need to wait and see it happen live. Max lookback: 7 days.
         </p>
       </div>
 
-      {/* Historical replay always windows/filters by the Iceberg event_timestamp
+      {/* Historical replay always windows/filters by the ingestion timestamp
           column, regardless of a rule's live windowing.timestamp_field — see
           RunHistoricalAnalysis in the backend. Surface that divergence here so
           analysts aren't confused when a custom-timestamp rule's replay doesn't
@@ -337,9 +337,8 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill }) 
           color: '#fde68a',
           fontSize: '0.78rem',
         }}>
-          This rule windows live traffic by <strong>{selectedRule.windowing.timestamp_field}</strong>, but historical
-          replay always windows and filters by the Iceberg ingestion timestamp (<strong>event_timestamp</strong>) —
-          results may differ from live behavior for this rule.
+          Heads up: this rule normally times events using its own <strong>{selectedRule.windowing.timestamp_field}</strong> field,
+          but this replay uses the time each event first arrived in our system instead — so results here may differ slightly from what this rule does live.
         </div>
       )}
 
@@ -417,7 +416,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill }) 
         <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', gap: '1rem' }}>
           <Database size={48} color="var(--text-muted)" style={{ opacity: 0.4 }} />
           <p style={{ color: 'var(--text-muted)', fontSize: '1rem', textAlign: 'center' }}>
-            Select a time range and click <strong>Run Replay</strong> to query historical data from Iceberg.
+            Select a time range and click <strong>Run Replay</strong> to see how this rule would have performed.
           </p>
         </div>
       )}
@@ -437,25 +436,25 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill }) 
             <div style={{ width: 12, height: 12, borderRadius: '50%', background: ruleColor }} />
             <span style={{ color: 'white', fontWeight: 600, fontSize: '1rem' }}>{selectedRule.rule_metadata.rule_name}</span>
             <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginLeft: 'auto' }}>
-              {data.length} matched rows returned
+              {data.length} matching events found
             </span>
           </div>
 
           {/* Metric Cards */}
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
             <div className="metric-card" style={{ flex: 1, minWidth: 140 }}>
-              <h3>Matched Rows</h3>
+              <h3>Matching Events</h3>
               <div className="value">{totalMatches.toLocaleString()}</div>
             </div>
             <div className="metric-card" style={{ flex: 1, minWidth: 140 }}>
-              <h3>Unique Groups</h3>
+              <h3>Unique Entities</h3>
               <div className="value">{uniqueGroupKeys.toLocaleString()}</div>
             </div>
             {aggAliases.map((alias, ai) => {
               const total = data.reduce((s, r) => s + (r[alias] || 0), 0);
               return (
                 <div key={alias} className="metric-card" style={{ flex: 1, minWidth: 140 }}>
-                  <h3>Σ {alias}</h3>
+                  <h3>Total {alias}</h3>
                   <div className="value">{typeof total === 'number' ? total.toLocaleString() : total}</div>
                 </div>
               );
@@ -472,7 +471,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill }) 
               intentionally not adding a one-off margin here, so every gap in
               the panel stays equal instead of stacking and drifting apart. */}
           <div className="chart-container" style={{ height: 410 }}>
-            <div className="chart-title">Aggregation Values Over Time</div>
+            <div className="chart-title">Metric Trend Over Time</div>
             <ResponsiveContainer width="100%" height={350}>
               <AreaChart data={areaChartData} margin={{ top: 8 }}>
                 <CartesianGrid {...GRID_PROPS} />
@@ -503,28 +502,28 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill }) 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             {/* Left: Top Group Keys Bar Chart */}
             <div className="chart-container" style={{ height: 340 }}>
-              <div className="chart-title">Top Group Keys by Matches</div>
+              <div className="chart-title">Most Active Entities</div>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={groupBarData} layout="vertical">
                   <CartesianGrid {...GRID_PROPS} />
                   <XAxis type="number" stroke={AXIS_STROKE} tick={{ fontSize: 11 }} />
                   <YAxis type="category" dataKey="groupKey" stroke={AXIS_STROKE} tick={{ fontSize: 10 }} width={130} />
                   <Tooltip {...TOOLTIP_STYLE} />
-                  <Bar dataKey="matches" fill={ruleColor} radius={[0, 4, 4, 0]} name="Matched Windows" />
+                  <Bar dataKey="matches" fill={ruleColor} radius={[0, 4, 4, 0]} name="Times Matched" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
 
             {/* Right: Aggregation per alias bar chart */}
             <div className="chart-container" style={{ height: 340 }}>
-              <div className="chart-title">Aggregation Totals by Group</div>
+              <div className="chart-title">Total Activity per Entity</div>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={groupBarData} layout="vertical">
                   <CartesianGrid {...GRID_PROPS} />
                   <XAxis type="number" stroke={AXIS_STROKE} tick={{ fontSize: 11 }} />
                   <YAxis type="category" dataKey="groupKey" stroke={AXIS_STROKE} tick={{ fontSize: 10 }} width={130} />
                   <Tooltip {...TOOLTIP_STYLE} />
-                  <Bar dataKey="totalAgg" fill={RULE_COLORS[1]} radius={[0, 4, 4, 0]} name="Total Agg Value" />
+                  <Bar dataKey="totalAgg" fill={RULE_COLORS[1]} radius={[0, 4, 4, 0]} name="Total Activity" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -535,20 +534,20 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill }) 
               20 rows) isn't clipped/overflowed the same way the charts above
               were. Spacing above comes from the outer flex column's gap. */}
           <div className="chart-container" style={{ height: 'auto' }}>
-            <div className="chart-title">Group Key Details</div>
+            <div className="chart-title">Entity Details</div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
                     <th style={thStyle}>#</th>
                     <th style={thStyle} onClick={() => handleSort('groupKey')}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Group Key <ArrowUpDown size={12} /></span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Entity <ArrowUpDown size={12} /></span>
                     </th>
                     <th style={thStyle} onClick={() => handleSort('count')}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Matched Windows <ArrowUpDown size={12} /></span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Times Matched <ArrowUpDown size={12} /></span>
                     </th>
                     <th style={thStyle} onClick={() => handleSort('totalValue')}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Total Agg Value <ArrowUpDown size={12} /></span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Total Activity <ArrowUpDown size={12} /></span>
                     </th>
                     <th style={thStyle} onClick={() => handleSort('lastSeen')}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Last Seen <ArrowUpDown size={12} /></span>
@@ -630,7 +629,10 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill }) 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '1rem' }}>
               {breakdown.modality_mix && breakdown.modality_mix.length > 0 && (
                 <div className="chart-container" style={{ height: 300 }}>
-                  <div className="chart-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}><ShieldCheck size={13} style={{ opacity: 0.7 }} /> Modality Mix</div>
+                  <div className="chart-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }} title="Modality = the authentication method used for the transaction (e.g. fingerprint, iris, OTP, face).">
+                    <ShieldCheck size={13} style={{ opacity: 0.7 }} /> Modality Mix
+                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 400 }}>(auth method used)</span>
+                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', height: 240 }}>
                     <div style={{ width: 140, height: 140, flexShrink: 0 }}>
                       <ResponsiveContainer width="100%" height="100%">
@@ -698,7 +700,9 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill }) 
 
               {breakdown.match_score_histogram && breakdown.match_score_histogram.length > 0 && (
                 <div className="chart-container" style={{ height: 300 }}>
-                  <div className="chart-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Fingerprint size={13} style={{ opacity: 0.7 }} /> Fingerprint Match-Score Distribution</div>
+                  <div className="chart-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }} title="How closely each fingerprint matched the record on file — higher scores mean higher confidence.">
+                    <Fingerprint size={13} style={{ opacity: 0.7 }} /> Fingerprint Match Confidence
+                  </div>
                   <ResponsiveContainer width="100%" height={240}>
                     <BarChart data={breakdown.match_score_histogram}>
                       <CartesianGrid {...GRID_PROPS} />

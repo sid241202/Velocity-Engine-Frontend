@@ -153,7 +153,7 @@ function Section({ icon: Icon, iconColor = 'var(--violet-light)', title, tip, ba
 }
 
 /* ─── Sink Card ──────────────────────────────────────────────── */
-function SinkCard({ id, accentColor, title, subtitle, checked, onChange, disabled }) {
+function SinkCard({ id, accentColor, title, subtitle, checked, onChange, onFocus, disabled }) {
   return (
     <label
       htmlFor={id}
@@ -178,6 +178,7 @@ function SinkCard({ id, accentColor, title, subtitle, checked, onChange, disable
         type="checkbox"
         checked={checked}
         onChange={onChange}
+        onFocus={onFocus}
         disabled={disabled}
         style={{ width: 'auto', marginTop: 3, accentColor, flexShrink: 0 }}
       />
@@ -212,10 +213,46 @@ function secondsToTtl(totalSeconds) {
   return { amount: totalSeconds, unit: 'sec' };
 }
 
+/* ─── Plain-English duration, for the live Time Window preview ──── */
+function describeSeconds(totalSeconds) {
+  const n = Number(totalSeconds);
+  if (!n || n <= 0) return `${totalSeconds} seconds`;
+  if (n % 86400 === 0) { const d = n / 86400; return `${d} day${d !== 1 ? 's' : ''}`; }
+  if (n % 3600 === 0)  { const h = n / 3600;  return `${h} hour${h !== 1 ? 's' : ''}`; }
+  if (n % 60 === 0)    { const m = n / 60;    return `${m} minute${m !== 1 ? 's' : ''}`; }
+  return `${n} second${n !== 1 ? 's' : ''}`;
+}
+
+/* ─── Common event field suggestions ──────────────────────────────
+   Not an exhaustive schema — just the fields analysts reach for most
+   often, so a non-technical user has somewhere to start instead of
+   guessing dot-paths from scratch. The input still accepts free text. */
+const COMMON_FIELDS = [
+  { path: '_data.aua',        label: 'AUA Code (requesting agency)' },
+  { path: '_data.sa',         label: 'Sub-AUA Code' },
+  { path: '_data.asa',        label: 'ASA Code (auth service agency)' },
+  { path: '_data.uid',        label: 'Aadhaar Number (UID)' },
+  { path: '_data.authCode',   label: 'Auth Response Code' },
+  { path: '_data.authResult', label: 'Auth Result (success/failure)' },
+  { path: '_data.otpUsesFlag',label: 'OTP Used Flag' },
+  { path: '_data.amount',     label: 'Transaction Amount' },
+  { path: '_data.refId',      label: 'Reference ID' },
+  { path: '_data.txnTime',    label: 'Transaction Time' },
+];
+const COMMON_FIELDS_LIST_ID = 'common-event-fields';
+function CommonFieldsDatalist() {
+  return (
+    <datalist id={COMMON_FIELDS_LIST_ID}>
+      {COMMON_FIELDS.map(f => <option key={f.path} value={f.path}>{f.label}</option>)}
+    </datalist>
+  );
+}
+
 /* ─── Main Component ─────────────────────────────────────────── */
 export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRule, onEditComplete }) {
 
   // ── Core ───────────────────────────────────────────────────────
+  const [ruleName, setRuleName]     = useState('');
   const [ruleId, setRuleId]         = useState(generateId());
   const [severity, setSeverity]     = useState('HIGH');
   const [ttlAmount, setTtlAmount]   = useState(1);
@@ -265,6 +302,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
   // ── Validation ────────────────────────────────────────────────
   const errors = useMemo(() => {
     const e = {};
+    if (!isNonEmpty(ruleName)) e.ruleName = 'Give this rule a short descriptive name';
     if (!isValidRuleId(ruleId)) e.ruleId = 'Use 3-64 chars: letters, numbers, _ or - only';
     if (Number(ttlAmount) <= 0) e.ttl = 'Must be greater than 0';
     if (!isGlobal) {
@@ -291,7 +329,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
       e.anomalyEntityField = 'Field path is required when this option is enabled';
     }
     return e;
-  }, [ruleId, ttlAmount, isGlobal, keys, noWindowing, windowSize, windowType, windowSlide,
+  }, [ruleName, ruleId, ttlAmount, isGlobal, keys, noWindowing, windowSize, windowType, windowSlide,
       timeType, eventTimeSource, customTsField, aggregations, atLeastOneSink,
       useAnomalyEntityField, anomalyEntityField]);
 
@@ -307,6 +345,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
     const sinks    = editingRule.sinks || {};
     const having   = editingRule.having_thresholds || {};
 
+    setRuleName(meta.rule_name || '');
     setRuleId(meta.rule_id || generateId());
     setSeverity(meta.severity_level || 'HIGH');
     const { amount, unit } = secondsToTtl(meta.penalty_ttl_seconds);
@@ -347,6 +386,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
   }, [editingRule]);
 
   const resetForm = () => {
+    setRuleName('');
     setRuleId(generateId());
     setSeverity('HIGH');
     setTtlAmount(1); setTtlUnit('hr');
@@ -402,6 +442,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
     const payload = {
       rule_metadata: {
         rule_id: ruleId,
+        rule_name: ruleName.trim(),
         status: 'DRAFT',
         severity_level: severity,
         penalty_ttl_seconds: penaltyTtlSeconds,
@@ -474,13 +515,25 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
       </div>
 
       <form onSubmit={handleSave}>
+        <CommonFieldsDatalist />
 
         {/* ── Section 1: Identification ────────────────────────── */}
         <Section icon={Zap} iconColor="var(--violet-light)" title="Identification">
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
             <div>
+              <FieldLabel label="Rule Name" tip="A short, human-readable name so anyone browsing the rule list — not just you — can tell what this rule is for." required />
+              <input
+                value={ruleName}
+                onChange={e => setRuleName(e.target.value)}
+                onFocus={() => onFieldFocus && onFieldFocus('rule_name')}
+                placeholder="e.g. High OTP Attempts per AUA"
+                style={{ border: errors.ruleName ? '1px solid var(--danger)' : undefined }}
+              />
+              <FieldError msg={errors.ruleName} />
+            </div>
+            <div>
               <FieldLabel label="Alert Severity" tip="Priority level assigned when this rule fires an alert." required />
-              <select value={severity} onChange={e => setSeverity(e.target.value)}>
+              <select value={severity} onChange={e => setSeverity(e.target.value)} onFocus={() => onFieldFocus && onFieldFocus('severity')}>
                 <option value="LOW">Low</option>
                 <option value="MEDIUM">Medium</option>
                 <option value="HIGH">High</option>
@@ -504,16 +557,17 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
               <FieldError msg={errors.ruleId} />
             </div>
             <div>
-              <FieldLabel label="Redis Key TTL" tip="How long a flagged entity stays in the Redis penalty list. Only used when 'Add to Penalty List' is enabled." />
+              <FieldLabel label="Cooldown Period" tip="Once this rule flags an entity, how long before that same entity can be flagged again. Prevents one ongoing issue from spamming repeat alerts." />
               <div className="input-unit-row">
                 <input
                   type="number"
                   value={ttlAmount}
                   onChange={e => setTtlAmount(e.target.value)}
+                  onFocus={() => onFieldFocus && onFieldFocus('penalty_ttl')}
                   min="1" step="1" placeholder="1"
                   style={{ border: errors.ttl ? '1px solid var(--danger)' : undefined }}
                 />
-                <select value={ttlUnit} onChange={e => setTtlUnit(e.target.value)}>
+                <select value={ttlUnit} onChange={e => setTtlUnit(e.target.value)} onFocus={() => onFieldFocus && onFieldFocus('penalty_ttl')}>
                   {TTL_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
                 </select>
               </div>
@@ -531,7 +585,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
               tip="The event field used to separate entities. Each unique value is tracked independently (e.g., each AUA code gets its own counter)."
             />
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.74rem', color: 'var(--teal)', fontWeight: 500, flexShrink: 0, marginLeft: '0.75rem' }}>
-              <input type="checkbox" checked={isGlobal} onChange={e => setIsGlobal(e.target.checked)} style={{ width: 'auto', accentColor: 'var(--teal)' }} />
+              <input type="checkbox" checked={isGlobal} onChange={e => setIsGlobal(e.target.checked)} onFocus={() => onFieldFocus && onFieldFocus('global_key')} style={{ width: 'auto', accentColor: 'var(--teal)' }} />
               Track all events together
             </label>
           </div>
@@ -542,6 +596,8 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
                 <input
                   value={k}
                   onChange={e => { const nk = [...keys]; nk[i] = e.target.value; setKeys(nk); }}
+                  onFocus={() => onFieldFocus && onFieldFocus('grouping_keys')}
+                  list={COMMON_FIELDS_LIST_ID}
                   placeholder="e.g. _data.aua  or  _data.uid"
                   required
                   style={{ border: errors[`key_${i}`] ? '1px solid var(--danger)' : undefined }}
@@ -576,15 +632,17 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
           {(anomalySinkEnabled || anomalyStoreSinkEnabled) && (
             <div style={{ marginTop: '0.875rem', padding: '0.7rem 0.875rem', background: 'rgba(124,58,237,0.06)', borderRadius: '7px', border: '1px solid rgba(124,58,237,0.15)' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', cursor: 'pointer', fontSize: '0.78rem', color: 'var(--violet-light)', fontWeight: 500, marginBottom: useAnomalyEntityField ? '0.5rem' : 0 }}>
-                <input type="checkbox" checked={useAnomalyEntityField} onChange={e => setUseAnomalyEntityField(e.target.checked)} style={{ width: 'auto', accentColor: 'var(--violet)' }} />
+                <input type="checkbox" checked={useAnomalyEntityField} onChange={e => setUseAnomalyEntityField(e.target.checked)} onFocus={() => onFieldFocus && onFieldFocus('anomaly_entity_field')} style={{ width: 'auto', accentColor: 'var(--violet)' }} />
                 Use a specific field as the alert identifier
-                <Tip text="When a breach is detected, this field's value is stored in the alert and used as the Redis key. Falls back to the group-by value if the field is missing." />
+                <Tip text="When a breach is detected, this field's value is stored in the alert and used to identify the flagged entity. Falls back to the group-by value if the field is missing." />
               </label>
               {useAnomalyEntityField && (
                 <>
                   <input
                     value={anomalyEntityField}
                     onChange={e => setAnomalyEntityField(e.target.value)}
+                    onFocus={() => onFieldFocus && onFieldFocus('anomaly_entity_field')}
+                    list={COMMON_FIELDS_LIST_ID}
                     placeholder="e.g. _data.refId  or  _data.uid"
                     style={{ border: errors.anomalyEntityField ? '1px solid var(--danger)' : undefined }}
                   />
@@ -604,9 +662,11 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
           badge={filterTree.conditions?.length > 0 ? `${filterTree.conditions.length} conditions` : null}
         >
           {(!filterTree.conditions || filterTree.conditions.length === 0) && (
-            <p className="helper" style={{ marginBottom: '0.75rem' }}>No filters — all events on the source topic are included.</p>
+            <p className="helper" style={{ marginBottom: '0.75rem' }}>No filters — every incoming event is included.</p>
           )}
-          <VisualFilterBuilder filterTree={filterTree} setFilterTree={setFilterTree} />
+          <div onFocus={() => onFieldFocus && onFieldFocus('filters')}>
+            <VisualFilterBuilder filterTree={filterTree} setFilterTree={setFilterTree} />
+          </div>
         </Section>
 
         {/* ── Section 4: Time Window ───────────────────────────── */}
@@ -665,7 +725,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
                   { val: 'PROCESSING_TIME', label: 'System Received Time', tip: 'Uses the time the platform received the event. Simpler but may drift for delayed events.' },
                 ].map(({ val, label, tip }) => (
                   <label key={val} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.82rem', color: 'var(--text-2)', fontWeight: 500 }}>
-                    <input type="radio" checked={timeType === val} onChange={() => setTimeType(val)} style={{ width: 'auto', accentColor: 'var(--violet)' }} />
+                    <input type="radio" checked={timeType === val} onChange={() => setTimeType(val)} onFocus={() => onFieldFocus && onFieldFocus(val === 'EVENT_TIME' ? 'event_time' : 'processing_time')} style={{ width: 'auto', accentColor: 'var(--violet)' }} />
                     {label} <Tip text={tip} />
                   </label>
                 ))}
@@ -677,11 +737,11 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
                   <p className="form-label" style={{ marginBottom: '0.5rem' }}>Timestamp Source</p>
                   <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap' }}>
                     {[
-                      { val: 'KAFKA_TIMESTAMP', label: 'Message arrival time (recommended)', tip: 'The time the event arrived in Kafka. Best default choice.' },
-                      { val: 'CUSTOM',          label: 'Field inside the event payload',      tip: 'Use a timestamp field embedded in the event JSON. Must be in IST.' },
+                      { val: 'KAFKA_TIMESTAMP', label: 'Message arrival time (recommended)', tip: 'The time the event arrived in our system. Best default choice.' },
+                      { val: 'CUSTOM',          label: 'Field inside the event payload',      tip: 'Use a timestamp field embedded in the event data. Must be in IST.' },
                     ].map(({ val, label, tip }) => (
                       <label key={val} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-2)' }}>
-                        <input type="radio" checked={eventTimeSource === val} onChange={() => setEventTimeSource(val)} style={{ width: 'auto', accentColor: 'var(--violet)' }} />
+                        <input type="radio" checked={eventTimeSource === val} onChange={() => setEventTimeSource(val)} onFocus={() => onFieldFocus && onFieldFocus(val === 'KAFKA_TIMESTAMP' ? 'kafka_timestamp' : 'custom_ts_field')} style={{ width: 'auto', accentColor: 'var(--violet)' }} />
                         {label} <Tip text={tip} />
                       </label>
                     ))}
@@ -689,10 +749,12 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
                   {eventTimeSource === 'CUSTOM' && (
                     <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
                       <div style={{ flex: 2 }}>
-                        <FieldLabel label="Timestamp Field Path" tip="Dot-notation path to the timestamp inside each event JSON." required />
+                        <FieldLabel label="Timestamp Field Path" tip="Dot-notation path to the timestamp inside each event." required />
                         <input
                           value={customTsField}
                           onChange={e => setCustomTsField(e.target.value)}
+                          onFocus={() => onFieldFocus && onFieldFocus('custom_ts_field')}
+                          list={COMMON_FIELDS_LIST_ID}
                           placeholder="e.g. _event_timestamp  or  _data.txnTime"
                           style={{ border: errors.customTsField ? '1px solid var(--danger)' : undefined }}
                         />
@@ -717,7 +779,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
               <div style={{ display: 'grid', gridTemplateColumns: windowType === 'SLIDING' ? '1fr 1fr 1fr' : '1fr 1fr', gap: '0.75rem', alignItems: 'start' }}>
                 <div>
                   <FieldLabel label="Window Type" tip="Rolling: overlaps with the previous window. Fixed: discrete non-overlapping intervals." required />
-                  <select value={windowType} onChange={e => setWindowType(e.target.value)}>
+                  <select value={windowType} onChange={e => setWindowType(e.target.value)} onFocus={() => onFieldFocus && onFieldFocus(`window_type_${windowType}`)}>
                     <option value="SLIDING">Rolling (overlapping)</option>
                     <option value="TUMBLING">Fixed (non-overlapping)</option>
                   </select>
@@ -729,6 +791,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
                     type="number"
                     value={windowSize}
                     onChange={e => setWindowSize(e.target.value)}
+                    onFocus={() => onFieldFocus && onFieldFocus('window_size')}
                     min="1" step="1" required
                     style={{ border: errors.windowSize ? '1px solid var(--danger)' : undefined }}
                   />
@@ -742,6 +805,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
                       type="number"
                       value={windowSlide}
                       onChange={e => setWindowSlide(e.target.value)}
+                      onFocus={() => onFieldFocus && onFieldFocus('slide_interval')}
                       min="1" step="1" required
                       style={{ border: errors.windowSlide ? '1px solid var(--danger)' : undefined }}
                     />
@@ -750,6 +814,18 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
                   </div>
                 )}
               </div>
+
+              {/* Plain-English restatement of the window config above, so a
+                  non-technical reader doesn't have to mentally translate
+                  "SLIDING, size=300, slide=60" into what actually happens. */}
+              {isPositiveInt(windowSize) && (windowType === 'TUMBLING' || isPositiveInt(windowSlide)) && (
+                <p className="helper" style={{ marginTop: '0.6rem', fontStyle: 'italic' }}>
+                  In plain terms: this checks the last {describeSeconds(windowSize)} of activity
+                  {windowType === 'SLIDING'
+                    ? `, re-checked every ${describeSeconds(windowSlide)}.`
+                    : `, in non-overlapping ${describeSeconds(windowSize)} blocks.`}
+                </p>
+              )}
 
               <div style={{ marginTop: '0.75rem' }}>
                 <Accordion title="Advanced Timing">
@@ -760,6 +836,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
                         type="number"
                         value={lateness}
                         onChange={e => setLateness(Number(e.target.value))}
+                        onFocus={() => onFieldFocus && onFieldFocus('lateness')}
                         min="0"
                       />
                     </div>
@@ -777,6 +854,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
                               type="number"
                               value={val}
                               onChange={e => set(Math.min(max, Math.max(0, Number(e.target.value))))}
+                              onFocus={() => onFieldFocus && onFieldFocus('alignment')}
                               min={0} max={max}
                               style={{ width: '58px' }}
                             />
@@ -831,6 +909,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
                     <input
                       value={a.alias}
                       onChange={e => { const na = [...aggregations]; na[i].alias = e.target.value; setAggregations(na); }}
+                      onFocus={() => onFieldFocus && onFieldFocus('aggregations')}
                       placeholder="e.g. total_count"
                       required
                       style={{ border: errors[`agg_alias_${i}`] ? '1px solid var(--danger)' : undefined }}
@@ -841,6 +920,8 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
                     <input
                       value={a.field}
                       onChange={e => { const na = [...aggregations]; na[i].field = e.target.value; setAggregations(na); }}
+                      onFocus={() => onFieldFocus && onFieldFocus('aggregations')}
+                      list={COMMON_FIELDS_LIST_ID}
                       placeholder="e.g. _data.authCode"
                       required
                       style={{ border: errors[`agg_field_${i}`] ? '1px solid var(--danger)' : undefined }}
@@ -855,6 +936,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
                       if (e.target.value === 'COUNT_DISTINCT') na[i].cardinality_hint = 'HIGH';
                       setAggregations(na);
                     }}
+                    onFocus={() => onFieldFocus && onFieldFocus('aggregations')}
                   >
                     <option value="COUNT">Count</option>
                     <option value="COUNT_DISTINCT">Count Unique</option>
@@ -891,6 +973,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
                         type="radio"
                         checked={a.cardinality_hint === 'LOW'}
                         onChange={() => { const na = [...aggregations]; na[i].cardinality_hint = 'LOW'; setAggregations(na); }}
+                        onFocus={() => onFieldFocus && onFieldFocus('count_distinct_LOW')}
                         style={{ width: 'auto', accentColor: 'var(--violet)' }}
                       />
                       Few unique values
@@ -900,6 +983,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
                         type="radio"
                         checked={a.cardinality_hint === 'HIGH'}
                         onChange={() => { const na = [...aggregations]; na[i].cardinality_hint = 'HIGH'; setAggregations(na); }}
+                        onFocus={() => onFieldFocus && onFieldFocus('count_distinct_HIGH')}
                         style={{ width: 'auto', accentColor: 'var(--violet)' }}
                       />
                       Many unique values
@@ -927,12 +1011,12 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
           iconColor="#f472b6"
           title="Alert Condition"
           tip={noWindowing
-            ? 'In real-time mode, write a JEXL expression that evaluates directly against event fields. Leave blank to alert on every matching event.'
+            ? 'In real-time mode, write a condition that checks event fields directly. Leave blank to alert on every matching event.'
             : 'Define when this rule fires an alert. Use the metric names you defined above. Leave empty to always record data without alerting.'}
         >
           {noWindowing ? (
             <div style={{ marginBottom: '0.75rem', padding: '0.6rem 0.875rem', background: 'rgba(251,191,36,0.06)', borderRadius: '7px', border: '1px solid rgba(251,191,36,0.2)' }}>
-              <p style={{ margin: 0, fontSize: '0.74rem', color: '#fbbf24', fontWeight: 500 }}>⚡ No-Window mode — evaluating raw event fields</p>
+              <p style={{ margin: 0, fontSize: '0.74rem', color: '#fbbf24', fontWeight: 500 }}>⚡ No-Window mode — checking raw event fields</p>
               <p style={{ margin: '0.3rem 0 0', fontSize: '0.71rem', color: 'var(--text-3)', lineHeight: 1.55 }}>
                 Reference event fields directly using dot notation.<br />
                 Examples: <code style={{ color: 'var(--violet-light)' }}>_data.authCode == "Y"</code>&nbsp;&nbsp;
@@ -942,11 +1026,13 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
               </p>
             </div>
           ) : null}
-          <VisualThresholdBuilder
-            expression={jexlExpression}
-            setExpression={setJexlExpression}
-            aggregations={noWindowing ? [] : aggregations}
-          />
+          <div onFocus={() => onFieldFocus && onFieldFocus('having_thresholds')}>
+            <VisualThresholdBuilder
+              expression={jexlExpression}
+              setExpression={setJexlExpression}
+              aggregations={noWindowing ? [] : aggregations}
+            />
+          </div>
         </Section>
 
         {/* ── Section 7: Outputs ──────────────────────────────── */}
@@ -966,6 +1052,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
               subtitle="Store aggregated metrics per time window. Use for trend analysis and dashboards."
               checked={aggSinkEnabled}
               onChange={e => setAggSinkEnabled(e.target.checked)}
+              onFocus={() => onFieldFocus && onFieldFocus('sinks')}
               disabled={noWindowing}
             />
             <SinkCard
@@ -975,14 +1062,16 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
               subtitle="Emit a real-time alert the moment a threshold is crossed."
               checked={anomalySinkEnabled}
               onChange={e => setAnomalySinkEnabled(e.target.checked)}
+              onFocus={() => onFieldFocus && onFieldFocus('sinks')}
             />
             <SinkCard
               id="sink-store"
               accentColor="var(--teal)"
               title="Add to Penalty List"
-              subtitle="Flag the breaching entity in Redis for immediate blocking by other services."
+              subtitle="Flag the breaching entity for immediate blocking by other services."
               checked={anomalyStoreSinkEnabled}
               onChange={e => setAnomalyStoreSinkEnabled(e.target.checked)}
+              onFocus={() => onFieldFocus && onFieldFocus('sinks')}
             />
           </div>
           {noWindowing && (
