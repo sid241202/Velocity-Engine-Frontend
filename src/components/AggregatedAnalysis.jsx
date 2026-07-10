@@ -575,12 +575,19 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
   const severityDistribution = useMemo(() => {
     const counts = {};
     for (const ev of anomalyData) {
-      const sev = String(ev.severity || ev.severityLevel || 'UNKNOWN').toUpperCase();
+      // Real anomaly events (Flink's AnomalyEvent) carry no severity field —
+      // only simulation-mode's mock events do. Fall back to the rule's own
+      // configured severity_level (same rules-lookup pattern as getRuleName
+      // above) so real breach data still shows a real severity mix instead
+      // of collapsing to a single "Unknown" slice.
+      const ruleId = ev.ruleId || ev.id || 'unknown';
+      const rule = rules.find(r => r.rule_metadata.rule_id === ruleId);
+      const sev = String(ev.severity || ev.severityLevel || rule?.rule_metadata?.severity_level || 'UNKNOWN').toUpperCase();
       counts[sev] = (counts[sev] || 0) + 1;
     }
     const colorMap = { CRITICAL: '#f85149', HIGH: '#ff7b72', MEDIUM: '#e3a008', LOW: '#3fb950', UNKNOWN: '#8b949e' };
     return Object.entries(counts).map(([name, value]) => ({ name, value, color: colorMap[name] || '#8b949e' }));
-  }, [anomalyData]);
+  }, [anomalyData, rules]);
 
   // Own bucket resolution for the anomaly rate sparkline — anomaly-analysis
   // isn't scoped to the agg query's date range (it's "last N anomalies"), so
