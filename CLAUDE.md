@@ -56,12 +56,20 @@ don't silently change WSO2 client behavior without confirming first.
 
 ## Branches
 
-- `release` — stable/demo branch, has full UI feature parity with mock data
-  fallbacks for demoing without a live backend.
-- `test-simulation` — dedicated simulation branch; `SIMULATION_MODE` wiring
-  with mock data generators, kept in sync with `release`'s components.
-- `rbac` — current RBAC work, cut from `release`, **not yet merged back**
-  (explicitly deferred by the user).
+- `release` — stable/demo branch. As of 2026-07-16, has the full RBAC
+  surface merged in (`--no-ff` merge commit `70b2005`) — real backend calls
+  only now, no `SIMULATION_MODE`/mock-data fallback (that was removed as
+  part of the RBAC work, not preserved through the merge).
+- `rbac` — the branch this work was developed on. Already merged into
+  `release`; kept around rather than deleted.
+- `test-simulation-refactored` — dedicated simulation branch (refactored
+  plain-language UI pass + `SIMULATION_MODE`/mock data generators); the only
+  simulation branch left. Deliberately never merged into `release` — still
+  requires explicit permission to merge.
+- The original `test-simulation` branch (pre-refactor) was superseded by
+  `test-simulation-refactored` and deleted 2026-07-16, both locally and on
+  `github`, at the user's explicit request — its full history is preserved
+  via `test-simulation-refactored`'s ancestry, nothing was lost.
 
 ## Dev server
 
