@@ -38,7 +38,7 @@ function formatTime(ts) {
   return formatISTDateTime(ts);
 }
 
-export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill, simulationMode }) {
+export default function HistoricalAnalysis({ rules, selectedRuleId, prefill, simulationMode }) {
   // Initialize datetime-local values in IST (not browser local time)
   const [startTs, setStartTs] = useState(() => toISTDatetimeLocal(Date.now() - 24 * 60 * 60 * 1000));
   const [endTs, setEndTs] = useState(() => toISTDatetimeLocal(Date.now()));
@@ -48,26 +48,15 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill, si
   const [error, setError] = useState('');
   const [sortCol, setSortCol] = useState('totalValue');
   const [sortDir, setSortDir] = useState('desc');
+  const [selectedGroup, setSelectedGroup] = useState('__ALL__');
   const abortRef = useRef(null);
 
-  const selectedRulesArr = useMemo(
-    () => rules.filter(r => selectedRuleIds.has(r.rule_metadata.rule_id)),
-    [rules, selectedRuleIds]
-  );
-
-  /* Historical analysis: one rule at a time. Use dropdown to pick from selected rules. */
-  const [chosenRuleId, setChosenRuleId] = useState('');
-
-  /* Auto-select the first selected rule */
-  const effectiveRuleId = useMemo(() => {
-    if (chosenRuleId && selectedRuleIds.has(chosenRuleId)) return chosenRuleId;
-    if (selectedRulesArr.length > 0) return selectedRulesArr[0].rule_metadata.rule_id;
-    return '';
-  }, [chosenRuleId, selectedRuleIds, selectedRulesArr]);
+  // A rule change should reset any group filter left over from the previous rule.
+  useEffect(() => { setSelectedGroup('__ALL__'); }, [selectedRuleId]);
 
   const selectedRule = useMemo(
-    () => rules.find(r => r.rule_metadata.rule_id === effectiveRuleId),
-    [rules, effectiveRuleId]
+    () => rules.find(r => r.rule_metadata.rule_id === selectedRuleId),
+    [rules, selectedRuleId]
   );
 
   // min = 7 days ago, max = now: past-7-day lookback, future dates blocked.
@@ -177,14 +166,14 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill, si
   }, [simulationMode, selectedRule, startTs, endTs]);
 
   // Cross-panel drill-through from the Anomaly feed: apply the prefilled
-  // rule + date range, then auto-run the query exactly once per prefill
-  // instance (nonce) once the derived state has actually settled to match —
-  // avoids firing on stale chosenRuleId/startTs/endTs from the previous tab.
+  // date range (rule selection itself is driven by the parent's selectedRuleId,
+  // set by the same drill-through action), then auto-run the query exactly once
+  // per prefill instance (nonce) once the derived state has actually settled to
+  // match — avoids firing on stale startTs/endTs from the previous tab.
   const prefillAppliedNonceRef = useRef(null);
 
   useEffect(() => {
     if (!prefill) return;
-    setChosenRuleId(prefill.ruleId);
     setStartTs(prefill.startTs);
     setEndTs(prefill.endTs);
   }, [prefill]);
@@ -192,11 +181,11 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill, si
   useEffect(() => {
     if (!prefill) return;
     if (prefillAppliedNonceRef.current === prefill.nonce) return;
-    if (effectiveRuleId !== prefill.ruleId) return;
+    if (selectedRuleId !== prefill.ruleId) return;
     if (startTs !== prefill.startTs || endTs !== prefill.endTs) return;
     prefillAppliedNonceRef.current = prefill.nonce;
     fetchData();
-  }, [prefill, effectiveRuleId, startTs, endTs, fetchData]);
+  }, [prefill, selectedRuleId, startTs, endTs, fetchData]);
 
   const handleStop = useCallback(() => {
     if (abortRef.current) {
@@ -208,13 +197,36 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill, si
   }, []);
 
   /* ───── Derived data ───── */
-  const totalMatches = data.length;
-  const uniqueGroupKeys = useMemo(() => new Set(data.map(r => r.groupKey)).size, [data]);
+
+  // ─── Group-by filter — only offered for rules that actually group by a
+  // non-global key, and populated dynamically from whatever groups appear in
+  // the fetched data. Selecting a group narrows the charts below to just that
+  // group; the Entity Details table and the two per-entity bar charts
+  // intentionally stay unfiltered so they can still be used to compare across
+  // groups. The forensic breakdown panels are computed server-side over the
+  // full result set and aren't filterable client-side.
+  const showGroupFilter = !!(selectedRule && Array.isArray(selectedRule.grouping?.keys) && selectedRule.grouping.keys.length > 0);
+
+  const availableGroups = useMemo(() => {
+    const set = new Set();
+    for (const row of data) {
+      if (row.groupKey) set.add(row.groupKey);
+    }
+    return [...set].sort();
+  }, [data]);
+
+  const chartRows = useMemo(() => {
+    if (selectedGroup === '__ALL__') return data;
+    return data.filter(r => r.groupKey === selectedGroup);
+  }, [data, selectedGroup]);
+
+  const totalMatches = chartRows.length;
+  const uniqueGroupKeys = useMemo(() => new Set(chartRows.map(r => r.groupKey)).size, [chartRows]);
 
   /* Area chart: aggregation values over time */
   const areaChartData = useMemo(() => {
     const timeMap = {};
-    for (const row of data) {
+    for (const row of chartRows) {
       const ts = row.window_start;
       if (!timeMap[ts]) timeMap[ts] = { window_start: ts };
       for (const alias of aggAliases) {
@@ -223,7 +235,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill, si
       }
     }
     return Object.values(timeMap).sort((a, b) => new Date(a.window_start) - new Date(b.window_start));
-  }, [data, aggAliases]);
+  }, [chartRows, aggAliases]);
 
   /* Top group keys table */
   const groupTableData = useMemo(() => {
@@ -259,7 +271,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill, si
      client-side from data already fetched — no backend dependency. */
   const heatmapData = useMemo(() => {
     const grid = {}; // dayKey -> [{count, breached}] x24
-    for (const row of data) {
+    for (const row of chartRows) {
       const ts = row.window_start;
       if (!ts) continue;
       const raw = String(ts).replace(' ', 'T');
@@ -275,7 +287,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill, si
     const dayKeys = Object.keys(grid).sort();
     const maxCount = Math.max(1, ...dayKeys.flatMap(dk => grid[dk].map(c => c.count)));
     return { dayKeys, grid, maxCount };
-  }, [data]);
+  }, [chartRows]);
 
   /* Bar chart: group key distribution */
   const groupBarData = useMemo(() => {
@@ -295,7 +307,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill, si
     }
   };
 
-  const ruleColor = selectedRule ? getRuleColor(rules, effectiveRuleId) : '#3b82f6';
+  const ruleColor = selectedRule ? getRuleColor(rules, selectedRuleId) : '#3b82f6';
   const hasData = data.length > 0;
 
   const thStyle = {
@@ -305,8 +317,8 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill, si
   };
   const tdStyle = { padding: '0.45rem 0.6rem', fontSize: '0.8rem', borderBottom: '1px solid rgba(255,255,255,0.04)' };
 
-  /* ───── Empty state: no selected rules ───── */
-  if (selectedRuleIds.size === 0) {
+  /* ───── Empty state: no selected rule ───── */
+  if (!selectedRuleId) {
     return (
       <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '500px', gap: '1.5rem' }}>
         <History size={64} color="var(--text-muted)" style={{ opacity: 0.3 }} />
@@ -358,20 +370,24 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill, si
         </div>
       )}
 
-      {/* Rule Picker + Date Range */}
+      {/* Group-by filter — only shown for rules that group by a non-global key */}
+      {showGroupFilter && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Group</label>
+          <select
+            value={selectedGroup}
+            onChange={e => setSelectedGroup(e.target.value)}
+            style={{ maxWidth: 260 }}
+            title="Filter the charts below to a single group. Entity tables and charts always show every group."
+          >
+            <option value="__ALL__">All Groups (Overview)</option>
+            {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
+          </select>
+        </div>
+      )}
+
+      {/* Date Range */}
       <div className="date-picker-row">
-        {selectedRulesArr.length > 1 && (
-          <div className="form-group" style={{ flex: 1.5, marginBottom: 0, minWidth: 200 }}>
-            <label className="form-label">Select Rule to Replay</label>
-            <select value={effectiveRuleId} onChange={e => setChosenRuleId(e.target.value)}>
-              {selectedRulesArr.map(r => (
-                <option key={r.rule_metadata.rule_id} value={r.rule_metadata.rule_id}>
-                  {r.rule_metadata.rule_name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
         <div className="form-group" style={{ flex: 1, marginBottom: 0, minWidth: 200 }}>
           <label className="form-label">From (IST)</label>
           <input type="datetime-local" value={startTs} onChange={e => setStartTs(e.target.value)} min={minDate} max={maxDate} />
@@ -467,7 +483,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleIds, prefill, si
               <div className="value">{uniqueGroupKeys.toLocaleString()}</div>
             </div>
             {aggAliases.map((alias, ai) => {
-              const total = data.reduce((s, r) => s + (r[alias] || 0), 0);
+              const total = chartRows.reduce((s, r) => s + (r[alias] || 0), 0);
               return (
                 <div key={alias} className="metric-card" style={{ flex: 1, minWidth: 140 }}>
                   <h3>Total {alias}</h3>

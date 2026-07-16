@@ -210,7 +210,7 @@ const CustomXAxisTick = (props) => {
 
 // ─── Main Component ────────────────────────────────────────────────────────
 
-export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelectedRuleIds, onDrillToHistorical, simulationMode }) {
+export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedRuleId, onDrillToHistorical, simulationMode }) {
   // Initialize datetime-local values in IST (not browser local time)
   const [startTs, setStartTs] = useState(() => toISTDatetimeLocal(Date.now() - 24 * 60 * 60 * 1000));
   const [endTs, setEndTs] = useState(() => toISTDatetimeLocal(Date.now()));
@@ -222,6 +222,10 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
   const [sortDir, setSortDir] = useState('desc');
   const [showAnomalyFeed, setShowAnomalyFeed] = useState(true);
   const [hiddenSeries, setHiddenSeries] = useState({});
+  const [selectedGroup, setSelectedGroup] = useState('__ALL__');
+
+  // A rule change should reset any group filter left over from the previous rule.
+  useEffect(() => { setSelectedGroup('__ALL__'); }, [selectedRuleId]);
 
   const handleLegendClick = useCallback((e) => {
     const key = e.dataKey;
@@ -229,9 +233,10 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
   }, []);
 
   const selectedRules = useMemo(
-    () => rules.filter(r => selectedRuleIds.has(r.rule_metadata.rule_id)),
-    [rules, selectedRuleIds]
+    () => rules.filter(r => r.rule_metadata.rule_id === selectedRuleId),
+    [rules, selectedRuleId]
   );
+  const currentRule = selectedRules[0] || null;
 
   // min = 7 days ago, no max — users may query into the future (returns empty results).
   const minDate = toISTDatetimeLocalFromOffset(-7 * 24 * 60 * 60 * 1000);
@@ -249,8 +254,8 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
   };
 
   const fetchData = useCallback(async () => {
-    if (selectedRuleIds.size === 0) {
-      setError('Please select at least one rule from the sidebar on the left.');
+    if (!selectedRuleId) {
+      setError('Please select a rule from the sidebar on the left.');
       return;
     }
     const validationErr = validate();
@@ -271,7 +276,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
       return;
     }
 
-    const ids = [...selectedRuleIds].join(',');
+    const ids = selectedRuleId;
     // Send naive IST strings to ClickHouse via backend
     const sFormatted = istDatetimeLocalToBackendStr(startTs);
     const eFormatted = istDatetimeLocalToBackendStr(endTs);
@@ -301,7 +306,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
     } finally {
       setLoading(false);
     }
-  }, [simulationMode, selectedRuleIds, startTs, endTs]);
+  }, [simulationMode, selectedRuleId, startTs, endTs]);
 
   const getRuleName = useCallback((ruleId) => {
     const match = rules.find(rule => rule.rule_metadata.rule_id === ruleId);
@@ -312,24 +317,45 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
   const allRows = useMemo(() => {
     const rows = [];
     for (const [ruleId, arr] of Object.entries(data)) {
-      if (!selectedRuleIds.has(ruleId)) continue;
+      if (ruleId !== selectedRuleId) continue;
       (arr || []).forEach(row => rows.push({ ...row, ruleId }));
     }
     return rows;
-  }, [data, selectedRuleIds]);
+  }, [data, selectedRuleId]);
 
-  const totalWindows = useMemo(() => allRows.length, [allRows]);
-  const totalBreaches = useMemo(() => allRows.filter(r => isBreached(r)).length, [allRows]);
+  // ─── Group-by filter — only offered for rules that actually group by a
+  // non-global key, and populated dynamically from whatever groups have shown
+  // up in the loaded data (new ones appear automatically as they arrive).
+  // Selecting a group narrows the charts below to just that group; the Entity
+  // Breach Ranking table and the anomaly feed intentionally stay unfiltered so
+  // they can still be used to compare across groups.
+  const showGroupFilter = !!(currentRule && Array.isArray(currentRule.grouping?.keys) && currentRule.grouping.keys.length > 0);
+
+  const availableGroups = useMemo(() => {
+    const set = new Set();
+    for (const row of allRows) {
+      if (row.groupKey) set.add(row.groupKey);
+    }
+    return [...set].sort();
+  }, [allRows]);
+
+  const chartRows = useMemo(() => {
+    if (selectedGroup === '__ALL__') return allRows;
+    return allRows.filter(r => r.groupKey === selectedGroup);
+  }, [allRows, selectedGroup]);
+
+  const totalWindows = useMemo(() => chartRows.length, [chartRows]);
+  const totalBreaches = useMemo(() => chartRows.filter(r => isBreached(r)).length, [chartRows]);
   const breachRate = useMemo(() => totalWindows > 0 ? (totalBreaches / totalWindows * 100) : 0, [totalBreaches, totalWindows]);
-  const uniqueGroups = useMemo(() => new Set(allRows.map(r => r.groupKey)).size, [allRows]);
-  const totalEvents = useMemo(() => allRows.reduce((s, r) => s + getRowEventCount(r), 0), [allRows]);
+  const uniqueGroups = useMemo(() => new Set(chartRows.map(r => r.groupKey)).size, [chartRows]);
+  const totalEvents = useMemo(() => chartRows.reduce((s, r) => s + getRowEventCount(r), 0), [chartRows]);
   const avgEventsPerWindow = useMemo(() => totalWindows > 0 ? (totalEvents / totalWindows).toFixed(1) : '0.0', [totalEvents, totalWindows]);
 
   /* ───── Peak Hour (most activity) ───── */
   const peakHour = useMemo(() => {
-    if (allRows.length === 0) return null;
+    if (chartRows.length === 0) return null;
     const hourMap = {};
-    for (const row of allRows) {
+    for (const row of chartRows) {
       // Parse space-separated IST string as IST by appending +05:30
       const raw = String(row.windowStart || '').replace(' ', 'T');
       const d = new Date(raw.includes('+') || raw.endsWith('Z') ? raw : raw + '+05:30');
@@ -344,11 +370,11 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
       if (count > maxCount) { maxCount = count; maxH = parseInt(h, 10); }
     }
     return { hour: maxH, count: maxCount };
-  }, [allRows]);
+  }, [chartRows]);
 
   /* ───── Auto-Insights ───── */
   const peakBreachPeriod = useMemo(() => {
-    const breachRows = allRows.filter(r => isBreached(r));
+    const breachRows = chartRows.filter(r => isBreached(r));
     if (breachRows.length === 0) return null;
     const hourMap = {};
     for (const row of breachRows) {
@@ -361,8 +387,11 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
       if (count > peakCount) { peakCount = count; peakH = parseInt(h, 10); }
     }
     return { hour: peakH, count: peakCount };
-  }, [allRows]);
+  }, [chartRows]);
 
+  // Intentionally reads allRows, not chartRows — this insight is about which
+  // group is riskiest, so it stays meaningful (not trivially "the one you
+  // already selected") regardless of the group filter above.
   const mostAtRiskGroup = useMemo(() => {
     if (allRows.length === 0) return null;
     const groupMap = {};
@@ -383,35 +412,40 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
 
   const ruleComparisons = useMemo(() => {
     const comparisons = [];
-    for (const ruleId of [...selectedRuleIds]) {
-      const rows = (data[ruleId] || []);
-      if (rows.length === 0) continue;
-      const breaches = rows.filter(r => isBreached(r)).length;
-      const total = rows.length;
-      const rate = total > 0 ? (breaches / total * 100) : 0;
-      const groupBreachMap = {};
-      for (const row of rows) {
-        if (isBreached(row)) {
-          const gk = row.groupKey || 'N/A';
-          groupBreachMap[gk] = (groupBreachMap[gk] || 0) + 1;
-        }
+    if (!selectedRuleId) return comparisons;
+    const ruleId = selectedRuleId;
+    const rows = (data[ruleId] || []);
+    if (rows.length === 0) return comparisons;
+    const breaches = rows.filter(r => isBreached(r)).length;
+    const total = rows.length;
+    const rate = total > 0 ? (breaches / total * 100) : 0;
+    const groupBreachMap = {};
+    for (const row of rows) {
+      if (isBreached(row)) {
+        const gk = row.groupKey || 'N/A';
+        groupBreachMap[gk] = (groupBreachMap[gk] || 0) + 1;
       }
-      let mostAffected = 'N/A', maxBreaches = 0;
-      for (const [gk, count] of Object.entries(groupBreachMap)) {
-        if (count > maxBreaches) { maxBreaches = count; mostAffected = gk; }
-      }
-      comparisons.push({ ruleId, ruleName: getRuleName(ruleId), breaches, total, rate, mostAffected, color: getRuleColor(rules, ruleId) });
     }
+    let mostAffected = 'N/A', maxBreaches = 0;
+    for (const [gk, count] of Object.entries(groupBreachMap)) {
+      if (count > maxBreaches) { maxBreaches = count; mostAffected = gk; }
+    }
+    comparisons.push({ ruleId, ruleName: getRuleName(ruleId), breaches, total, rate, mostAffected, color: getRuleColor(rules, ruleId) });
     return comparisons;
-  }, [data, selectedRuleIds, getRuleName, rules]);
+  }, [data, selectedRuleId, getRuleName, rules]);
 
-  /* ───── Consolidated Chart Data: Event Volume + Agg Metrics + Breach Markers ───── */
+  /* ───── Consolidated Chart Data: Event Volume + Agg Metrics + Breach Markers ─────
+     Event-volume/breach rows come from chartRows (group-filtered); the agg metric
+     values baked in below intentionally come from the full per-rule data (not
+     group-filtered) for the same reason aggLineDescriptors in LiveAnalysis does —
+     these are metric series across the whole rule, matching the pre-group-filter
+     behavior this consolidated chart has always had for aggregation values. */
   const { comboData, aggLines } = useMemo(() => {
     const timeMap = {};
     const lines = [];
 
-    // Build event-volume + breach-marker rows from allRows
-    for (const row of allRows) {
+    // Build event-volume + breach-marker rows from chartRows
+    for (const row of chartRows) {
       const ts = row.windowStart;
       if (!ts) continue;
       if (!timeMap[ts]) timeMap[ts] = { windowStart: ts, _tsMs: new Date(ts).getTime(), _breached: false };
@@ -425,7 +459,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
     }
 
     // Bake aggregation metric values into the same row map
-    for (const ruleId of [...selectedRuleIds]) {
+    for (const ruleId of (selectedRuleId ? [selectedRuleId] : [])) {
       const rows = data[ruleId] || [];
       if (!rows.length) continue;
       const aliasSet = new Set();
@@ -451,7 +485,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
 
     const sorted = Object.values(timeMap).sort((a, b) => a._tsMs - b._tsMs);
     return { comboData: sorted, aggLines: lines };
-  }, [allRows, data, selectedRuleIds, getRuleName, rules]);
+  }, [chartRows, data, selectedRuleId, getRuleName, rules]);
 
   // Breach timestamps for XAxis tick highlighting — derived from comboData
   const breachTimestamps = useMemo(
@@ -491,7 +525,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
   /* ───── Window Intensity bar data (bucketed) ───── */
   const breachBarData = useMemo(() => {
     const bucketMap = {};
-    for (const row of allRows) {
+    for (const row of chartRows) {
       const ts = row.windowStart;
       if (!ts) continue;
       const key = getBucketKey(ts, bucketResolution);
@@ -500,13 +534,13 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
       if (isBreached(row)) bucketMap[key].breached = true;
     }
     return Object.values(bucketMap).sort((a, b) => new Date(a.windowStart) - new Date(b.windowStart));
-  }, [allRows, bucketResolution]);
+  }, [chartRows, bucketResolution]);
 
   /* ───── Cumulative Breaches area data (bucketed) ───── */
   const cumulativeData = useMemo(() => {
     const perRule = {};
-    for (const ruleId of [...selectedRuleIds]) {
-      const ruleRows = allRows.filter(r => r.ruleId === ruleId);
+    for (const ruleId of (selectedRuleId ? [selectedRuleId] : [])) {
+      const ruleRows = chartRows.filter(r => r.ruleId === ruleId);
       const bucketMap = {};
       for (const row of ruleRows) {
         const ts = row.windowStart;
@@ -526,7 +560,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
     const lastCum = {};
     const merged = sortedTs.map(ts => {
       const point = { windowStart: ts };
-      for (const ruleId of [...selectedRuleIds]) {
+      for (const ruleId of (selectedRuleId ? [selectedRuleId] : [])) {
         const entry = (perRule[ruleId] || []).find(e => e.windowStart === ts);
         if (entry) lastCum[ruleId] = entry.cumBreaches;
         point[`cum_${ruleId}`] = lastCum[ruleId] || 0;
@@ -539,7 +573,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
     // this comparison ahead of time and pass it via closure.
     const breachIncrementTs = new Set();
     for (let i = 1; i < merged.length; i++) {
-      for (const ruleId of [...selectedRuleIds]) {
+      for (const ruleId of (selectedRuleId ? [selectedRuleId] : [])) {
         const key = `cum_${ruleId}`;
         if ((merged[i][key] || 0) > (merged[i - 1][key] || 0)) {
           breachIncrementTs.add(merged[i].windowStart);
@@ -548,7 +582,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
       }
     }
     return { merged, breachIncrementTs };
-  }, [allRows, selectedRuleIds, bucketResolution]);
+  }, [chartRows, selectedRuleId, bucketResolution]);
 
   const sortedAnomalyData = useMemo(() => {
     return [...anomalyData].sort((a, b) => {
@@ -721,7 +755,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
           <h2 style={{ color: 'var(--text-1)', margin: 0, fontSize: '0.95rem', fontWeight: 700, letterSpacing: '-0.02em' }}>Aggregated Rule Analysis</h2>
         </div>
         <p style={{ color: 'var(--text-3)', fontSize: '0.73rem', margin: 0 }}>
-          Analyze up to 7 days of historical results for the selected rules. Breach events are overlaid on every chart as red markers.
+          Analyze up to 7 days of historical results for the selected rule. Breach events are overlaid on every chart as red markers.
         </p>
       </div>
 
@@ -785,9 +819,9 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
         <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', gap: '0.875rem' }}>
           <BarChart3 size={52} color="var(--text-muted)" style={{ opacity: 0.2 }} />
           <div style={{ textAlign: 'center' }}>
-            {allSelectedRuleIds && allSelectedRuleIds.size > 0 && selectedRuleIds.size === 0 ? (
+            {allSelectedRuleId && !selectedRuleId ? (
               <>
-                <p style={{ color: 'var(--amber)', fontSize: '0.9rem', fontWeight: 600, margin: '0 0 0.3rem' }}>Selected rules are still in Draft</p>
+                <p style={{ color: 'var(--amber)', fontSize: '0.9rem', fontWeight: 600, margin: '0 0 0.3rem' }}>The selected rule is still in Draft</p>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: 0, maxWidth: 360 }}>
                   Draft rules aren't live yet, so there's no historical data to show.
                   Publish the rule to make it Active, or use Historical Replay to test it against past traffic instead.
@@ -797,7 +831,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
               <>
                 <p style={{ color: 'var(--text-2)', fontSize: '0.9rem', fontWeight: 600, margin: '0 0 0.3rem' }}>No data yet</p>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: 0, maxWidth: 320 }}>
-                  Select one or more rules from the sidebar, pick a time range, and click "Load Analytics".
+                  Select a rule from the sidebar, pick a time range, and click "Load Analytics".
                 </p>
               </>
             )}
@@ -807,6 +841,22 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
 
       {!loading && hasData && (
         <>
+          {/* Group-by filter — only shown for rules that group by a non-global key */}
+          {showGroupFilter && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Group</label>
+              <select
+                value={selectedGroup}
+                onChange={e => setSelectedGroup(e.target.value)}
+                style={{ maxWidth: 260 }}
+                title="Filter the charts below to a single group. The Entity Breach Ranking table and anomaly feed always show every group."
+              >
+                <option value="__ALL__">All Groups (Overview)</option>
+                {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
+          )}
+
           {/* Auto-Insights Panel */}
           <div style={{
             background: 'rgba(255,255,255,0.02)',
@@ -1374,7 +1424,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleIds, allSelected
                   {groupTableData.length === 0 && (
                     <tr>
                       <td colSpan={7} style={{ ...tdStyle, textAlign: 'center', color: 'var(--text-3)', padding: '2.5rem' }}>
-                        No entity data available for the selected rules and time range.
+                        No entity data available for the selected rule and time range.
                       </td>
                     </tr>
                   )}

@@ -17,7 +17,7 @@ const STATUS_MAP = {
 };
 
 export default function SavedRulesSidebar({
-  rules, fetchRules, selectedRuleIds, toggleRuleSelection, activeTab, navigateToSummary
+  rules, fetchRules, selectedRuleId, toggleRuleSelection, activeTab, navigateToSummary
 }) {
   const isAnalysisPage = ['live', 'agg', 'historical'].includes(activeTab);
   // Live and Agg analysis only work for non-DRAFT rules
@@ -41,7 +41,7 @@ export default function SavedRulesSidebar({
       {isAnalysisPage && rules.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.75rem', padding: '0.35rem 0.6rem', background: 'var(--violet-subtle)', borderRadius: '6px', border: '1px solid rgba(124,58,237,0.15)' }}>
           <TrendingUp size={11} color="var(--violet-light)" />
-          <span style={{ fontSize: '0.68rem', color: 'var(--violet-light)', fontWeight: 500 }}>Click a rule to include in analysis</span>
+          <span style={{ fontSize: '0.68rem', color: 'var(--violet-light)', fontWeight: 500 }}>Click a rule to analyze it — selecting a new one replaces the current selection</span>
         </div>
       )}
 
@@ -49,7 +49,7 @@ export default function SavedRulesSidebar({
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.45rem', minHeight: 0 }}>
         {rules.map(r => {
           const ruleId    = r.rule_metadata.rule_id;
-          const isSelected = selectedRuleIds.has(ruleId);
+          const isSelected = selectedRuleId === ruleId;
           const color     = getRuleColor(rules, ruleId);
           const meta      = r.rule_metadata;
           const statusInfo = STATUS_MAP[meta.status] || STATUS_MAP.DRAFT;

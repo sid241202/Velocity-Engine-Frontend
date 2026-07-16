@@ -38,7 +38,9 @@ const SIMULATION_MODE = true;
 export default function Dashboard() {
   const [activeTab, setActiveTab]         = useState('live');
   const [rules, setRules]                 = useState([]);
-  const [selectedRuleIds, setSelectedRuleIds] = useState(new Set());
+  // Single-select: choosing a rule replaces whatever was previously selected
+  // (radio-button behavior, not a multi-select checkbox list).
+  const [selectedRuleId, setSelectedRuleId] = useState(null);
   const [summaryRuleId, setSummaryRuleId] = useState(null);
   const [backendStatus, setBackendStatus] = useState('connecting');
   const [editingRule, setEditingRule]     = useState(null);
@@ -92,16 +94,14 @@ export default function Dashboard() {
   // Auto-select the mock rule on mount in simulation mode.
   useEffect(() => {
     if (SIMULATION_MODE) {
-      setSelectedRuleIds(new Set([MOCK_RULE_ID]));
+      setSelectedRuleId(MOCK_RULE_ID);
     }
   }, []);
 
   const toggleRuleSelection = (ruleId) => {
-    setSelectedRuleIds(prev => {
-      const next = new Set(prev);
-      if (next.has(ruleId)) next.delete(ruleId); else next.add(ruleId);
-      return next;
-    });
+    // Radio-button behavior: clicking the already-selected rule deselects it,
+    // clicking a different rule replaces the current selection.
+    setSelectedRuleId(prev => (prev === ruleId ? null : ruleId));
   };
 
   const navigateToSummary = (ruleId) => {
@@ -125,11 +125,7 @@ export default function Dashboard() {
   // — this gets you to the right rule + right time window, not a pre-applied
   // entity filter.)
   const drillToHistorical = (ruleId, aroundTs) => {
-    setSelectedRuleIds(prev => {
-      const next = new Set(prev);
-      next.add(ruleId);
-      return next;
-    });
+    setSelectedRuleId(ruleId);
     const centerEpoch = parseISTStringToEpochMs(aroundTs);
     const nowEpoch = Date.now();
     const sevenDaysAgo = nowEpoch - 7 * 24 * 60 * 60 * 1000;
@@ -153,18 +149,16 @@ export default function Dashboard() {
     { key: 'summary',    label: 'Rule Summary',      icon: Shield,      tip: 'View and manage a specific rule' },
   ];
 
-  // Determine which rules a draft user can access per panel
+  // Determine which rule a draft user can access per panel
   // Draft rules: ONLY historical analysis allowed
   // Prod/Paused rules: all panels allowed
-  const analysisSelectedIds = selectedRuleIds;
+  const analysisSelectedId = selectedRuleId;
 
-  // For Live and Agg: filter out DRAFT rules with a tooltip
-  const prodSelectedIds = new Set(
-    [...selectedRuleIds].filter(id => {
-      const rule = rules.find(r => r.rule_metadata.rule_id === id);
-      return rule && rule.rule_metadata.status !== 'DRAFT';
-    })
-  );
+  // For Live and Agg: null out the selection if it's a DRAFT rule
+  const selectedRuleRecord = rules.find(r => r.rule_metadata.rule_id === selectedRuleId);
+  const prodSelectedId = (selectedRuleRecord && selectedRuleRecord.rule_metadata.status !== 'DRAFT')
+    ? selectedRuleId
+    : null;
 
   return (
     <div className="app-container">
@@ -294,7 +288,7 @@ export default function Dashboard() {
           <SavedRulesSidebar
             rules={rules}
             fetchRules={fetchRules}
-            selectedRuleIds={selectedRuleIds}
+            selectedRuleId={selectedRuleId}
             toggleRuleSelection={toggleRuleSelection}
             activeTab={activeTab}
             navigateToSummary={navigateToSummary}
@@ -316,7 +310,7 @@ export default function Dashboard() {
           <div style={{ display: activeTab === 'live' ? 'block' : 'none' }}
                className={activeTab === 'live' ? 'animate-fade-in' : ''}>
             <ErrorBoundary label="Live Analysis" showDetails={true}>
-              <LiveAnalysis rules={rules} selectedRuleIds={prodSelectedIds} allSelectedRuleIds={selectedRuleIds} simulationMode={SIMULATION_MODE} />
+              <LiveAnalysis rules={rules} selectedRuleId={prodSelectedId} allSelectedRuleId={selectedRuleId} simulationMode={SIMULATION_MODE} />
             </ErrorBoundary>
           </div>
 
@@ -324,7 +318,7 @@ export default function Dashboard() {
           <div style={{ display: activeTab === 'agg' ? 'block' : 'none' }}
                className={activeTab === 'agg' ? 'animate-fade-in' : ''}>
             <ErrorBoundary label="Aggregated Analysis">
-              <AggregatedAnalysis rules={rules} selectedRuleIds={prodSelectedIds} allSelectedRuleIds={selectedRuleIds} onDrillToHistorical={drillToHistorical} simulationMode={SIMULATION_MODE} />
+              <AggregatedAnalysis rules={rules} selectedRuleId={prodSelectedId} allSelectedRuleId={selectedRuleId} onDrillToHistorical={drillToHistorical} simulationMode={SIMULATION_MODE} />
             </ErrorBoundary>
           </div>
 
@@ -332,7 +326,7 @@ export default function Dashboard() {
           <div style={{ display: activeTab === 'historical' ? 'block' : 'none' }}
                className={activeTab === 'historical' ? 'animate-fade-in' : ''}>
             <ErrorBoundary label="Historical Analysis">
-              <HistoricalAnalysis rules={rules} selectedRuleIds={analysisSelectedIds} prefill={historicalPrefill} simulationMode={SIMULATION_MODE} />
+              <HistoricalAnalysis rules={rules} selectedRuleId={analysisSelectedId} prefill={historicalPrefill} simulationMode={SIMULATION_MODE} />
             </ErrorBoundary>
           </div>
 
