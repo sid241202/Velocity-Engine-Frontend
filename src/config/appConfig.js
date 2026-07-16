@@ -35,12 +35,24 @@ export const MAX_AGGREGATIONS         = 3;
 // (see src/context/RBACContext.jsx). Returns { user_id, roles[], permissions[] }.
 export const ME_ENDPOINT = `${API_BASE}/me`;
 
+// getEnvVar: checks a runtime-injected window._env_ override first (see
+// public/env-config.js in Docker deployments), then build-time Vite env,
+// then falls back to the given default.
+const getEnvVar = (key, defaultValue) => {
+  return (window._env_ && window._env_[key]) || import.meta.env[key] || defaultValue;
+};
+
+// AUTH_MODE selects which identity path is active, mirroring the backend's
+// config.AuthMode ("dev" | "wso2"):
+//   - "dev":  the X-Debug-User-Id header shim below, kept as a local dev/demo
+//             fallback for when a live WSO2 instance isn't reachable.
+//   - "wso2": real WSO2/OIDC tokens (see AuthService.js) — getAuthHeaders()
+//             in apiClient.js attaches Authorization: Bearer <access_token>
+//             instead of the debug header.
+export const AUTH_MODE = getEnvVar('REACT_APP_AUTH_MODE', 'dev');
+
 // TEMPORARY PRE-WSO2 IDENTITY SHIM — mirrors the backend's AuthDevMode
-// (internal/middleware/auth.go). Real identity comes from a WSO2/OIDC token
-// once that phase lands; until then, every authenticated request carries this
-// header so the backend's dev-mode IdentityMiddleware can resolve a user id.
-// Must be replaced by real token-based identity before any non-development
-// deployment — same caveat as the backend side.
+// (internal/middleware/auth.go). Only used when AUTH_MODE === 'dev'.
 export const AUTH_DEBUG_HEADER_NAME     = 'X-Debug-User-Id';
 export const AUTH_DEBUG_USER_ID_STORAGE_KEY = 'velocity_debug_user_id';
 export const AUTH_DEBUG_DEFAULT_USER_ID = '1';
@@ -50,24 +62,16 @@ export const AUTH_DEBUG_DEFAULT_USER_ID = '1';
 // config file" note at the top of this file. Only src/services/AuthService.js
 // imports this today.
 //
-// SECURITY NOTE: client_secret below is a hardcoded fallback shipped in the
-// frontend bundle — anything sent to the browser is publicly visible to
-// anyone who opens devtools, so this is not actually a secret once deployed.
-// A public OIDC client (SPA) should not have a client_secret at all — it
-// should use Authorization Code + PKCE only (code_challenge_method is
-// already set to S256 below, which is correct). Flagging this for a
-// deliberate decision, not silently changing WSO2 client behavior here.
-const getEnvVar = (key, defaultValue) => {
-  return (window._env_ && window._env_[key]) || import.meta.env[key] || defaultValue;
-};
-
+// client_secret was removed here (demo-wso2): this is now a pure public-
+// client PKCE flow (code_challenge_method: 'S256' below, already correct;
+// AuthService.js's login()/handleCallback() already generate and send a real
+// PKCE code_verifier/code_challenge). Requires the WSO2 service provider for
+// this client_id to be registered as a public client (no secret) IdP-side.
 export const authConfig = {
   // WSO2 Identity Server Authority (Base URL)
   authority: getEnvVar('REACT_APP_WSO2_AUTHORITY', 'https://sso.uidai.net.in/oauth2'),
 
   client_id: getEnvVar('REACT_APP_CLIENT_ID', '9HGuTetQjRjxkx1vHmoP1v0fXm8a'),
-
-  client_secret: getEnvVar('REACT_APP_CLIENT_SECRET', 'RlsK9p2f4kJ_iKBZLSgiBYuIKjQa'),
 
   redirect_uri: getEnvVar('REACT_APP_REDIRECT_URI', 'http://localhost:3000/callback'),
 

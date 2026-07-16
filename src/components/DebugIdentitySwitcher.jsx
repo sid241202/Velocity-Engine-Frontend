@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import { UserCog } from 'lucide-react';
 import { useRBAC } from '../context/RBACContext';
+import { AUTH_MODE } from '../config/appConfig';
 
 /**
- * DebugIdentitySwitcher — TEMPORARY pre-WSO2 dev tool.
+ * DebugIdentitySwitcher — dev-mode-only tool (AUTH_MODE === 'dev').
  *
  * Lets whoever is testing locally switch which MySQL `users.id` the app
  * authenticates as, by changing the X-Debug-User-Id header value that
- * RBACContext sends to GET /me (mirrors the backend's AuthDevMode identity
- * shim — see internal/middleware/auth.go). This has no effect once real
- * WSO2/OIDC tokens replace the header shim; delete this component then.
+ * RBACContext sends to GET /me (mirrors the backend's AuthMode="dev" shim —
+ * see internal/middleware/auth.go). Renders nothing when AUTH_MODE is
+ * "wso2" — kept, not deleted, as a local dev/demo fallback for when a live
+ * WSO2 instance isn't reachable (same reasoning as the backend keeping its
+ * "dev" AuthMode path alongside "wso2").
  *
  * There is no fixed dropdown of "known" users here because seed `users`
  * rows are created manually in each environment (only roles/permissions
@@ -18,6 +21,8 @@ import { useRBAC } from '../context/RBACContext';
 export default function DebugIdentitySwitcher() {
   const { userId, roles, loading, error, debugUserId, setDebugUserId } = useRBAC();
   const [draft, setDraft] = useState(debugUserId);
+
+  if (AUTH_MODE !== 'dev') return null;
 
   const applyDraft = () => {
     const trimmed = draft.trim();

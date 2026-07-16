@@ -1,10 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ME_ENDPOINT,
-  AUTH_DEBUG_HEADER_NAME,
   AUTH_DEBUG_USER_ID_STORAGE_KEY,
   AUTH_DEBUG_DEFAULT_USER_ID,
 } from '../config/appConfig';
+import { getAuthHeaders } from '../services/apiClient';
 
 const RBACContext = createContext(null);
 
@@ -45,7 +45,7 @@ export function RBACProvider({ children }) {
     setState((prev) => ({ ...prev, loading: true, error: '' }));
     try {
       const res = await fetch(ME_ENDPOINT, {
-        headers: { [AUTH_DEBUG_HEADER_NAME]: debugUserId },
+        headers: await getAuthHeaders(),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));

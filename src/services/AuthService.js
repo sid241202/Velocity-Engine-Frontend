@@ -249,7 +249,6 @@ class AuthService {
         code: code,
         redirect_uri: authConfig.redirect_uri,
         client_id: authConfig.client_id,
-        client_secret: authConfig.client_secret,
         code_verifier: codeVerifier
       };
       

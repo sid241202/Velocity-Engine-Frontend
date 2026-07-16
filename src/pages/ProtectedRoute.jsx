@@ -1,16 +1,7 @@
-/**
- * ProtectedRoute Component
- *
- * WSO2 OAuth is TEMPORARILY DISABLED.
- * This component now passes children through unconditionally.
- *
- * To re-enable WSO2 auth, restore the original implementation below.
- */
-
-/*  ── ORIGINAL WSO2 IMPLEMENTATION (preserved for re-enablement) ────────────
 import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import authService from '../services/AuthService';
+import { AUTH_MODE } from '../config/appConfig';
 
 const ProtectedRoute = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(null);
@@ -22,8 +13,7 @@ const ProtectedRoute = ({ children }) => {
 
   const checkAuth = async () => {
     try {
-      const devMode = sessionStorage.getItem('dev_mode') === 'true';
-      if (devMode) {
+      if (AUTH_MODE === 'dev') {
         setIsAuthenticated(true);
         setIsLoading(false);
         return;
@@ -66,14 +56,6 @@ const ProtectedRoute = ({ children }) => {
     return <Navigate to="/" replace />;
   }
 
-  return children;
-};
-──────────────────────────────────────────────────────────────────────────── */
-
-import React from 'react';
-
-// WSO2_DISABLED: Auth bypass — render children unconditionally
-const ProtectedRoute = ({ children }) => {
   return children;
 };
 
