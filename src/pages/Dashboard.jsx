@@ -8,8 +8,22 @@ import LiveAnalysis from '../components/LiveAnalysis';
 import AggregatedAnalysis from '../components/AggregatedAnalysis';
 import HistoricalAnalysis from '../components/HistoricalAnalysis';
 import ErrorBoundary from '../components/ErrorBoundary';
+import PermissionGuard from '../components/PermissionGuard';
+import DebugIdentitySwitcher from '../components/DebugIdentitySwitcher';
 import { API_BASE } from '../config/appConfig';
 import { toISTDatetimeLocal, parseISTStringToEpochMs } from '../utils/istUtils';
+import { useRBAC } from '../context/RBACContext';
+import { PERMISSIONS } from '../permissions';
+
+// build's tab also doubles as the rule-edit surface (navigateToEdit routes
+// here), so it accepts create OR update rather than requiring create alone.
+const NAV_ITEMS = [
+  { key: 'live',       label: 'Live Stream',       icon: Activity,   tip: 'Real-time event stream & breach detection', anyOf: [PERMISSIONS.LIVE_ANALYSIS_READ] },
+  { key: 'agg',        label: 'Analytics',         icon: BarChart3,  tip: 'Aggregated rule analysis over a custom date range', anyOf: [PERMISSIONS.AGGREGATED_ANALYSIS_READ] },
+  { key: 'historical', label: 'Historical Replay', icon: History,    tip: 'Replay and test rules on historical data', anyOf: [PERMISSIONS.HISTORICAL_ANALYSIS_READ] },
+  { key: 'build',      label: 'Create Rule',       icon: PlusSquare, tip: 'Build a new anomaly detection rule', anyOf: [PERMISSIONS.RULES_CREATE, PERMISSIONS.RULES_UPDATE] },
+  { key: 'summary',    label: 'Rule Summary',      icon: Shield,     tip: 'View and manage a specific rule', anyOf: [PERMISSIONS.RULES_READ] },
+];
 
 /**
  * Dashboard — all five panels are always mounted (display:none when inactive).
@@ -27,6 +41,7 @@ import { toISTDatetimeLocal, parseISTStringToEpochMs } from '../utils/istUtils';
  * because the JS runtime is destroyed — no extra logic needed.
  */
 export default function Dashboard() {
+  const { hasAnyPermission, loading: rbacLoading } = useRBAC();
   const [activeTab, setActiveTab]         = useState('live');
   const [rules, setRules]                 = useState([]);
   const [selectedRuleIds, setSelectedRuleIds] = useState(new Set());
@@ -73,6 +88,19 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => { fetchRules(); }, [fetchRules]);
+
+  // If the current tab isn't permitted for this user's role (e.g. the
+  // default 'live' tab for a role without live_analysis:read), jump to the
+  // first tab they can actually access instead of landing on a 403.
+  useEffect(() => {
+    if (rbacLoading) return;
+    const current = NAV_ITEMS.find(n => n.key === activeTab);
+    if (current && !hasAnyPermission(current.anyOf)) {
+      const firstAllowed = NAV_ITEMS.find(n => hasAnyPermission(n.anyOf));
+      if (firstAllowed) handleTabChange(firstAllowed.key);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rbacLoading, activeTab]);
 
   const toggleRuleSelection = (ruleId) => {
     setSelectedRuleIds(prev => {
@@ -123,14 +151,6 @@ export default function Dashboard() {
     handleTabChange('historical');
   };
 
-  const navItems = [
-    { key: 'live',       label: 'Live Stream',       icon: Activity,   tip: 'Real-time event stream & breach detection' },
-    { key: 'agg',        label: 'Analytics',         icon: BarChart3,   tip: 'Aggregated rule analysis over a custom date range' },
-    { key: 'historical', label: 'Historical Replay', icon: History,     tip: 'Replay and test rules on historical data' },
-    { key: 'build',      label: 'Create Rule',       icon: PlusSquare,  tip: 'Build a new anomaly detection rule' },
-    { key: 'summary',    label: 'Rule Summary',      icon: Shield,      tip: 'View and manage a specific rule' },
-  ];
-
   // Determine which rules a draft user can access per panel
   // Draft rules: ONLY historical analysis allowed
   // Prod/Paused rules: all panels allowed
@@ -153,6 +173,7 @@ export default function Dashboard() {
         </div>
         <h1>Velocity Engine</h1>
         <div className="header-right">
+          <DebugIdentitySwitcher />
           <span style={{ fontSize: '0.68rem', color: 'var(--text-3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>UIDAI · Auth Analytics</span>
           <span
             className={`conn-pill ${
@@ -233,17 +254,22 @@ export default function Dashboard() {
 
       {/* Nav */}
       <nav className="nav-bar">
-        {navItems.map(({ key, label, icon: Icon, tip }) => (
-          <button
-            key={key}
-            className={`nav-btn ${activeTab === key ? 'active' : ''}`}
-            onClick={() => handleTabChange(key)}
-            title={tip}
-          >
-            <Icon size={15} />
-            {label}
-          </button>
-        ))}
+        {NAV_ITEMS.map(({ key, label, icon: Icon, tip, anyOf }) => {
+          const allowed = rbacLoading || hasAnyPermission(anyOf);
+          return (
+            <button
+              key={key}
+              className={`nav-btn ${activeTab === key ? 'active' : ''}`}
+              onClick={() => allowed && handleTabChange(key)}
+              disabled={!allowed}
+              style={!allowed ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+              title={allowed ? tip : `Your role doesn't have access to ${label} (requires ${anyOf.join(' or ')})`}
+            >
+              <Icon size={15} />
+              {label}
+            </button>
+          );
+        })}
       </nav>
 
       {/* Main layout */}
@@ -274,7 +300,9 @@ export default function Dashboard() {
           <div style={{ display: activeTab === 'live' ? 'block' : 'none' }}
                className={activeTab === 'live' ? 'animate-fade-in' : ''}>
             <ErrorBoundary label="Live Analysis" showDetails={true}>
-              <LiveAnalysis rules={rules} selectedRuleIds={prodSelectedIds} allSelectedRuleIds={selectedRuleIds} />
+              <PermissionGuard permission={PERMISSIONS.LIVE_ANALYSIS_READ} label="Live Stream">
+                <LiveAnalysis rules={rules} selectedRuleIds={prodSelectedIds} allSelectedRuleIds={selectedRuleIds} />
+              </PermissionGuard>
             </ErrorBoundary>
           </div>
 
@@ -282,7 +310,9 @@ export default function Dashboard() {
           <div style={{ display: activeTab === 'agg' ? 'block' : 'none' }}
                className={activeTab === 'agg' ? 'animate-fade-in' : ''}>
             <ErrorBoundary label="Aggregated Analysis">
-              <AggregatedAnalysis rules={rules} selectedRuleIds={prodSelectedIds} allSelectedRuleIds={selectedRuleIds} onDrillToHistorical={drillToHistorical} />
+              <PermissionGuard permission={PERMISSIONS.AGGREGATED_ANALYSIS_READ} label="Analytics">
+                <AggregatedAnalysis rules={rules} selectedRuleIds={prodSelectedIds} allSelectedRuleIds={selectedRuleIds} onDrillToHistorical={drillToHistorical} />
+              </PermissionGuard>
             </ErrorBoundary>
           </div>
 
@@ -290,7 +320,9 @@ export default function Dashboard() {
           <div style={{ display: activeTab === 'historical' ? 'block' : 'none' }}
                className={activeTab === 'historical' ? 'animate-fade-in' : ''}>
             <ErrorBoundary label="Historical Analysis">
-              <HistoricalAnalysis rules={rules} selectedRuleIds={analysisSelectedIds} prefill={historicalPrefill} />
+              <PermissionGuard permission={PERMISSIONS.HISTORICAL_ANALYSIS_READ} label="Historical Replay">
+                <HistoricalAnalysis rules={rules} selectedRuleIds={analysisSelectedIds} prefill={historicalPrefill} />
+              </PermissionGuard>
             </ErrorBoundary>
           </div>
 
@@ -299,12 +331,14 @@ export default function Dashboard() {
             <div style={{ display: activeTab === 'build' ? 'block' : 'none' }}
                  className={activeTab === 'build' ? 'animate-fade-in' : ''}>
               <ErrorBoundary label="Rule Builder">
-                <RuleBuilderPage
-                  rules={rules}
-                  fetchRules={fetchRules}
-                  editingRule={editingRule}
-                  onEditComplete={handleEditComplete}
-                />
+                <PermissionGuard anyOf={[PERMISSIONS.RULES_CREATE, PERMISSIONS.RULES_UPDATE]} label="Create Rule">
+                  <RuleBuilderPage
+                    rules={rules}
+                    fetchRules={fetchRules}
+                    editingRule={editingRule}
+                    onEditComplete={handleEditComplete}
+                  />
+                </PermissionGuard>
               </ErrorBoundary>
             </div>
           )}
@@ -314,11 +348,13 @@ export default function Dashboard() {
             <div style={{ display: activeTab === 'summary' ? 'block' : 'none' }}
                  className={activeTab === 'summary' ? 'animate-fade-in' : ''}>
               <ErrorBoundary label="Rule Details">
-                <RuleSummaryPanel
-                  rule={rules.find(r => r.rule_metadata?.rule_id === summaryRuleId)}
-                  fetchRules={fetchRules}
-                  navigateToEdit={navigateToEdit}
-                />
+                <PermissionGuard permission={PERMISSIONS.RULES_READ} label="Rule Summary">
+                  <RuleSummaryPanel
+                    rule={rules.find(r => r.rule_metadata?.rule_id === summaryRuleId)}
+                    fetchRules={fetchRules}
+                    navigateToEdit={navigateToEdit}
+                  />
+                </PermissionGuard>
               </ErrorBoundary>
             </div>
           )}

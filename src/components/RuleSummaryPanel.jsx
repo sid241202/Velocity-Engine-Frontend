@@ -1,16 +1,28 @@
 import React from 'react';
 import { Send, PlayCircle, PauseCircle, Trash2, Shield, Clock, Filter, Layers, BarChart3, AlertTriangle, Zap, Pencil } from 'lucide-react';
-import { API_BASE } from '../config/appConfig';
+import { API_BASE, AUTH_DEBUG_HEADER_NAME } from '../config/appConfig';
+import { useRBAC } from '../context/RBACContext';
+import RequirePermission from './RequirePermission';
+import { PERMISSIONS } from '../permissions';
 
 export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
   const [isActioning, setIsActioning] = React.useState(false);
+  const { debugUserId } = useRBAC();
 
+  // rules:publish and rules:delete are enforced server-side (see
+  // internal/middleware/auth.go RequirePermission on POST /rules/:id/prod
+  // and DELETE /rules/:id) — these calls need the same identity header
+  // RBACContext uses for GET /me so the backend can resolve who's asking.
   const publishRule = async (id) => {
     if (isActioning) return;
     setIsActioning(true);
     try {
-      const res = await fetch(`${API_BASE}/rules/${id}/prod`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/rules/${id}/prod`, {
+        method: 'POST',
+        headers: { [AUTH_DEBUG_HEADER_NAME]: debugUserId },
+      });
       if (res.ok) { alert('Rule published successfully!'); fetchRules(); }
+      else if (res.status === 403) { alert("You don't have permission to publish rules."); }
       else { alert('Failed to publish. Check backend logs.'); }
     } catch (e) { console.error(e); alert('Network error.'); }
     finally { setIsActioning(false); }
@@ -36,8 +48,12 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
     if (isActioning) return;
     setIsActioning(true);
     try {
-      const res = await fetch(`${API_BASE}/rules/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE}/rules/${id}`, {
+        method: 'DELETE',
+        headers: { [AUTH_DEBUG_HEADER_NAME]: debugUserId },
+      });
       if (res.ok) { alert('Rule deleted successfully.'); fetchRules(); }
+      else if (res.status === 403) { alert("You don't have permission to delete rules."); }
       else { alert('Failed to delete. Check backend logs.'); }
     } catch (e) { console.error(e); alert('Network error.'); }
     finally { setIsActioning(false); }
@@ -434,9 +450,19 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
         {/* DRAFT: Publish + Edit */}
         {meta.status === 'DRAFT' && (
           <>
-            <button className="btn btn-accent" style={{ flex: 1, justifyContent: 'center', fontSize: '0.9rem' }} onClick={() => publishRule(meta.rule_id)} disabled={isActioning} title="Makes this rule live — it will start evaluating real traffic.">
-              <Send size={16} /> {isActioning ? 'Publishing…' : 'Publish Rule'}
-            </button>
+            <RequirePermission permission={PERMISSIONS.RULES_PUBLISH}>
+              {(allowed) => (
+                <button
+                  className="btn btn-accent"
+                  style={{ flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
+                  onClick={() => publishRule(meta.rule_id)}
+                  disabled={isActioning || !allowed}
+                  title={!allowed ? "Your role doesn't have permission to publish rules (requires rules:publish)" : "Makes this rule live — it will start evaluating real traffic."}
+                >
+                  <Send size={16} /> {isActioning ? 'Publishing…' : 'Publish Rule'}
+                </button>
+              )}
+            </RequirePermission>
             <button
               className="btn"
               style={{ background: 'rgba(99,102,241,0.2)', border: '1px solid rgba(99,102,241,0.4)', color: '#a5b4fc', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
@@ -476,9 +502,19 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
           </>
         )}
 
-        <button className="btn" style={{ background: 'var(--danger)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }} onClick={() => deleteRule(meta.rule_id)} disabled={isActioning}>
-          <Trash2 size={16} /> {isActioning ? 'Deleting…' : 'Delete'}
-        </button>
+        <RequirePermission permission={PERMISSIONS.RULES_DELETE}>
+          {(allowed) => (
+            <button
+              className="btn"
+              style={{ background: 'var(--danger)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
+              onClick={() => deleteRule(meta.rule_id)}
+              disabled={isActioning || !allowed}
+              title={!allowed ? "Your role doesn't have permission to delete rules (requires rules:delete)" : undefined}
+            >
+              <Trash2 size={16} /> {isActioning ? 'Deleting…' : 'Delete'}
+            </button>
+          )}
+        </RequirePermission>
       </div>
     </div>
   );
