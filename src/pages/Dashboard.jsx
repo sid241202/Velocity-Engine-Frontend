@@ -44,7 +44,9 @@ export default function Dashboard() {
   const { hasAnyPermission, loading: rbacLoading } = useRBAC();
   const [activeTab, setActiveTab]         = useState('live');
   const [rules, setRules]                 = useState([]);
-  const [selectedRuleIds, setSelectedRuleIds] = useState(new Set());
+  // Single-select: choosing a rule replaces whatever was previously selected
+  // (radio-button behavior, not a multi-select checkbox list).
+  const [selectedRuleId, setSelectedRuleId] = useState(null);
   const [summaryRuleId, setSummaryRuleId] = useState(null);
   const [backendStatus, setBackendStatus] = useState('connecting');
   const [editingRule, setEditingRule]     = useState(null);
@@ -103,11 +105,9 @@ export default function Dashboard() {
   }, [rbacLoading, activeTab]);
 
   const toggleRuleSelection = (ruleId) => {
-    setSelectedRuleIds(prev => {
-      const next = new Set(prev);
-      if (next.has(ruleId)) next.delete(ruleId); else next.add(ruleId);
-      return next;
-    });
+    // Radio-button behavior: clicking the already-selected rule deselects it,
+    // clicking a different rule replaces the current selection.
+    setSelectedRuleId(prev => (prev === ruleId ? null : ruleId));
   };
 
   const navigateToSummary = (ruleId) => {
@@ -131,11 +131,7 @@ export default function Dashboard() {
   // — this gets you to the right rule + right time window, not a pre-applied
   // entity filter.)
   const drillToHistorical = (ruleId, aroundTs) => {
-    setSelectedRuleIds(prev => {
-      const next = new Set(prev);
-      next.add(ruleId);
-      return next;
-    });
+    setSelectedRuleId(ruleId);
     const centerEpoch = parseISTStringToEpochMs(aroundTs);
     const nowEpoch = Date.now();
     const sevenDaysAgo = nowEpoch - 7 * 24 * 60 * 60 * 1000;
@@ -151,18 +147,16 @@ export default function Dashboard() {
     handleTabChange('historical');
   };
 
-  // Determine which rules a draft user can access per panel
+  // Determine which rule a draft user can access per panel
   // Draft rules: ONLY historical analysis allowed
   // Prod/Paused rules: all panels allowed
-  const analysisSelectedIds = selectedRuleIds;
+  const analysisSelectedId = selectedRuleId;
 
-  // For Live and Agg: filter out DRAFT rules with a tooltip
-  const prodSelectedIds = new Set(
-    [...selectedRuleIds].filter(id => {
-      const rule = rules.find(r => r.rule_metadata.rule_id === id);
-      return rule && rule.rule_metadata.status !== 'DRAFT';
-    })
-  );
+  // For Live and Agg: null out the selection if it's a DRAFT rule
+  const selectedRuleRecord = rules.find(r => r.rule_metadata.rule_id === selectedRuleId);
+  const prodSelectedId = (selectedRuleRecord && selectedRuleRecord.rule_metadata.status !== 'DRAFT')
+    ? selectedRuleId
+    : null;
 
   return (
     <div className="app-container">
@@ -278,7 +272,7 @@ export default function Dashboard() {
           <SavedRulesSidebar
             rules={rules}
             fetchRules={fetchRules}
-            selectedRuleIds={selectedRuleIds}
+            selectedRuleId={selectedRuleId}
             toggleRuleSelection={toggleRuleSelection}
             activeTab={activeTab}
             navigateToSummary={navigateToSummary}
@@ -301,7 +295,7 @@ export default function Dashboard() {
                className={activeTab === 'live' ? 'animate-fade-in' : ''}>
             <ErrorBoundary label="Live Analysis" showDetails={true}>
               <PermissionGuard permission={PERMISSIONS.LIVE_ANALYSIS_READ} label="Live Stream">
-                <LiveAnalysis rules={rules} selectedRuleIds={prodSelectedIds} allSelectedRuleIds={selectedRuleIds} />
+                <LiveAnalysis rules={rules} selectedRuleId={prodSelectedId} allSelectedRuleId={selectedRuleId} />
               </PermissionGuard>
             </ErrorBoundary>
           </div>
@@ -311,7 +305,7 @@ export default function Dashboard() {
                className={activeTab === 'agg' ? 'animate-fade-in' : ''}>
             <ErrorBoundary label="Aggregated Analysis">
               <PermissionGuard permission={PERMISSIONS.AGGREGATED_ANALYSIS_READ} label="Analytics">
-                <AggregatedAnalysis rules={rules} selectedRuleIds={prodSelectedIds} allSelectedRuleIds={selectedRuleIds} onDrillToHistorical={drillToHistorical} />
+                <AggregatedAnalysis rules={rules} selectedRuleId={prodSelectedId} allSelectedRuleId={selectedRuleId} onDrillToHistorical={drillToHistorical} />
               </PermissionGuard>
             </ErrorBoundary>
           </div>
@@ -321,7 +315,7 @@ export default function Dashboard() {
                className={activeTab === 'historical' ? 'animate-fade-in' : ''}>
             <ErrorBoundary label="Historical Analysis">
               <PermissionGuard permission={PERMISSIONS.HISTORICAL_ANALYSIS_READ} label="Historical Replay">
-                <HistoricalAnalysis rules={rules} selectedRuleIds={analysisSelectedIds} prefill={historicalPrefill} />
+                <HistoricalAnalysis rules={rules} selectedRuleId={analysisSelectedId} prefill={historicalPrefill} />
               </PermissionGuard>
             </ErrorBoundary>
           </div>

@@ -227,7 +227,7 @@ function LiveHeader() {
         <h2 style={{ color: 'var(--text-1)', margin: 0, fontSize: '0.95rem', fontWeight: 700, letterSpacing: '-0.02em' }}>Live Stream</h2>
       </div>
       <p style={{ color: 'var(--text-3)', fontSize: '0.73rem', margin: 0 }}>
-        Watch selected rules evaluate authentication traffic as it happens — this updates automatically, no need to refresh.
+        Watch the selected rule evaluate authentication traffic as it happens — this updates automatically, no need to refresh.
       </p>
     </div>
   );
@@ -235,12 +235,16 @@ function LiveHeader() {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleIds }) {
+export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId }) {
   const [data, setData] = useState({});
   const [sortCol, setSortCol] = useState('breaches');
   const [sortDir, setSortDir] = useState('desc');
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [hiddenSeries, setHiddenSeries] = useState({});
+  const [selectedGroup, setSelectedGroup] = useState('__ALL__');
+
+  // A rule change should reset any group filter left over from the previous rule.
+  useEffect(() => { setSelectedGroup('__ALL__'); }, [selectedRuleId]);
 
   const handleLegendClick = useCallback((e) => {
     const key = e.dataKey;
@@ -278,9 +282,10 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     : 0;
 
   const selectedRules = useMemo(
-    () => rules.filter(r => selectedRuleIds.has(r.rule_metadata.rule_id)),
-    [rules, selectedRuleIds]
+    () => rules.filter(r => r.rule_metadata.rule_id === selectedRuleId),
+    [rules, selectedRuleId]
   );
+  const currentRule = selectedRules[0] || null;
 
   const handleDelta = useCallback((ruleId, row) => {
     deltaCountRef.current += 1;
@@ -312,10 +317,9 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
   }, []);
 
   const fetchDataHttp = useCallback(async () => {
-    if (selectedRuleIds.size === 0) return;
-    const ids = [...selectedRuleIds].join(',');
+    if (!selectedRuleId) return;
     try {
-      const res = await fetch(`/api/rules/live-analysis?rule_ids=${ids}&hours=24`);
+      const res = await fetch(`/api/rules/live-analysis?rule_ids=${selectedRuleId}&hours=24`);
       if (res.ok) {
         const json = await res.json();
         setData(json.results || {});
@@ -323,7 +327,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     } catch (e) {
       console.error('Live fetch error:', e);
     }
-  }, [selectedRuleIds]);
+  }, [selectedRuleId]);
 
   const closeWebSocket = useCallback(() => {
     if (reconnectTimerRef.current) {
@@ -356,7 +360,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
   }, []);
 
   const connectWebSocket = useCallback(() => {
-    if (selectedRuleIds.size === 0) return;
+    if (!selectedRuleId) return;
 
     closeWebSocket();
     stopFallbackPolling();
@@ -372,7 +376,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
       ws.onopen = () => {
         reconnectAttemptRef.current = 0;
         setConnectionStatus('connected');
-        ws.send(JSON.stringify({ type: 'subscribe', rule_ids: [...selectedRuleIds] }));
+        ws.send(JSON.stringify({ type: 'subscribe', rule_ids: [selectedRuleId] }));
       };
 
       ws.onmessage = (event) => {
@@ -415,10 +419,10 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
         reconnectTimerRef.current = setTimeout(connectWebSocket, delay);
       }
     }
-  }, [selectedRuleIds, closeWebSocket, stopFallbackPolling, startFallbackPolling, handleDelta]);
+  }, [selectedRuleId, closeWebSocket, stopFallbackPolling, startFallbackPolling, handleDelta]);
 
   useEffect(() => {
-    if (selectedRuleIds.size === 0) {
+    if (!selectedRuleId) {
       setData({});
       closeWebSocket();
       stopFallbackPolling();
@@ -430,7 +434,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
       stopFallbackPolling();
       startFallbackPolling();
     } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'subscribe', rule_ids: [...selectedRuleIds] }));
+      wsRef.current.send(JSON.stringify({ type: 'subscribe', rule_ids: [selectedRuleId] }));
     } else {
       reconnectAttemptRef.current = 0;
       connectWebSocket();
@@ -440,7 +444,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
       closeWebSocket();
       stopFallbackPolling();
     };
-  }, [selectedRuleIds, connectWebSocket, closeWebSocket, stopFallbackPolling, startFallbackPolling]);
+  }, [selectedRuleId, connectWebSocket, closeWebSocket, stopFallbackPolling, startFallbackPolling]);
 
   const getRuleName = useCallback((ruleId) => {
     const match = rules.find(rule => rule.rule_metadata.rule_id === ruleId);
@@ -452,19 +456,40 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
   const allRows = useMemo(() => {
     const rows = [];
     for (const [ruleId, arr] of Object.entries(data)) {
-      if (!selectedRuleIds.has(ruleId)) continue;
+      if (ruleId !== selectedRuleId) continue;
       (arr || []).forEach(row => rows.push({ ...row, ruleId }));
     }
     return rows;
-  }, [data, selectedRuleIds]);
+  }, [data, selectedRuleId]);
 
-  const totalWindows = allRows.length;
-  const breachCount = useMemo(() => allRows.filter(r => isBreached(r)).length, [allRows]);
+  // ─── Group-by filter — only offered for rules that actually group by a
+  // non-global key, and populated dynamically from whatever groups have shown
+  // up in the data so far (new ones appear automatically as they arrive).
+  // Selecting a group narrows the charts below to just that group; the "Top
+  // Groups" table further down intentionally stays unfiltered so it can still
+  // be used to compare across groups.
+  const showGroupFilter = !!(currentRule && Array.isArray(currentRule.grouping?.keys) && currentRule.grouping.keys.length > 0);
+
+  const availableGroups = useMemo(() => {
+    const set = new Set();
+    for (const row of allRows) {
+      if (row.groupKey) set.add(row.groupKey);
+    }
+    return [...set].sort();
+  }, [allRows]);
+
+  const chartRows = useMemo(() => {
+    if (selectedGroup === '__ALL__') return allRows;
+    return allRows.filter(r => r.groupKey === selectedGroup);
+  }, [allRows, selectedGroup]);
+
+  const totalWindows = chartRows.length;
+  const breachCount = useMemo(() => chartRows.filter(r => isBreached(r)).length, [chartRows]);
   const breachRate = totalWindows > 0 ? ((breachCount / totalWindows) * 100).toFixed(1) : '0.0';
-  const uniqueGroups = useMemo(() => new Set(allRows.map(r => r.groupKey)).size, [allRows]);
+  const uniqueGroups = useMemo(() => new Set(chartRows.map(r => r.groupKey)).size, [chartRows]);
 
   const lastBreachInfo = useMemo(() => {
-    const breachRows = allRows.filter(r => isBreached(r));
+    const breachRows = chartRows.filter(r => isBreached(r));
     if (breachRows.length === 0) return { text: 'None', color: '#94a3b8' };
     let latest = null;
     for (const row of breachRows) {
@@ -477,14 +502,14 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
       text: timeAgo(latest.toISOString()),
       color: diffMin > 10 ? SAFE_GREEN : diffMin >= 2 ? '#f59e0b' : BREACH_RED,
     };
-  }, [allRows]);
+  }, [chartRows]);
 
   const breachTrend = useMemo(() => {
     const now = Date.now();
     const oneHourAgo = now - 3600000;
     const twoHoursAgo = now - 7200000;
     let lastHour = 0, prevHour = 0;
-    for (const row of allRows.filter(r => isBreached(r))) {
+    for (const row of chartRows.filter(r => isBreached(r))) {
       // Use parseAsIST — naive new Date() on space-separated IST strings is browser-dependent
       const d = parseAsIST(row.windowStart || row.evaluatedAt);
       if (!d) continue;
@@ -496,12 +521,12 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     if (lastHour > prevHour) return { text: 'Rising', color: BREACH_RED, Icon: TrendingUp };
     if (lastHour < prevHour) return { text: 'Declining', color: SAFE_GREEN, Icon: TrendingDown };
     return { text: 'Stable', color: '#f59e0b', Icon: Minus };
-  }, [allRows]);
+  }, [chartRows]);
 
   // Chart 1: Event Volume — bakes in agg metric values AND breach markers
   const { comboData, breachTs } = useMemo(() => {
     const timeMap = {};
-    for (const row of allRows) {
+    for (const row of chartRows) {
       const ts = row.windowStart;
       if (!ts) continue;
       if (!timeMap[ts]) timeMap[ts] = { windowStart: ts, _tsMs: new Date(ts).getTime(), _breached: false };
@@ -535,39 +560,41 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     const sorted = Object.values(timeMap).sort((a, b) => a._tsMs - b._tsMs);
     const breachTimestamps = sorted.filter(pt => pt._breached).map(pt => pt.windowStart);
     return { comboData: sorted, breachTs: breachTimestamps };
-  }, [allRows]);
+  }, [chartRows]);
 
-  // Derive agg line descriptors from selectedRules / data (for legend labels in consolidated chart)
+  // Derive agg line descriptors from the selected rule's raw data (for legend
+  // labels in the consolidated chart) — these are metric names, not chart
+  // values, so they're intentionally not narrowed by the group filter.
   const aggLineDescriptors = useMemo(() => {
     const lines = [];
-    for (const ruleId of [...selectedRuleIds]) {
-      const rows = data[ruleId] || [];
-      if (!rows.length) continue;
-      const metricKeysSet = new Set();
-      for (const row of rows) {
-        const aggObj = row.aggResult && typeof row.aggResult === 'object' ? row.aggResult
-          : row.aggregationResults && typeof row.aggregationResults === 'object' ? row.aggregationResults : null;
-        if (aggObj) for (const k of Object.keys(aggObj)) metricKeysSet.add(k);
-        const mv = parseMetricValues(row.metricValues);
-        for (const k of Object.keys(mv)) metricKeysSet.add(k);
-      }
-      const rName = getRuleName(ruleId);
-      [...metricKeysSet].forEach((alias, ai) => {
-        lines.push({
-          key: `agg_${ruleId}__${alias}`,
-          name: `${rName} · ${alias}`,
-          dashArray: DASH_PATTERNS[(ai + 1) % DASH_PATTERNS.length],
-        });
-      });
+    if (!selectedRuleId) return lines;
+    const ruleId = selectedRuleId;
+    const rows = data[ruleId] || [];
+    if (!rows.length) return lines;
+    const metricKeysSet = new Set();
+    for (const row of rows) {
+      const aggObj = row.aggResult && typeof row.aggResult === 'object' ? row.aggResult
+        : row.aggregationResults && typeof row.aggregationResults === 'object' ? row.aggregationResults : null;
+      if (aggObj) for (const k of Object.keys(aggObj)) metricKeysSet.add(k);
+      const mv = parseMetricValues(row.metricValues);
+      for (const k of Object.keys(mv)) metricKeysSet.add(k);
     }
+    const rName = getRuleName(ruleId);
+    [...metricKeysSet].forEach((alias, ai) => {
+      lines.push({
+        key: `agg_${ruleId}__${alias}`,
+        name: `${rName} · ${alias}`,
+        dashArray: DASH_PATTERNS[(ai + 1) % DASH_PATTERNS.length],
+      });
+    });
     return lines;
-  }, [data, selectedRuleIds, getRuleName]);
+  }, [data, selectedRuleId, getRuleName]);
 
   // Chart 2: Cumulative Breaches — area gradient with incremental dot markers
   const cumulativeData = useMemo(() => {
     const perRule = {};
-    for (const ruleId of [...selectedRuleIds]) {
-      const ruleRows = allRows.filter(r => r.ruleId === ruleId);
+    for (const ruleId of (selectedRuleId ? [selectedRuleId] : [])) {
+      const ruleRows = chartRows.filter(r => r.ruleId === ruleId);
       const timeMap = {};
       for (const row of ruleRows) {
         const ts = row.windowStart;
@@ -586,7 +613,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     const lastCum = {};
     const merged = sortedTs.map(ts => {
       const point = { windowStart: ts };
-      for (const ruleId of [...selectedRuleIds]) {
+      for (const ruleId of (selectedRuleId ? [selectedRuleId] : [])) {
         const entry = (perRule[ruleId] || []).find(e => e.windowStart === ts);
         if (entry) lastCum[ruleId] = entry.cumBreaches;
         point[`cum_${ruleId}`] = lastCum[ruleId] || 0;
@@ -599,7 +626,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     // this comparison ahead of time and pass it via closure.
     const breachIncrementTs = new Set();
     for (let i = 1; i < merged.length; i++) {
-      for (const ruleId of [...selectedRuleIds]) {
+      for (const ruleId of (selectedRuleId ? [selectedRuleId] : [])) {
         const key = `cum_${ruleId}`;
         if ((merged[i][key] || 0) > (merged[i - 1][key] || 0)) {
           breachIncrementTs.add(merged[i].windowStart);
@@ -609,12 +636,12 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
     }
 
     return { merged, breachIncrementTs };
-  }, [allRows, selectedRuleIds]);
+  }, [chartRows, selectedRuleId]);
 
   // Chart 3: Event count bars colored by breach status
   const breachBarData = useMemo(() => {
     const timeMap = {};
-    for (const row of allRows) {
+    for (const row of chartRows) {
       const ts = row.windowStart;
       if (!ts) continue;
       if (!timeMap[ts]) timeMap[ts] = { windowStart: ts, count: 0, breached: false };
@@ -622,7 +649,7 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
       if (isBreached(row)) timeMap[ts].breached = true;
     }
     return Object.values(timeMap).sort((a, b) => new Date(a.windowStart) - new Date(b.windowStart));
-  }, [allRows]);
+  }, [chartRows]);
 
   const currentlyBreaching = useMemo(() => {
     const set = new Set();
@@ -706,9 +733,10 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
 
   // ─── Empty State ───────────────────────────────────────────────────────────
 
-  if (selectedRuleIds.size === 0) {
-    // Check if DRAFT rules were selected (allSelectedRuleIds has entries but selectedRuleIds is empty)
-    const hasDraftOnly = allSelectedRuleIds && allSelectedRuleIds.size > 0 && selectedRuleIds.size === 0;
+  if (!selectedRuleId) {
+    // Check if a DRAFT rule was selected (allSelectedRuleId is set but selectedRuleId
+    // isn't, since DRAFT rules are filtered out by the parent before reaching here)
+    const hasDraftOnly = !!allSelectedRuleId && !selectedRuleId;
     return (
       <>
         <LiveHeader />
@@ -716,12 +744,12 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
           <Activity size={64} color="var(--text-muted)" style={{ opacity: 0.4 }} />
           {hasDraftOnly ? (
             <>
-              <p style={{ color: '#f59e0b', fontSize: '1rem', textAlign: 'center', maxWidth: 440, fontWeight: 600 }}>Selected rules are still in Draft</p>
+              <p style={{ color: '#f59e0b', fontSize: '1rem', textAlign: 'center', maxWidth: 440, fontWeight: 600 }}>The selected rule is still in Draft</p>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', maxWidth: 440 }}>Draft rules aren't live yet, so there's no real-time traffic to show. Publish the rule to make it Active, or use Historical Replay to test it against past data first.</p>
             </>
           ) : (
             <>
-              <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', textAlign: 'center', maxWidth: 400 }}>Select one or more rules from the sidebar to see them running live</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', textAlign: 'center', maxWidth: 400 }}>Select a rule from the sidebar to see it running live</p>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', opacity: 0.7, textAlign: 'center' }}>Updates arrive automatically · showing the last 24 hours</p>
             </>
           )}
@@ -799,6 +827,22 @@ export default function LiveAnalysis({ rules, selectedRuleIds, allSelectedRuleId
         }} />
         <span style={{ fontSize: '0.75rem', color: statusColor, textTransform: 'capitalize', fontWeight: 600 }}>{statusLabel}</span>
       </div>
+
+      {/* ── Group-by filter — only shown for rules that group by a non-global key ── */}
+      {showGroupFilter && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Group</label>
+          <select
+            value={selectedGroup}
+            onChange={e => setSelectedGroup(e.target.value)}
+            style={{ maxWidth: 260 }}
+            title="Filter the charts below to a single group. Tables further down always show every group."
+          >
+            <option value="__ALL__">All Groups (Overview)</option>
+            {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
+          </select>
+        </div>
+      )}
 
       {/* ── KPI Cards ── */}
       <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
