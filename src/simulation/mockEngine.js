@@ -43,7 +43,11 @@ export const MOCK_RULE = {
     { alias: 'count', operator: '>=', value: THRESHOLD },
   ],
   filters: [],
-  group_by_fields: [],
+  // Real grouping.keys contract (matches the backend/Flink VelocityRule
+  // shape) — the simulation genuinely groups by auth_source, one groupKey
+  // per entry in MOCK_LIVE_ENTITIES/MOCK_HISTORICAL_GROUPS below, so this
+  // is a true reflection of what's generated, not just decorative.
+  grouping: { keys: ['auth_source'], entity_name: 'auth_source', anomaly_entity_field: 'auth_source' },
   sinks: { aggSinkEnabled: true, anomalySinkEnabled: true },
 };
 
@@ -72,13 +76,11 @@ function randInt(min, max) {
 
 // ─── Multi-entity enrichment (Live/Agg/Anomaly) ───────────────────────────────
 //
-// MOCK_RULE itself declares group_by_fields: [] (ungrouped) — in real
-// production an ungrouped rule always produces a single server-side groupKey.
-// Same precedent as MOCK_HISTORICAL_GROUPS below: this simulation synthesizes
-// a handful of plausible entities purely so the "Top Groups" table, repeat-
-// offender grouping, severity mix, and penalty-TTL countdown (all of which
-// are meaningless with a single constant groupKey) have something real to
-// render. Not a literal reflection of MOCK_RULE's declared (ungrouped) shape.
+// MOCK_RULE declares grouping.keys: ['auth_source'], so these five entries
+// are the actual set of groupKey values the rule groups by — not just
+// decorative. Weighted so the "Top Groups" table, repeat-offender grouping,
+// severity mix, and penalty-TTL countdown all have a realistic, uneven
+// distribution to render instead of a flat one.
 const MOCK_LIVE_ENTITIES = [
   { key: 'aua-mobile-app-01',      weight: 0.35, severity: 'LOW' },
   { key: 'aua-web-portal-02',      weight: 0.25, severity: 'MEDIUM' },
@@ -207,14 +209,11 @@ export function generateHistoricalData(startStr, endStr) {
 // an `aggResult` object like the Live/Agg rows are.
 
 /**
- * Pseudo entities for the Historical Analysis panel. MOCK_RULE itself has no
- * grouping configured (group_by_fields: []), so in a byte-for-byte replay it
- * would only ever produce one group ('__GLOBAL__' server-side). Historical
- * Analysis's UI has group-key visualizations (Top Group Keys bar charts + a
- * sortable table) that are meaningless with a single row, so this simulation
- * synthesizes a handful of plausible auth_source channel names purely to
- * exercise those views. This is a simulation-only enrichment, not a literal
- * reflection of MOCK_RULE's real (ungrouped) configuration.
+ * Entities for the Historical Analysis panel — five plausible auth_source
+ * channel names, matching MOCK_RULE's grouping.keys: ['auth_source']. Each
+ * carries its own baseline/trend/spike-chance so the Top Group Keys bar
+ * charts and sortable table show a realistic, uneven distribution rather
+ * than five identical rows.
  */
 const MOCK_HISTORICAL_GROUPS = [
   { key: 'auth-source-mobile-app',   baseline: 26, trend:  0.35, spikeChance: 0.05 },

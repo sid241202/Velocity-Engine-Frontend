@@ -844,14 +844,14 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
           {/* Group-by filter — only shown for rules that group by a non-global key */}
           {showGroupFilter && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Group</label>
+              <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Select Entity</label>
               <select
                 value={selectedGroup}
                 onChange={e => setSelectedGroup(e.target.value)}
                 style={{ maxWidth: 260 }}
-                title="Filter the charts below to a single group. The Entity Breach Ranking table and anomaly feed always show every group."
+                title="Filter the charts below to a single entity. The Entity Breach Ranking table and anomaly feed always show every entity."
               >
-                <option value="__ALL__">All Groups (Overview)</option>
+                <option value="__ALL__">All Entities (Overview)</option>
                 {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
             </div>
