@@ -1,22 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import {
-  ME_ENDPOINT,
-  AUTH_DEBUG_USER_ID_STORAGE_KEY,
-  AUTH_DEBUG_DEFAULT_USER_ID,
-} from '../config/appConfig';
+import { ME_ENDPOINT } from '../config/appConfig';
 import { getAuthHeaders } from '../services/apiClient';
 
 const RBACContext = createContext(null);
 
-function readStoredDebugUserId() {
-  if (typeof window === 'undefined') return AUTH_DEBUG_DEFAULT_USER_ID;
-  return window.localStorage.getItem(AUTH_DEBUG_USER_ID_STORAGE_KEY) || AUTH_DEBUG_DEFAULT_USER_ID;
-}
-
 /**
  * RBACProvider — fetches the current user's roles and permissions from
- * GET /me once at mount (and whenever the debug identity changes), and
- * exposes them via useRBAC() to the rest of the app.
+ * GET /me once at mount, and exposes them via useRBAC() to the rest of the
+ * app.
  *
  * Fails CLOSED: if /me cannot be reached or returns an error, permissions
  * resolve to an empty set (every hasPermission check returns false) rather
@@ -25,7 +16,6 @@ function readStoredDebugUserId() {
  * of that, never a substitute for it, so it should fail the same direction.
  */
 export function RBACProvider({ children }) {
-  const [debugUserId, setDebugUserIdState] = useState(readStoredDebugUserId);
   const [state, setState] = useState({
     userId: null,
     roles: [],
@@ -33,13 +23,6 @@ export function RBACProvider({ children }) {
     loading: true,
     error: '',
   });
-
-  const setDebugUserId = useCallback((id) => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(AUTH_DEBUG_USER_ID_STORAGE_KEY, id);
-    }
-    setDebugUserIdState(id);
-  }, []);
 
   const fetchMe = useCallback(async () => {
     setState((prev) => ({ ...prev, loading: true, error: '' }));
@@ -69,7 +52,7 @@ export function RBACProvider({ children }) {
         error: e.message || 'Unable to verify permissions',
       });
     }
-  }, [debugUserId]);
+  }, []);
 
   useEffect(() => {
     fetchMe();
@@ -92,10 +75,8 @@ export function RBACProvider({ children }) {
       hasAnyPermission,
       hasAllPermissions,
       refetch: fetchMe,
-      debugUserId,
-      setDebugUserId,
     }),
-    [state, hasPermission, hasAnyPermission, hasAllPermissions, fetchMe, debugUserId, setDebugUserId]
+    [state, hasPermission, hasAnyPermission, hasAllPermissions, fetchMe]
   );
 
   return <RBACContext.Provider value={value}>{children}</RBACContext.Provider>;

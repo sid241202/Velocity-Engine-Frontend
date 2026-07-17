@@ -9,7 +9,6 @@ import AggregatedAnalysis from '../components/AggregatedAnalysis';
 import HistoricalAnalysis from '../components/HistoricalAnalysis';
 import ErrorBoundary from '../components/ErrorBoundary';
 import PermissionGuard from '../components/PermissionGuard';
-import DebugIdentitySwitcher from '../components/DebugIdentitySwitcher';
 import { API_BASE } from '../config/appConfig';
 import { toISTDatetimeLocal, parseISTStringToEpochMs } from '../utils/istUtils';
 import { useRBAC } from '../context/RBACContext';
@@ -167,7 +166,6 @@ export default function Dashboard() {
         </div>
         <h1>Velocity Engine</h1>
         <div className="header-right">
-          <DebugIdentitySwitcher />
           <span style={{ fontSize: '0.68rem', color: 'var(--text-3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>UIDAI · Auth Analytics</span>
           <span
             className={`conn-pill ${

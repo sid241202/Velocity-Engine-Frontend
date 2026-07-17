@@ -6,8 +6,8 @@ import ProtectedRoute from './pages/ProtectedRoute';
 import { RBACProvider } from './context/RBACContext';
 
 // RBACProvider is independent of WSO2/authentication — it resolves the
-// current user's roles/permissions (via GET /me) and is needed regardless
-// of which AUTH_MODE is active, so it wraps the router below.
+// current user's roles/permissions (via GET /me) and wraps the router below
+// regardless of auth state (authorization vs. authentication, kept separate).
 
 function App() {
   return (

@@ -42,21 +42,6 @@ const getEnvVar = (key, defaultValue) => {
   return (window._env_ && window._env_[key]) || import.meta.env[key] || defaultValue;
 };
 
-// AUTH_MODE selects which identity path is active, mirroring the backend's
-// config.AuthMode ("dev" | "wso2"):
-//   - "dev":  the X-Debug-User-Id header shim below, kept as a local dev/demo
-//             fallback for when a live WSO2 instance isn't reachable.
-//   - "wso2": real WSO2/OIDC tokens (see AuthService.js) — getAuthHeaders()
-//             in apiClient.js attaches Authorization: Bearer <access_token>
-//             instead of the debug header.
-export const AUTH_MODE = getEnvVar('REACT_APP_AUTH_MODE', 'dev');
-
-// TEMPORARY PRE-WSO2 IDENTITY SHIM — mirrors the backend's AuthDevMode
-// (internal/middleware/auth.go). Only used when AUTH_MODE === 'dev'.
-export const AUTH_DEBUG_HEADER_NAME     = 'X-Debug-User-Id';
-export const AUTH_DEBUG_USER_ID_STORAGE_KEY = 'velocity_debug_user_id';
-export const AUTH_DEBUG_DEFAULT_USER_ID = '1';
-
 // ── WSO2 / OIDC Auth Config ───────────────────────────────────────────────────
 // Consolidated from the former src/config/authConfig.js — see the "one common
 // config file" note at the top of this file. Only src/services/AuthService.js
@@ -67,15 +52,26 @@ export const AUTH_DEBUG_DEFAULT_USER_ID = '1';
 // AuthService.js's login()/handleCallback() already generate and send a real
 // PKCE code_verifier/code_challenge). Requires the WSO2 service provider for
 // this client_id to be registered as a public client (no secret) IdP-side.
+//
+// Defaults below point at this app's actual staging target, 10.10.79.27:32515
+// (a raw IP:port — no DNS name, unlike operator-360's staging/prod, which
+// both use https://<dns-name>/... — hence http, not https, here; no TLS
+// termination on a bare IP). Path structure (bare origin for
+// post_logout_redirect_uri, "/callback" for redirect_uri, "/silent-renew"
+// for silent_redirect_uri) matches operator-360's actual
+// .env.staging/.env.production convention, cross-checked directly rather
+// than assumed. "/callback" also matches this app's own registered route in
+// App.jsx. Override via REACT_APP_REDIRECT_URI etc. (or public/env-config.js
+// at runtime) for any other environment.
 export const authConfig = {
   // WSO2 Identity Server Authority (Base URL)
   authority: getEnvVar('REACT_APP_WSO2_AUTHORITY', 'https://sso.uidai.net.in/oauth2'),
 
   client_id: getEnvVar('REACT_APP_CLIENT_ID', '9HGuTetQjRjxkx1vHmoP1v0fXm8a'),
 
-  redirect_uri: getEnvVar('REACT_APP_REDIRECT_URI', 'http://localhost:3000/callback'),
+  redirect_uri: getEnvVar('REACT_APP_REDIRECT_URI', 'http://10.10.79.27:32515/callback'),
 
-  post_logout_redirect_uri: getEnvVar('REACT_APP_POST_LOGOUT_REDIRECT_URI', 'http://localhost:3000/'),
+  post_logout_redirect_uri: getEnvVar('REACT_APP_POST_LOGOUT_REDIRECT_URI', 'http://10.10.79.27:32515'),
   // Response type - using authorization code flow
   response_type: 'code',
 
@@ -83,7 +79,7 @@ export const authConfig = {
 
   automaticSilentRenew: false,
 
-  silent_redirect_uri: getEnvVar('REACT_APP_SILENT_REDIRECT_URI', 'https://ilabel.uidai.net.in/silent-renew'),
+  silent_redirect_uri: getEnvVar('REACT_APP_SILENT_REDIRECT_URI', 'http://10.10.79.27:32515/silent-renew'),
 
   // Explicit metadata for WSO2 IS
   metadata: {

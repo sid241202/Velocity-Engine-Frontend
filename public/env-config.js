@@ -1,31 +1,18 @@
-// Runtime environment configuration
-// This file is generated at runtime in Docker, but we need a fallback for local development
+// Runtime environment configuration — see the frontend CLAUDE.md and
+// WSO2_RBAC_STAGING_INTEGRATION_GUIDE.md (E:\Projects) for why this file,
+// not a build-time env var, is the channel that actually reaches the
+// browser (Vite's default envPrefix is "VITE_", so REACT_APP_* build-time
+// vars never reach import.meta.env in this app — window._env_, populated
+// here, is checked first by getEnvVar() in src/config/appConfig.js).
+//
+// No REACT_APP_CLIENT_SECRET here (demo-wso2 is a pure PKCE public-client
+// flow — see appConfig.js's authConfig — this key is not read at all). No
+// REACT_APP_AUTH_MODE either — this branch has no dev/wso2 toggle at all
+// (see src/pages/ProtectedRoute.jsx), so that key would do nothing.
 window._env_ = window._env_ || {
-  REACT_APP_WSO2_AUTHORITY: "https://sso.uidai.net.in/oauth2/token",
-  // REACT_APP_CLIENT_ID: "iwjUgROqRfhflhgVCM9DY9eJMpsa",
-  // REACT_APP_CLIENT_SECRET: "2IV57zUep477oqOKCRVdNKyGX24a",
-  // REACT_APP_REDIRECT_URI: "http://10.10.79.27:32384/callback",
-  // REACT_APP_POST_LOGOUT_REDIRECT_URI: "http://10.10.79.27:32384",
-  // REACT_APP_SILENT_REDIRECT_URI: "http://10.10.79.27:32384/silent-renew",
-  // REACT_APP_BACKEND_UPSTREAM: "http://10.10.79.27:31151",
-
-
-  // REACT_APP_BACKEND_UPSTREAM:"http://localhost:8080",
-  // REACT_APP_REDIRECT_URI: "http://localhost:3000/callback",
-  // REACT_APP_POST_LOGOUT_REDIRECT_URI: "http://localhost:3000"
-
-  //prod
-//   REACT_APP_CLIENT_ID: "qvwmNr_6e5LEFtH8ffaL44rzWYwa",
-//   REACT_APP_CLIENT_SECRET: "dMGjlhNC5IfgEo0EMYqfY2r1_fAa",
-//   REACT_APP_REDIRECT_URI: "https://ilabel.uidai.net.in/callback",
-//   REACT_APP_POST_LOGOUT_REDIRECT_URI: "https://ilabel.uidai.net.in",
-//   REACT_APP_SILENT_REDIRECT_URI: "https://ilabel.uidai.net.in/silent-renew",
-//   REACT_APP_BACKEND_UPSTREAM: "https://ilabel.uidai.net.in",
-
+  REACT_APP_WSO2_AUTHORITY: "https://sso.uidai.net.in/oauth2",
   REACT_APP_CLIENT_ID: "9HGuTetQjRjxkx1vHmoP1v0fXm8a",
-  REACT_APP_CLIENT_SECRET: "RlsK9p2f4kJ_iKBZLSgiBYuIKjQa",
-  REACT_APP_REDIRECT_URI: "http://localhost:3000/callback",
-  REACT_APP_POST_LOGOUT_REDIRECT_URI: "http://localhost:3000",
-  REACT_APP_SILENT_REDIRECT_URI: "http://localhost:3000/silent-renew",
-  // REACT_APP_BACKEND_UPSTREAM: "http://10.10.79.27:31151"
+  REACT_APP_REDIRECT_URI: "http://10.10.79.27:32515/callback",
+  REACT_APP_POST_LOGOUT_REDIRECT_URI: "http://10.10.79.27:32515",
+  REACT_APP_SILENT_REDIRECT_URI: "http://10.10.79.27:32515/silent-renew",
 };

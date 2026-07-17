@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import authService from '../services/AuthService';
-import { AUTH_MODE } from '../config/appConfig';
 
 const ProtectedRoute = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(null);
@@ -13,11 +12,6 @@ const ProtectedRoute = ({ children }) => {
 
   const checkAuth = async () => {
     try {
-      if (AUTH_MODE === 'dev') {
-        setIsAuthenticated(true);
-        setIsLoading(false);
-        return;
-      }
       const authenticated = await authService.isAuthenticated();
       setIsAuthenticated(authenticated);
     } catch (error) {

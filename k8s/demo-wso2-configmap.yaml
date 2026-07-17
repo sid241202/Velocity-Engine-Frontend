@@ -1,0 +1,56 @@
+# Consolidated staging config for the frontend's demo-wso2 branch.
+#
+# NOTE ON FORMAT: same situation as the backend repo's k8s/demo-wso2-configmap.yaml
+# — this repo's Jenkinsfile references k8s/deployment.yaml, but no k8s/
+# directory or existing ConfigMap example exists in this repo to copy the
+# format from (checked directly). The actual Deployment manifest evidently
+# lives elsewhere.
+#
+# UNLIKE a typical app, this frontend's runtime config is NOT env vars read
+# by a server process — it's nginx serving static files, and the one file
+# that actually carries runtime config is public/env-config.js (a plain
+# <script> loaded by index.html, populating window._env_ — see
+# src/config/appConfig.js's getEnvVar and WSO2_RBAC_STAGING_INTEGRATION_GUIDE.md
+# for why REACT_APP_* build-time env vars don't work in this Vite app at
+# all). The idiomatic k8s way to override this per-deployment WITHOUT
+# rebuilding the image is a ConfigMap mounted as a file via subPath — that's
+# what this manifest provides. This also closes a real gap: this repo's
+# Dockerfile has no entrypoint script that (re)generates env-config.js from
+# container env vars at startup, despite a comment in that file claiming
+# one exists — see the guide doc, §4.1.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: velocity-frontend-demo-wso2-config
+data:
+  env-config.js: |
+    // Runtime environment configuration for demo-wso2 staging
+    // (10.10.79.27:32515) — mounted over public/env-config.js at container
+    // start via the volumeMount below. No REACT_APP_CLIENT_SECRET (pure
+    // PKCE public-client flow) and no REACT_APP_AUTH_MODE (this branch has
+    // no dev/wso2 toggle at all).
+    window._env_ = window._env_ || {
+      REACT_APP_WSO2_AUTHORITY: "https://sso.uidai.net.in/oauth2",
+      REACT_APP_CLIENT_ID: "9HGuTetQjRjxkx1vHmoP1v0fXm8a",
+      REACT_APP_REDIRECT_URI: "http://10.10.79.27:32515/callback",
+      REACT_APP_POST_LOGOUT_REDIRECT_URI: "http://10.10.79.27:32515",
+      REACT_APP_SILENT_REDIRECT_URI: "http://10.10.79.27:32515/silent-renew",
+    };
+
+# ── Wiring into your actual Deployment ──────────────────────────────────
+# Add to the frontend container spec in whatever Deployment manifest really
+# runs this image:
+#
+#   volumeMounts:
+#     - name: env-config
+#       mountPath: /usr/share/nginx/html/env-config.js
+#       subPath: env-config.js
+#   volumes:
+#     - name: env-config
+#       configMap:
+#         name: velocity-frontend-demo-wso2-config
+#
+# No Secret needed on the frontend side — there is no client_secret to
+# store once this branch is a pure PKCE public-client flow, and nothing
+# else here is sensitive (client_id is a public OAuth identifier, not a
+# credential).
