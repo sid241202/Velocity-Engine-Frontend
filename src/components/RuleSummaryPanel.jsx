@@ -9,9 +9,10 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
   const [isActioning, setIsActioning] = React.useState(false);
 
   // rules:publish and rules:delete are enforced server-side (see
-  // internal/middleware/auth.go RequirePermission on POST /rules/:id/prod
-  // and DELETE /rules/:id) — these calls need the same identity headers
-  // RBACContext uses for GET /me so the backend can resolve who's asking.
+  // internal/middleware/auth.go RequirePermission on POST /rules/:id/prod,
+  // POST /rules/:id/status, and DELETE /rules/:id) — these calls need the
+  // same identity headers RBACContext uses for GET /me so the backend can
+  // resolve who's asking.
   const publishRule = async (id) => {
     if (isActioning) return;
     setIsActioning(true);
@@ -33,7 +34,7 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
     try {
       const res = await fetch(`${API_BASE}/rules/${id}/status`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify({ status })
       });
       if (res.ok) { alert(`Rule is now ${status}`); fetchRules(); }
@@ -474,23 +475,37 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
 
         {/* ACTIVE: Pause (to enable editing) */}
         {meta.status === 'ACTIVE' && (
-          <button
-            className="btn"
-            style={{ background: 'var(--warning)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
-            onClick={() => updateStatus(meta.rule_id, 'PAUSED')}
-            title="Pausing the rule brings it back to draft, enabling editing."
-            disabled={isActioning}
-          >
-            <PauseCircle size={16} /> {isActioning ? 'Pausing…' : 'Pause'}
-          </button>
+          <RequirePermission permission={PERMISSIONS.RULES_PUBLISH}>
+            {(allowed) => (
+              <button
+                className="btn"
+                style={{ background: 'var(--warning)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
+                onClick={() => updateStatus(meta.rule_id, 'PAUSED')}
+                title={!allowed ? "Your role doesn't have permission to change rule status (requires rules:publish)" : "Pausing the rule brings it back to draft, enabling editing."}
+                disabled={isActioning || !allowed}
+              >
+                <PauseCircle size={16} /> {isActioning ? 'Pausing…' : 'Pause'}
+              </button>
+            )}
+          </RequirePermission>
         )}
 
         {/* PAUSED: Resume + Edit */}
         {meta.status === 'PAUSED' && (
           <>
-            <button className="btn" style={{ background: 'var(--success)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }} onClick={() => updateStatus(meta.rule_id, 'ACTIVE')} disabled={isActioning}>
-              <PlayCircle size={16} /> {isActioning ? 'Resuming…' : 'Resume'}
-            </button>
+            <RequirePermission permission={PERMISSIONS.RULES_PUBLISH}>
+              {(allowed) => (
+                <button
+                  className="btn"
+                  style={{ background: 'var(--success)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
+                  onClick={() => updateStatus(meta.rule_id, 'ACTIVE')}
+                  disabled={isActioning || !allowed}
+                  title={!allowed ? "Your role doesn't have permission to change rule status (requires rules:publish)" : undefined}
+                >
+                  <PlayCircle size={16} /> {isActioning ? 'Resuming…' : 'Resume'}
+                </button>
+              )}
+            </RequirePermission>
             <button
               className="btn"
               style={{ background: 'rgba(99,102,241,0.2)', border: '1px solid rgba(99,102,241,0.4)', color: '#a5b4fc', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}

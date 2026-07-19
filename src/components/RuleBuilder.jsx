@@ -4,6 +4,7 @@ import VisualThresholdBuilder from './VisualThresholdBuilder';
 import VisualFilterBuilder, { processFilterTree } from './VisualFilterBuilder';
 import { API_BASE, DEFAULT_SOURCE_TOPIC, DEFAULT_PENALTY_TTL_SEC, DEFAULT_WINDOW_SIZE_SEC, DEFAULT_SLIDE_SEC } from '../config/appConfig';
 import { isValidRuleId, isNonEmpty, isValidJexlAlias, isPositiveInt } from '../utils/validators';
+import { getAuthHeaders } from '../services/apiClient';
 
 /* ─── Smart Tooltip with viewport-aware positioning ─────────────── */
 function Tip({ text }) {
@@ -465,7 +466,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
       const method = isEditing ? 'PUT' : 'POST';
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
         body: JSON.stringify(payload),
       });
       if (res.ok) {
