@@ -30,20 +30,9 @@ export const DEFAULT_WINDOW_SIZE_SEC  = 300;    // 5 minutes
 export const DEFAULT_SLIDE_SEC        = 60;     // 1 minute
 export const MAX_AGGREGATIONS         = 3;
 
-// ── RBAC ──────────────────────────────────────────────────────────────────────
-// ME_ENDPOINT: hydrates the frontend's authorization context once at bootstrap
-// (see src/context/RBACContext.jsx). Returns { user_id, roles[], permissions[] }.
-export const ME_ENDPOINT = `${API_BASE}/me`;
-
-// TEMPORARY PRE-WSO2 IDENTITY SHIM — mirrors the backend's AuthDevMode
-// (internal/middleware/auth.go). Real identity comes from a WSO2/OIDC token
-// once that phase lands; until then, every authenticated request carries this
-// header so the backend's dev-mode IdentityMiddleware can resolve a user id.
-// Must be replaced by real token-based identity before any non-development
-// deployment — same caveat as the backend side.
-export const AUTH_DEBUG_HEADER_NAME     = 'X-Debug-User-Id';
-export const AUTH_DEBUG_USER_ID_STORAGE_KEY = 'velocity_debug_user_id';
-export const AUTH_DEBUG_DEFAULT_USER_ID = '1';
+// No RBAC/identity config on this branch: no /me endpoint, no debug-identity
+// header, no login gate. Every request is treated as a single implicit user
+// (see this repo's CLAUDE.md and cmd/server/main.go on the backend).
 
 // ── WSO2 / OIDC Auth Config ───────────────────────────────────────────────────
 // Consolidated from the former src/config/authConfig.js — see the "one common

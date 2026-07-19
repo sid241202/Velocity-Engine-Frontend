@@ -15,53 +15,49 @@ autonomy/permission scope — this file only covers what's specific to this repo
 - Recharts for all charting.
 - Plain hooks + Context API for state — no Redux/Zustand.
 - Native `fetch` for all HTTP; no axios.
-- `oidc-client-ts` for WSO2/OIDC — **currently disabled** for local
-  testing/staging. `src/pages/ProtectedRoute.jsx` is a passthrough
-  (`({children}) => children`) with the real auth-check implementation
-  preserved in a comment block for when WSO2 is re-enabled. Don't repurpose
-  `ProtectedRoute` for RBAC — it's authentication, RBAC is authorization,
-  kept as separate concerns.
+- `oidc-client-ts` for WSO2/OIDC — present in `package.json` but unreachable
+  on this branch: `src/App.jsx` never mounts a login route at all (no
+  `Landing`/`Callback`/`ProtectedRoute`), it goes straight to `/dashboard`.
+  `src/services/AuthService.js`/`src/config/appConfig.js`'s `authConfig`
+  block are dead code as a result — nothing imports/calls them on any
+  reachable code path. Left in place (not deleted) since removing WSO2
+  wiring entirely wasn't asked for here; don't resurrect a login flow
+  without being asked either.
 
-## Config
+## No auth/identity/RBAC layer — demo is a fully open application
 
-All configuration lives in `src/config/appConfig.js` — API/WS base URLs,
-WebSocket reconnect tuning, rule builder defaults, RBAC endpoints/debug
-identity constants, and the WSO2/OIDC `authConfig` (merged in from the
-now-deleted `src/config/authConfig.js`). Don't add another `src/config/*.js`
-file — extend this one.
+As of 2026-07-20, this branch has **no login, no identity concept, and no
+permission gating anywhere** — not a lighter-weight identity, not the
+previous `X-Debug-User-Id` debug shim with checks removed, but nothing at
+all. Every panel and action is unconditionally visible and enabled; the app
+loads straight into `Dashboard` (see `src/App.jsx`). `release` (a
+separately-diverged branch) has real WSO2/OIDC auth + RBAC — don't assume
+parity, and don't port anything from it here without being asked.
 
-**Known flagged issue, not yet fixed**: `appConfig.js` ships a hardcoded
-WSO2 `client_secret` fallback — not actually secret once bundled into a
-browser-served JS file. Recommended fix when WSO2 is re-enabled: switch to a
-PKCE-only public-client flow (`code_challenge_method` is already `S256`,
-which is correct) rather than shipping a secret. Flagged in a code comment;
-don't silently change WSO2 client behavior without confirming first.
+Deleted entirely (not kept as no-ops): `src/components/DebugIdentitySwitcher.jsx`,
+`src/context/RBACContext.jsx` (`RBACProvider`/`useRBAC`), `src/components/RequirePermission.jsx`,
+`src/components/PermissionGuard.jsx`, `src/components/AccessDenied.jsx` (its
+only caller was `PermissionGuard`). `src/App.jsx` no longer wraps the router
+in `RBACProvider`. `src/pages/Dashboard.jsx`'s `NAV_ITEMS` no longer carry
+permission keys, the nav bar no longer disables/dims any tab, and none of
+the five tab-panels are wrapped in a permission guard anymore.
+`src/components/RuleSummaryPanel.jsx`'s publish/delete calls no longer send
+any identity header — the backend requires none. `src/config/appConfig.js`
+no longer exports `ME_ENDPOINT` or any `AUTH_DEBUG_*` constant (there is no
+`GET /me` on the backend to hydrate from anymore).
 
-## RBAC (frontend half)
-
-- `src/permissions.js` — `PERMISSIONS` (ten `resource:action` keys) and
-  `ROLES` (four role names) constants. Must mirror
-  `backend/internal/migrations/mysql/0001_init_rbac.sql` exactly (see
-  `../CLAUDE.md` cross-repo contracts).
-- `src/context/RBACContext.jsx` — `RBACProvider`/`useRBAC()`. Fetches
-  `GET /me` once at mount, fails **closed** (empty permission set) on any
-  error — never fail open.
-- `src/components/RequirePermission.jsx` — component-level gate (hide or,
-  via render-prop, disable-in-place).
-- `src/components/PermissionGuard.jsx` — page/tab-panel-level gate,
-  defaults fallback to `AccessDenied` (403 panel) instead of nothing.
-- `src/components/DebugIdentitySwitcher.jsx` — **temporary** pre-WSO2 dev
-  tool; sets the `X-Debug-User-Id` header RBACContext sends. Delete this
-  once real WSO2/OIDC tokens replace the header shim.
+`src/permissions.js` (`PERMISSIONS`/`ROLES` constants) is **kept, not
+deleted** — `release` still needs it and the two files must stay in sync if
+`release`'s RBAC schema changes — but nothing on this branch imports or
+applies it anymore.
 
 ## Branches
 
-- `release` — stable/demo branch. As of 2026-07-16, has the full RBAC
-  surface merged in (`--no-ff` merge commit `70b2005`) — real backend calls
-  only now, no `SIMULATION_MODE`/mock-data fallback (that was removed as
-  part of the RBAC work, not preserved through the merge).
-- `rbac` — the branch this work was developed on. Already merged into
-  `release`; kept around rather than deleted.
+- `release` — stable/demo branch, real WSO2/OIDC auth + RBAC. Deliberately
+  diverged from `demo` — verify `release`'s own `CLAUDE.md` and code
+  directly rather than assuming parity with this file.
+- `demo` (this branch) — no auth/identity/RBAC layer at all (see above).
+  Not merged into `release`.
 - `test-simulation-refactored` — dedicated simulation branch (refactored
   plain-language UI pass + `SIMULATION_MODE`/mock data generators); the only
   simulation branch left. Deliberately never merged into `release` — still
