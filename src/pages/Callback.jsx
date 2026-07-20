@@ -11,50 +11,50 @@ const Callback = () => {
   const [userInfo, setUserInfo] = useState(null);
 
   useEffect(() => {
-    handleAuthCallback();
-  }, []);
+    const handleAuthCallback = async () => {
+      try {
+        console.log('=== CALLBACK COMPONENT MOUNTED ===');
+        console.log('Current URL:', window.location.href);
+        console.log('Search params:', window.location.search);
+        console.log('Hash:', window.location.hash);
 
-  const handleAuthCallback = async () => {
-    try {
-      console.log('=== CALLBACK COMPONENT MOUNTED ===');
-      console.log('Current URL:', window.location.href);
-      console.log('Search params:', window.location.search);
-      console.log('Hash:', window.location.hash);
+        setStatus('processing');
+        setMessage('Validating authorization code...');
 
-      setStatus('processing');
-      setMessage('Validating authorization code...');
+        console.log('Calling authService.handleCallback()...');
 
-      console.log('Calling authService.handleCallback()...');
+        const result = await authService.handleCallback();
 
-      const result = await authService.handleCallback();
+        console.log('handleCallback completed successfully');
+        console.log('Result:', result);
 
-      console.log('handleCallback completed successfully');
-      console.log('Result:', result);
+        if (result && result.user) {
+          setStatus('success');
+          setMessage('Authentication successful! Redirecting...');
+          setUserInfo({
+            name: result.user.profile.name || result.user.profile.username || result.user.profile.ad_id || 'User',
+            email: result.user.profile.email,
+            userId: result.user.profile.sub
+          });
 
-      if (result && result.user) {
-        setStatus('success');
-        setMessage('Authentication successful! Redirecting...');
-        setUserInfo({
-          name: result.user.profile.name || result.user.profile.username || result.user.profile.ad_id || 'User',
-          email: result.user.profile.email,
-          userId: result.user.profile.sub
-        });
-
+          setTimeout(() => {
+            navigate(result.returnUrl, { replace: true });
+          }, 1000);
+        } else {
+          throw new Error('No user data received');
+        }
+      } catch (error) {
+        console.error('=== AUTHENTICATION CALLBACK ERROR ===', error);
+        setStatus('error');
+        setMessage(error.message || 'Authentication failed. Please try again.');
         setTimeout(() => {
-          navigate(result.returnUrl, { replace: true });
-        }, 1000);
-      } else {
-        throw new Error('No user data received');
+          navigate('/', { replace: true });
+        }, 3000);
       }
-    } catch (error) {
-      console.error('=== AUTHENTICATION CALLBACK ERROR ===', error);
-      setStatus('error');
-      setMessage(error.message || 'Authentication failed. Please try again.');
-      setTimeout(() => {
-        navigate('/', { replace: true });
-      }, 3000);
-    }
-  };
+    };
+
+    handleAuthCallback();
+  }, [navigate]);
 
   return (
     <div className="cb-root">

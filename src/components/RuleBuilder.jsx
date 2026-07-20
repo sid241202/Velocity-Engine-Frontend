@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Save, Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, Zap, Clock, Database, Filter, BarChart2, Bell, Radio } from 'lucide-react';
+import { Save, Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, Zap, Clock, Database, Filter, BarChart2, Bell } from 'lucide-react';
 import VisualThresholdBuilder from './VisualThresholdBuilder';
 import VisualFilterBuilder, { processFilterTree } from './VisualFilterBuilder';
-import { API_BASE, DEFAULT_SOURCE_TOPIC, DEFAULT_PENALTY_TTL_SEC, DEFAULT_WINDOW_SIZE_SEC, DEFAULT_SLIDE_SEC } from '../config/appConfig';
+import { API_BASE, DEFAULT_SOURCE_TOPIC, DEFAULT_WINDOW_SIZE_SEC, DEFAULT_SLIDE_SEC } from '../config/appConfig';
 import { isValidRuleId, isNonEmpty, isValidJexlAlias, isPositiveInt } from '../utils/validators';
 
 /* ─── Smart Tooltip with viewport-aware positioning ─────────────── */
@@ -249,7 +249,7 @@ function CommonFieldsDatalist() {
 }
 
 /* ─── Main Component ─────────────────────────────────────────── */
-export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRule, onEditComplete }) {
+export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onEditComplete }) {
 
   // ── Core ───────────────────────────────────────────────────────
   const [ruleName, setRuleName]     = useState('');
@@ -1019,9 +1019,9 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
               <p style={{ margin: 0, fontSize: '0.74rem', color: '#fbbf24', fontWeight: 500 }}>⚡ No-Window mode — checking raw event fields</p>
               <p style={{ margin: '0.3rem 0 0', fontSize: '0.71rem', color: 'var(--text-3)', lineHeight: 1.55 }}>
                 Reference event fields directly using dot notation.<br />
-                Examples: <code style={{ color: 'var(--violet-light)' }}>_data.authCode == "Y"</code>&nbsp;&nbsp;
+                Examples: <code style={{ color: 'var(--violet-light)' }}>_data.authCode == &quot;Y&quot;</code>&nbsp;&nbsp;
                 <code style={{ color: 'var(--violet-light)' }}>_data.amount &gt; 50000</code>&nbsp;&nbsp;
-                <code style={{ color: 'var(--violet-light)' }}>_data.status == "FAIL"</code><br />
+                <code style={{ color: 'var(--violet-light)' }}>_data.status == &quot;FAIL&quot;</code><br />
                 Leave blank to flag <strong>every</strong> matching event as an anomaly.
               </p>
             </div>
@@ -1076,7 +1076,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
           </div>
           {noWindowing && (
             <p className="helper" style={{ marginTop: '0.5rem' }}>
-              "Save Summary Data" is not available in No-Window mode — there is no aggregation to store.
+              &quot;Save Summary Data&quot; is not available in No-Window mode — there is no aggregation to store.
             </p>
           )}
         </Section>

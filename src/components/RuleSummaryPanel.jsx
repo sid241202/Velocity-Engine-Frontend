@@ -146,16 +146,7 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
     fontSize: '0.85rem'
   };
 
-  const fieldRowStyle = {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '0.35rem 0',
-    fontSize: '0.9rem'
-  };
-
   const fieldLabelStyle = { color: 'var(--text-muted)', fontSize: '0.85rem' };
-  const fieldValueStyle = { color: 'var(--text-main)', fontWeight: 500 };
 
   const chipStyle = {
     display: 'inline-block',

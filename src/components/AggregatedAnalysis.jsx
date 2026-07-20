@@ -89,8 +89,6 @@ const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
 // Semantic colors — exact match to test-simulation branch
 const BREACH_RED   = '#f85149';
-const BREACH_AMBER = '#ff7b72';
-const SAFE_GREEN   = '#3fb950';
 const ACCENT_BLUE  = '#5865f2';
 const ACCENT_CYAN  = '#2dd4bf';
 
@@ -116,14 +114,6 @@ function getBreachColor(rate) {
   return '#f85149';
 }
 
-function getSeverityBadge(sev) {
-  const s = String(sev || '').toUpperCase();
-  if (s === 'CRITICAL') return { bg: 'rgba(248,81,73,0.15)', color: '#f85149', border: 'rgba(248,81,73,0.3)' };
-  if (s === 'HIGH')     return { bg: 'rgba(255,123,114,0.12)', color: '#ff7b72', border: 'rgba(255,123,114,0.25)' };
-  if (s === 'MEDIUM')   return { bg: 'rgba(227,160,8,0.12)', color: '#e3a008', border: 'rgba(227,160,8,0.25)' };
-  return { bg: 'rgba(45,212,191,0.1)', color: '#2dd4bf', border: 'rgba(45,212,191,0.2)' };
-}
-
 function formatHourRange(hour) {
   const pad = (n) => String(n).padStart(2, '0');
   const nextHour = (hour + 1) % 24;
@@ -132,7 +122,7 @@ function formatHourRange(hour) {
 
 // ─── Custom Tooltip for the ComposedChart ──────────────────────────────────
 
-function EventVolumeTooltip({ active, payload, label, getRuleName }) {
+function EventVolumeTooltip({ active, payload, label }) {
   if (!active || !payload || !payload.length) return null;
   const breached = payload.some(p => p.payload && isBreached(p.payload));
   return (
@@ -240,23 +230,22 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
   // min = 7 days ago, no max — users may query into the future (returns empty results).
   const minDate = toISTDatetimeLocalFromOffset(-7 * 24 * 60 * 60 * 1000);
 
-  // Validate: start must be within the 7-day lookback window, and start must be before end.
-  // Future end dates are allowed — ClickHouse will simply return no rows.
-  const validate = () => {
-    const startEpoch = istDatetimeLocalToEpochMs(startTs);
-    const endEpoch   = istDatetimeLocalToEpochMs(endTs);
-    const nowEpoch   = Date.now();
-    if (isNaN(startEpoch) || isNaN(endEpoch)) return 'Invalid date format.';
-    if (startEpoch >= endEpoch) return 'Start time must be before end time.';
-    if (startEpoch < nowEpoch - 7 * 24 * 60 * 60 * 1000) return 'Start cannot be more than 7 days ago.';
-    return '';
-  };
-
   const fetchData = useCallback(async () => {
     if (!selectedRuleId) {
       setError('Please select a rule from the sidebar on the left.');
       return;
     }
+    // Validate: start must be within the 7-day lookback window, and start must be before end.
+    // Future end dates are allowed — ClickHouse will simply return no rows.
+    const validate = () => {
+      const startEpoch = istDatetimeLocalToEpochMs(startTs);
+      const endEpoch   = istDatetimeLocalToEpochMs(endTs);
+      const nowEpoch   = Date.now();
+      if (isNaN(startEpoch) || isNaN(endEpoch)) return 'Invalid date format.';
+      if (startEpoch >= endEpoch) return 'Start time must be before end time.';
+      if (startEpoch < nowEpoch - 7 * 24 * 60 * 60 * 1000) return 'Start cannot be more than 7 days ago.';
+      return '';
+    };
     const validationErr = validate();
     if (validationErr) {
       setError(validationErr);
@@ -473,7 +462,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
 
     const sorted = Object.values(timeMap).sort((a, b) => a._tsMs - b._tsMs);
     return { comboData: sorted, aggLines: lines };
-  }, [chartRows, data, selectedRuleId, getRuleName, rules]);
+  }, [chartRows, data, selectedRuleId, getRuleName]);
 
   // Breach timestamps for XAxis tick highlighting — derived from comboData
   const breachTimestamps = useMemo(
@@ -818,7 +807,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
               <>
                 <p style={{ color: 'var(--amber)', fontSize: '0.9rem', fontWeight: 600, margin: '0 0 0.3rem' }}>The selected rule is still in Draft</p>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: 0, maxWidth: 360 }}>
-                  Draft rules aren't live yet, so there's no historical data to show.
+                  Draft rules aren&apos;t live yet, so there&apos;s no historical data to show.
                   Publish the rule to make it Active, or use Historical Replay to test it against past traffic instead.
                 </p>
               </>
@@ -826,7 +815,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
               <>
                 <p style={{ color: 'var(--text-2)', fontSize: '0.9rem', fontWeight: 600, margin: '0 0 0.3rem' }}>No data yet</p>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: 0, maxWidth: 320 }}>
-                  Select a rule from the sidebar, pick a time range, and click "Load Analytics".
+                  Select a rule from the sidebar, pick a time range, and click &quot;Load Analytics&quot;.
                 </p>
               </>
             )}
@@ -1275,7 +1264,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
                     label={{ value: 'Events / Window', angle: -90, position: 'insideLeft', offset: 12, style: { fill: '#64748b', fontSize: 10 } }}
                   />
 
-                  <Tooltip content={<EventVolumeTooltip getRuleName={getRuleName} />} />
+                  <Tooltip content={<EventVolumeTooltip />} />
 
                   <Legend
                     verticalAlign="top"

@@ -6,7 +6,7 @@ import {
   ResponsiveContainer, Brush, Cell, Scatter
 } from 'recharts';
 import { getRuleColor } from '../constants';
-import { formatISTTime, formatISTDateTime } from '../utils/istUtils';
+import { formatISTTime } from '../utils/istUtils';
 
 // ─── Design System ────────────────────────────────────────────────────────────
 
@@ -141,7 +141,7 @@ function getEventCount(row) {
 }
 
 // ─── Custom Tooltip for Event Volume chart ────────────────────────────────────
-function EventVolumeTooltip({ active, payload, label, getRuleName }) {
+function EventVolumeTooltip({ active, payload, label }) {
   if (!active || !payload || !payload.length) return null;
   const breached = payload.some(p => p.payload && isBreached(p.payload));
   return (
@@ -745,7 +745,7 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId 
           {hasDraftOnly ? (
             <>
               <p style={{ color: '#f59e0b', fontSize: '1rem', textAlign: 'center', maxWidth: 440, fontWeight: 600 }}>The selected rule is still in Draft</p>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', maxWidth: 440 }}>Draft rules aren't live yet, so there's no real-time traffic to show. Publish the rule to make it Active, or use Historical Replay to test it against past data first.</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', maxWidth: 440 }}>Draft rules aren&apos;t live yet, so there&apos;s no real-time traffic to show. Publish the rule to make it Active, or use Historical Replay to test it against past data first.</p>
             </>
           ) : (
             <>
@@ -930,7 +930,7 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId 
                 label={{ value: 'Events / Window', angle: -90, position: 'insideLeft', offset: 12, style: { fill: '#64748b', fontSize: 10 } }}
               />
 
-              <Tooltip content={<EventVolumeTooltip getRuleName={getRuleName} />} />
+              <Tooltip content={<EventVolumeTooltip />} />
 
               <Legend
                 verticalAlign="top"
