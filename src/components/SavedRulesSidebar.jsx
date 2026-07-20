@@ -17,7 +17,7 @@ const STATUS_MAP = {
 };
 
 export default function SavedRulesSidebar({
-  rules, fetchRules, selectedRuleId, toggleRuleSelection, activeTab, navigateToSummary
+  rules, selectedRuleId, toggleRuleSelection, activeTab, navigateToSummary
 }) {
   const isAnalysisPage = ['live', 'agg', 'historical'].includes(activeTab);
   // Live and Agg analysis only work for non-DRAFT rules

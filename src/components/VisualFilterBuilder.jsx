@@ -26,7 +26,6 @@ const STANDARD_OPERATORS = [
 
 const NULL_OPERATORS = ['IS_NULL', 'IS_NOT_NULL'];
 const DATE_OPERATORS = ['DATE_BEFORE', 'DATE_AFTER', 'DATE_EQUALS'];
-const ALL_OPERATORS  = [...STANDARD_OPERATORS, ...NULL_OPERATORS, ...DATE_OPERATORS];
 
 // Plain-English display text for each operator — the underlying value sent
 // to the backend is unchanged, this only affects what the dropdown shows.

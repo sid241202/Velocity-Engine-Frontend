@@ -62,18 +62,6 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill }) {
   const minDate = toISTDatetimeLocalFromOffset(-7 * 24 * 60 * 60 * 1000);
   const maxDate = toISTDatetimeLocal(Date.now());
 
-  // Validate: start before end, end not in future, start not older than 7 days.
-  const validate = () => {
-    const startEpoch = istDatetimeLocalToEpochMs(startTs);
-    const endEpoch   = istDatetimeLocalToEpochMs(endTs);
-    const nowEpoch   = Date.now();
-    if (isNaN(startEpoch) || isNaN(endEpoch)) return 'Invalid date format.';
-    if (startEpoch >= endEpoch) return 'Start time must be before end time.';
-    if (endEpoch > nowEpoch + 60000) return 'End time cannot be in the future.';
-    if (startEpoch < nowEpoch - 7 * 24 * 60 * 60 * 1000) return 'Start cannot be more than 7 days ago.';
-    return '';
-  };
-
   /* Get aggregation aliases from the rule's aggregations array */
   const aggAliases = useMemo(() => {
     if (!selectedRule || !selectedRule.aggregations) return [];
@@ -85,6 +73,17 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill }) {
       setError('Select a rule from the sidebar first.');
       return;
     }
+    // Validate: start before end, end not in future, start not older than 7 days.
+    const validate = () => {
+      const startEpoch = istDatetimeLocalToEpochMs(startTs);
+      const endEpoch   = istDatetimeLocalToEpochMs(endTs);
+      const nowEpoch   = Date.now();
+      if (isNaN(startEpoch) || isNaN(endEpoch)) return 'Invalid date format.';
+      if (startEpoch >= endEpoch) return 'Start time must be before end time.';
+      if (endEpoch > nowEpoch + 60000) return 'End time cannot be in the future.';
+      if (startEpoch < nowEpoch - 7 * 24 * 60 * 60 * 1000) return 'Start cannot be more than 7 days ago.';
+      return '';
+    };
     const validationErr = validate();
     if (validationErr) {
       setError(validationErr);
@@ -466,7 +465,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill }) {
               <h3>Unique Entities</h3>
               <div className="value">{uniqueGroupKeys.toLocaleString()}</div>
             </div>
-            {aggAliases.map((alias, ai) => {
+            {aggAliases.map((alias) => {
               const total = chartRows.reduce((s, r) => s + (r[alias] || 0), 0);
               return (
                 <div key={alias} className="metric-card" style={{ flex: 1, minWidth: 140 }}>
