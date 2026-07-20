@@ -12,11 +12,11 @@
 # default shown. Everything else appConfig.js exports (API_BASE, WS_BASE,
 # WS_RECONNECT_*, LIVE_STORE_MAX_ROWS, LIVE_POLL_INTERVAL,
 # HISTORICAL_MAX_DAYS, DEFAULT_SOURCE_TOPIC, DEFAULT_PENALTY_TTL_SEC,
-# DEFAULT_WINDOW_SIZE_SEC, DEFAULT_SLIDE_SEC, MAX_AGGREGATIONS, ME_ENDPOINT,
-# AUTH_DEBUG_HEADER_NAME, AUTH_DEBUG_USER_ID_STORAGE_KEY,
-# AUTH_DEBUG_DEFAULT_USER_ID) is a hardcoded build-time constant with no
-# environment override — there is no env var name for these, so they have
-# no entry in a ConfigMap.
+# DEFAULT_WINDOW_SIZE_SEC, DEFAULT_SLIDE_SEC, MAX_AGGREGATIONS) is a
+# hardcoded build-time constant with no environment override — there is no
+# env var name for these, so they have no entry in a ConfigMap. (No
+# ME_ENDPOINT or AUTH_DEBUG_* constants exist on this branch at all — this
+# branch has no /me endpoint and no debug-identity system; see CLAUDE.md.)
 #
 # REACT_APP_CLIENT_SECRET: appConfig.js on this branch ships a real hardcoded
 # fallback value for this key (see the file's own "SECURITY NOTE" comment —
