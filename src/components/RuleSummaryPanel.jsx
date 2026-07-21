@@ -4,6 +4,12 @@ import { API_BASE } from '../config/appConfig';
 import { getAuthHeaders } from '../services/apiClient';
 import RequirePermission from './RequirePermission';
 import { PERMISSIONS } from '../permissions';
+import { pathToLabel } from '../constants/eventFields';
+
+// Friendly label for a raw event-field dot-path, falling back to the raw
+// path itself for anything outside the known schema (e.g. rules saved
+// before this field list existed).
+const fieldLabel = (path) => pathToLabel.get(path) || path;
 
 export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
   const [isActioning, setIsActioning] = React.useState(false);
@@ -188,7 +194,7 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
     }
     return (
       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '0.35rem 0.6rem', borderRadius: '4px', marginTop: '0.25rem', fontSize: '0.85rem' }}>
-        <span style={{ color: '#93c5fd', fontFamily: 'monospace' }}>{node.field}</span>
+        <span style={{ color: '#93c5fd', fontFamily: 'monospace' }}>{fieldLabel(node.field)}</span>
         <span style={{ color: 'var(--warning)', fontWeight: 600 }}>{node.operator}</span>
         <span style={{ color: 'var(--text-main)', fontFamily: 'monospace' }}>{Array.isArray(node.value) ? node.value.join(', ') : String(node.value ?? '')}</span>
       </div>
@@ -323,7 +329,7 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap' }}>
           {grouping.keys && grouping.keys.length > 0 ? grouping.keys.map((k, i) => (
-            <span key={i} style={chipStyle}>{k}</span>
+            <span key={i} style={chipStyle}>{k === '__GLOBAL__' ? k : fieldLabel(k)}</span>
           )) : (
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>No grouping keys</p>
           )}
@@ -360,7 +366,7 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
           </div>
           <div style={{ flex: 1, minWidth: '140px' }}>
             <label style={fieldLabelStyle}>Timestamp Field</label>
-            <input style={readOnlyMonoInputStyle} value={windowing.timestamp_field || 'N/A'} disabled />
+            <input style={readOnlyMonoInputStyle} value={windowing.timestamp_field ? fieldLabel(windowing.timestamp_field) : 'N/A'} disabled />
           </div>
         </div>
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
@@ -412,7 +418,7 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
                 {aggregations.map((a, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                     <td style={{ padding: '0.4rem 0.5rem', fontFamily: 'monospace', color: '#93c5fd' }}>{a.alias}</td>
-                    <td style={{ padding: '0.4rem 0.5rem', fontFamily: 'monospace' }}>{a.field}</td>
+                    <td style={{ padding: '0.4rem 0.5rem', fontFamily: 'monospace' }}>{fieldLabel(a.field)}</td>
                     <td style={{ padding: '0.4rem 0.5rem' }}>{a.function}</td>
                     <td style={{ padding: '0.4rem 0.5rem' }}>{a.cardinality_hint || '—'}</td>
                   </tr>

@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Save, Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, Zap, Clock, Database, Filter, BarChart2, Bell } from 'lucide-react';
 import VisualThresholdBuilder from './VisualThresholdBuilder';
 import VisualFilterBuilder, { processFilterTree } from './VisualFilterBuilder';
+import FieldSelect from './FieldSelect';
 import { API_BASE, DEFAULT_SOURCE_TOPIC, DEFAULT_WINDOW_SIZE_SEC, DEFAULT_SLIDE_SEC } from '../config/appConfig';
 import { isValidRuleId, isNonEmpty, isValidJexlAlias, isPositiveInt } from '../utils/validators';
 import { getAuthHeaders } from '../services/apiClient';
+import { ENVELOPE_FIELD_OPTIONS, DATA_FIELD_OPTIONS } from '../constants/eventFields';
 
 /* ─── Smart Tooltip with viewport-aware positioning ─────────────── */
 function Tip({ text }) {
@@ -224,31 +226,6 @@ function describeSeconds(totalSeconds) {
   return `${n} second${n !== 1 ? 's' : ''}`;
 }
 
-/* ─── Common event field suggestions ──────────────────────────────
-   Not an exhaustive schema — just the fields analysts reach for most
-   often, so a non-technical user has somewhere to start instead of
-   guessing dot-paths from scratch. The input still accepts free text. */
-const COMMON_FIELDS = [
-  { path: '_data.aua',        label: 'AUA Code (requesting agency)' },
-  { path: '_data.sa',         label: 'Sub-AUA Code' },
-  { path: '_data.asa',        label: 'ASA Code (auth service agency)' },
-  { path: '_data.uid',        label: 'Aadhaar Number (UID)' },
-  { path: '_data.authCode',   label: 'Auth Response Code' },
-  { path: '_data.authResult', label: 'Auth Result (success/failure)' },
-  { path: '_data.otpUsesFlag',label: 'OTP Used Flag' },
-  { path: '_data.amount',     label: 'Transaction Amount' },
-  { path: '_data.refId',      label: 'Reference ID' },
-  { path: '_data.txnTime',    label: 'Transaction Time' },
-];
-const COMMON_FIELDS_LIST_ID = 'common-event-fields';
-function CommonFieldsDatalist() {
-  return (
-    <datalist id={COMMON_FIELDS_LIST_ID}>
-      {COMMON_FIELDS.map(f => <option key={f.path} value={f.path}>{f.label}</option>)}
-    </datalist>
-  );
-}
-
 /* ─── Main Component ─────────────────────────────────────────── */
 export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onEditComplete }) {
 
@@ -290,6 +267,22 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
 
   // ── Alert Condition ───────────────────────────────────────────
   const [jexlExpression, setJexlExpression] = useState('');
+  const [fieldInsertValue, setFieldInsertValue] = useState('');
+  const jexlTextareaRef = useRef(null);
+
+  const insertFieldAtCursor = (fieldPath) => {
+    const el = jexlTextareaRef.current;
+    if (!el) { setJexlExpression(prev => prev + fieldPath); return; }
+    const start = el.selectionStart ?? jexlExpression.length;
+    const end = el.selectionEnd ?? jexlExpression.length;
+    const next = jexlExpression.slice(0, start) + fieldPath + jexlExpression.slice(end);
+    setJexlExpression(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + fieldPath.length;
+      el.setSelectionRange(pos, pos);
+    });
+  };
 
   // ── Sinks ─────────────────────────────────────────────────────
   const [aggSinkEnabled,          setAggSinkEnabled]          = useState(true);
@@ -516,8 +509,6 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
       </div>
 
       <form onSubmit={handleSave}>
-        <CommonFieldsDatalist />
-
         {/* ── Section 1: Identification ────────────────────────── */}
         <Section icon={Zap} iconColor="var(--violet-light)" title="Identification">
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
@@ -594,14 +585,12 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
           {!isGlobal && keys.map((k, i) => (
             <div key={i} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.4rem', flexDirection: 'column' }}>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <input
+                <FieldSelect
                   value={k}
-                  onChange={e => { const nk = [...keys]; nk[i] = e.target.value; setKeys(nk); }}
+                  onChange={val => { const nk = [...keys]; nk[i] = val; setKeys(nk); }}
                   onFocus={() => onFieldFocus && onFieldFocus('grouping_keys')}
-                  list={COMMON_FIELDS_LIST_ID}
-                  placeholder="e.g. _data.aua  or  _data.uid"
                   required
-                  style={{ border: errors[`key_${i}`] ? '1px solid var(--danger)' : undefined }}
+                  hasError={!!errors[`key_${i}`]}
                 />
                 {keys.length > 1 && (
                   <button type="button" className="btn btn-danger" style={{ padding: '0.45rem 0.55rem', flexShrink: 0 }}
@@ -639,13 +628,11 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
               </label>
               {useAnomalyEntityField && (
                 <>
-                  <input
+                  <FieldSelect
                     value={anomalyEntityField}
-                    onChange={e => setAnomalyEntityField(e.target.value)}
+                    onChange={setAnomalyEntityField}
                     onFocus={() => onFieldFocus && onFieldFocus('anomaly_entity_field')}
-                    list={COMMON_FIELDS_LIST_ID}
-                    placeholder="e.g. _data.refId  or  _data.uid"
-                    style={{ border: errors.anomalyEntityField ? '1px solid var(--danger)' : undefined }}
+                    hasError={!!errors.anomalyEntityField}
                   />
                   <FieldError msg={errors.anomalyEntityField} />
                 </>
@@ -751,13 +738,11 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
                     <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
                       <div style={{ flex: 2 }}>
                         <FieldLabel label="Timestamp Field Path" tip="Dot-notation path to the timestamp inside each event." required />
-                        <input
+                        <FieldSelect
                           value={customTsField}
-                          onChange={e => setCustomTsField(e.target.value)}
+                          onChange={setCustomTsField}
                           onFocus={() => onFieldFocus && onFieldFocus('custom_ts_field')}
-                          list={COMMON_FIELDS_LIST_ID}
-                          placeholder="e.g. _event_timestamp  or  _data.txnTime"
-                          style={{ border: errors.customTsField ? '1px solid var(--danger)' : undefined }}
+                          hasError={!!errors.customTsField}
                         />
                         <FieldError msg={errors.customTsField} />
                       </div>
@@ -918,14 +903,12 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
                     <FieldError msg={errors[`agg_alias_${i}`]} />
                   </div>
                   <div>
-                    <input
+                    <FieldSelect
                       value={a.field}
-                      onChange={e => { const na = [...aggregations]; na[i].field = e.target.value; setAggregations(na); }}
+                      onChange={val => { const na = [...aggregations]; na[i].field = val; setAggregations(na); }}
                       onFocus={() => onFieldFocus && onFieldFocus('aggregations')}
-                      list={COMMON_FIELDS_LIST_ID}
-                      placeholder="e.g. _data.authCode"
                       required
-                      style={{ border: errors[`agg_field_${i}`] ? '1px solid var(--danger)' : undefined }}
+                      hasError={!!errors[`agg_field_${i}`]}
                     />
                     <FieldError msg={errors[`agg_field_${i}`]} />
                   </div>
@@ -1016,24 +999,61 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
             : 'Define when this rule fires an alert. Use the metric names you defined above. Leave empty to always record data without alerting.'}
         >
           {noWindowing ? (
-            <div style={{ marginBottom: '0.75rem', padding: '0.6rem 0.875rem', background: 'rgba(251,191,36,0.06)', borderRadius: '7px', border: '1px solid rgba(251,191,36,0.2)' }}>
-              <p style={{ margin: 0, fontSize: '0.74rem', color: '#fbbf24', fontWeight: 500 }}>⚡ No-Window mode — checking raw event fields</p>
-              <p style={{ margin: '0.3rem 0 0', fontSize: '0.71rem', color: 'var(--text-3)', lineHeight: 1.55 }}>
-                Reference event fields directly using dot notation.<br />
-                Examples: <code style={{ color: 'var(--violet-light)' }}>_data.authCode == &quot;Y&quot;</code>&nbsp;&nbsp;
-                <code style={{ color: 'var(--violet-light)' }}>_data.amount &gt; 50000</code>&nbsp;&nbsp;
-                <code style={{ color: 'var(--violet-light)' }}>_data.status == &quot;FAIL&quot;</code><br />
-                Leave blank to flag <strong>every</strong> matching event as an anomaly.
+            <>
+              <div style={{ marginBottom: '0.75rem', padding: '0.6rem 0.875rem', background: 'rgba(251,191,36,0.06)', borderRadius: '7px', border: '1px solid rgba(251,191,36,0.2)' }}>
+                <p style={{ margin: 0, fontSize: '0.74rem', color: '#fbbf24', fontWeight: 500 }}>⚡ No-Window mode — checking raw event fields</p>
+                <p style={{ margin: '0.3rem 0 0', fontSize: '0.71rem', color: 'var(--text-3)', lineHeight: 1.55 }}>
+                  Reference event fields directly using dot notation.<br />
+                  Examples: <code style={{ color: 'var(--violet-light)' }}>_data.authCode == &quot;Y&quot;</code>&nbsp;&nbsp;
+                  <code style={{ color: 'var(--violet-light)' }}>_data.amount &gt; 50000</code>&nbsp;&nbsp;
+                  <code style={{ color: 'var(--violet-light)' }}>_data.status == &quot;FAIL&quot;</code><br />
+                  Leave blank to flag <strong>every</strong> matching event as an anomaly.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', gap: '0.75rem' }}>
+                <FieldLabel label="Condition Expression (JEXL)" />
+                <select
+                  value={fieldInsertValue}
+                  onChange={e => {
+                    const path = e.target.value;
+                    if (path) insertFieldAtCursor(path);
+                    setFieldInsertValue('');
+                  }}
+                  onFocus={() => onFieldFocus && onFieldFocus('having_thresholds')}
+                  style={{ flexShrink: 0, fontSize: '0.74rem', width: 'auto', maxWidth: '240px' }}
+                >
+                  <option value="">+ Insert field…</option>
+                  <optgroup label="Event Envelope">
+                    {ENVELOPE_FIELD_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                  </optgroup>
+                  <optgroup label="Event Data">
+                    {DATA_FIELD_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                  </optgroup>
+                </select>
+              </div>
+              <textarea
+                ref={jexlTextareaRef}
+                value={jexlExpression}
+                onChange={e => setJexlExpression(e.target.value)}
+                onFocus={() => onFieldFocus && onFieldFocus('having_thresholds')}
+                placeholder='e.g. _data.otpUsesFlag == 1 && _data.authResult == "n"'
+                rows={4}
+                style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.8rem', resize: 'vertical', lineHeight: 1.5 }}
+              />
+              <p className="helper" style={{ marginTop: '0.3rem' }}>
+                Compiled Expression: <code style={{ color: 'var(--violet-light)' }}>{jexlExpression || 'None (No Alerts)'}</code>
               </p>
+            </>
+          ) : (
+            <div onFocus={() => onFieldFocus && onFieldFocus('having_thresholds')}>
+              <VisualThresholdBuilder
+                expression={jexlExpression}
+                setExpression={setJexlExpression}
+                aggregations={aggregations}
+              />
             </div>
-          ) : null}
-          <div onFocus={() => onFieldFocus && onFieldFocus('having_thresholds')}>
-            <VisualThresholdBuilder
-              expression={jexlExpression}
-              setExpression={setJexlExpression}
-              aggregations={noWindowing ? [] : aggregations}
-            />
-          </div>
+          )}
         </Section>
 
         {/* ── Section 7: Outputs ──────────────────────────────── */}
