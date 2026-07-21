@@ -310,7 +310,7 @@ export default function Dashboard() {
           <div style={{ display: activeTab === 'live' ? 'block' : 'none' }}
                className={activeTab === 'live' ? 'animate-fade-in' : ''}>
             <ErrorBoundary label="Live Analysis" showDetails={true}>
-              <LiveAnalysis rules={rules} selectedRuleId={prodSelectedId} allSelectedRuleId={selectedRuleId} simulationMode={SIMULATION_MODE} />
+              <LiveAnalysis rules={rules} selectedRuleId={prodSelectedId} allSelectedRuleId={selectedRuleId} simulationMode={SIMULATION_MODE} onRuleClick={navigateToSummary} />
             </ErrorBoundary>
           </div>
 
@@ -318,7 +318,7 @@ export default function Dashboard() {
           <div style={{ display: activeTab === 'agg' ? 'block' : 'none' }}
                className={activeTab === 'agg' ? 'animate-fade-in' : ''}>
             <ErrorBoundary label="Aggregated Analysis">
-              <AggregatedAnalysis rules={rules} selectedRuleId={prodSelectedId} allSelectedRuleId={selectedRuleId} onDrillToHistorical={drillToHistorical} simulationMode={SIMULATION_MODE} />
+              <AggregatedAnalysis rules={rules} selectedRuleId={prodSelectedId} allSelectedRuleId={selectedRuleId} onDrillToHistorical={drillToHistorical} simulationMode={SIMULATION_MODE} onRuleClick={navigateToSummary} />
             </ErrorBoundary>
           </div>
 
