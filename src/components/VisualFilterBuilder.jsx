@@ -13,6 +13,7 @@
 import React from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { isValidEpochMs, isValidIsoDate } from '../utils/validators';
+import FieldSelect from './FieldSelect';
 
 // ─── Operator Groups ──────────────────────────────────────────────────────────
 const STANDARD_OPERATORS = [
@@ -224,16 +225,11 @@ export default function VisualFilterBuilder({ filterTree, setFilterTree }) {
       >
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
           {/* Field */}
-          <input
-            type="text"
-            placeholder="Event field (e.g. _data.aua)"
+          <FieldSelect
             value={node.field || ''}
-            onChange={e => updateNode(path, { field: e.target.value })}
-            list="common-event-fields"
-            style={{
-              flex: 2, minWidth: '120px', margin: 0,
-              border: node.field === '' ? '1px solid rgba(239,68,68,0.4)' : undefined,
-            }}
+            onChange={val => updateNode(path, { field: val })}
+            hasError={node.field === ''}
+            style={{ flex: 2, minWidth: '120px', margin: 0 }}
           />
 
           {/* Operator */}
