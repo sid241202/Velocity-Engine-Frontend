@@ -1,31 +1,51 @@
 /* ================================================================
-   VELOCITY ENGINE — Deep Slate Design System v2
-   Direction: Deep navy-slate backgrounds, refined indigo primary,
-   teal data accent, precise typography, zero visual noise.
-   Inspired by: Linear, Vercel, GitHub Primer, Stripe Dashboard
+   VELOCITY ENGINE — Deep Slate Design System v3
+   A disciplined 12-step neutral scale, refined violet/jade accents,
+   a consistent type + radius scale — the same navy-slate identity as
+   v2, leveled up. Inspired by Castle.io's dashboard-as-product
+   aesthetic (dark, confident, generously spaced, data treated as a
+   first-class visual element) reconciled with our existing look
+   rather than replacing it — violet/teal stay, the system around
+   them gets more disciplined.
 ================================================================ */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;1,14..32,400&display=swap');
 
 /* ── Design Tokens ──────────────────────────────────────────── */
 :root {
+  /* Neutral scale — 12 steps, near-black to near-white, cool slate
+     undertone. Everything below (backgrounds, surfaces, text) is
+     drawn from this ramp instead of one-off hex values. */
+  --gray-1:  #0c0e12;
+  --gray-2:  #131619;
+  --gray-3:  #191d22;
+  --gray-4:  #20242a;
+  --gray-5:  #262b32;
+  --gray-6:  #2e343c;
+  --gray-7:  #3a414a;
+  --gray-8:  #4c5560;
+  --gray-9:  #6b7280;
+  --gray-10: #838a98;
+  --gray-11: #b4bac4;
+  --gray-12: #eef0f3;
+
   /* Base backgrounds — deep slate-navy, NOT pure black */
-  --bg:              #0d1117;
+  --bg:              var(--gray-1);
   --bg-warm:         #0f1318;
-  --surface:         #161b22;
-  --surface-2:       #1c2128;
-  --surface-3:       #21262d;
-  --surface-4:       #2d333b;
+  --surface:         var(--gray-2);
+  --surface-2:       var(--gray-3);
+  --surface-3:       var(--gray-4);
+  --surface-4:       var(--gray-5);
 
   /* Borders — very subtle, layered */
   --border:          rgba(255, 255, 255, 0.07);
-  --border-2:        rgba(255, 255, 255, 0.11);
+  --border-2:        rgba(255, 255, 255, 0.12);
   --border-focus:    rgba(88, 101, 242, 0.60);
 
-  /* Text — proper contrast hierarchy */
-  --text-1:    #e6edf3;
-  --text-2:    #8b949e;
-  --text-3:    #545d68;
+  /* Text — proper contrast hierarchy, off the neutral scale */
+  --text-1:    var(--gray-12);
+  --text-2:    var(--gray-11);
+  --text-3:    var(--gray-9);
 
   /* Primary — refined indigo (not electric violet) */
   --violet:          #5865f2;
@@ -33,7 +53,7 @@
   --violet-glow:     rgba(88, 101, 242, 0.22);
   --violet-subtle:   rgba(88, 101, 242, 0.09);
 
-  /* Data accent — teal, slightly more saturated */
+  /* Data accent — teal/jade, slightly more saturated */
   --teal:            #2dd4bf;
   --teal-glow:       rgba(45, 212, 191, 0.14);
   --teal-subtle:     rgba(45, 212, 191, 0.08);
@@ -43,7 +63,7 @@
   --amber-glow:      rgba(227, 160, 8, 0.18);
   --amber-subtle:    rgba(227, 160, 8, 0.07);
 
-  /* Semantic */
+  /* Semantic — danger / warning / success, for breach & anomaly states */
   --success:         #3fb950;
   --success-subtle:  rgba(63, 185, 80, 0.10);
   --warning:         #e3a008;
@@ -59,10 +79,28 @@
   /* Legacy compat */
   --primary:         #5865f2;
   --accent:          #2dd4bf;
-  --text-main:       #e6edf3;
-  --text-muted:      #545d68;
+  --text-main:       var(--gray-12);
+  --text-muted:      var(--gray-9);
   --glass-border:    rgba(255,255,255,0.07);
   --glass-bg:        rgba(255,255,255,0.02);
+
+  /* ── Radius scale — one consistent corner treatment app-wide ── */
+  --radius-xs: 6px;   /* badges, pills, tiny chips */
+  --radius-sm: 8px;   /* buttons, inputs, small cards */
+  --radius-md: 10px;  /* cards, stat tiles */
+  --radius-lg: 12px;  /* 0.75rem — panels, modals, drawers */
+
+  /* ── Type scale ── */
+  --fs-3xs:  0.64rem;  /* micro meta */
+  --fs-2xs:  0.68rem;  /* uppercase eyebrow / stat labels */
+  --fs-xs:   0.73rem;  /* helper text, secondary meta */
+  --fs-sm:   0.79rem;  /* table cells, body small */
+  --fs-base: 0.86rem;  /* default body */
+  --fs-md:   0.95rem;  /* section subheadings */
+  --fs-lg:   1.1rem;   /* panel titles */
+  --fs-xl:   1.35rem;  /* app brand / hero stat */
+  --fs-2xl:  1.75rem;  /* large stat values */
+  --fs-3xl:  2.25rem;  /* rare hero numbers */
 }
 
 /* ── Base ──────────────────────────────────────────────────── */
@@ -106,7 +144,7 @@ h1, h2, h3, h4 {
 .glass-panel {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 1.25rem;
   position: relative;
   /* Do NOT set overflow:hidden — it clips tooltips and dropdowns */
@@ -132,7 +170,7 @@ h1, h2, h3, h4 {
 .card {
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 1rem 1.25rem;
   transition: border-color 0.18s, box-shadow 0.18s;
 }
@@ -145,7 +183,7 @@ h1, h2, h3, h4 {
 .card-sm {
   background: var(--surface-3);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 0.75rem 1rem;
 }
 
@@ -155,7 +193,7 @@ h1, h2, h3, h4 {
   align-items: center;
   gap: 0.4rem;
   padding: 0.5rem 1rem;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-2);
   background: var(--surface-3);
   color: var(--text-2);
@@ -264,7 +302,7 @@ h1, h2, h3, h4 {
 input, select, textarea {
   background: var(--surface-3);
   border: 1px solid var(--border-2);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 0.475rem 0.7rem;
   color: var(--text-1);
   font-size: 0.83rem;
@@ -307,14 +345,14 @@ select {
 }
 
 .input-unit-row input {
-  border-radius: 6px 0 0 6px;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
   border-right: none;
   flex: 1;
   min-width: 0;
 }
 
 .input-unit-row select {
-  border-radius: 0 6px 6px 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   width: auto;
   min-width: 92px;
   background-color: var(--surface-4);
@@ -324,7 +362,7 @@ select {
 
 .input-unit-row input:focus {
   border-right: 1px solid var(--border-focus);
-  border-radius: 6px 0 0 6px;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
   position: relative;
   z-index: 1;
 }
@@ -335,7 +373,7 @@ select {
   align-items: center;
   gap: 0.2rem;
   padding: 0.15rem 0.45rem;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 0.67rem;
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -387,7 +425,7 @@ select {
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-left: 3px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 0.65rem 0.875rem;
   cursor: pointer;
   /* Only specific props — 'transition: all' causes layout bounce on hover */
@@ -416,7 +454,7 @@ select {
 .stat-tile {
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 1rem 1.25rem;
   display: flex;
   flex-direction: column;
@@ -444,7 +482,7 @@ select {
 .stat-tile:hover::after { opacity: 1; }
 
 .stat-label {
-  font-size: 0.67rem;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -452,7 +490,7 @@ select {
 }
 
 .stat-value {
-  font-size: 1.65rem;
+  font-size: var(--fs-2xl);
   font-weight: 700;
   letter-spacing: -0.03em;
   color: var(--text-1);
@@ -460,7 +498,7 @@ select {
 }
 
 .stat-sub {
-  font-size: 0.71rem;
+  font-size: var(--fs-xs);
   color: var(--text-3);
 }
 
@@ -488,7 +526,7 @@ select {
 }
 
 .section-title {
-  font-size: 0.71rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -502,7 +540,7 @@ select {
 table { width: 100%; border-collapse: collapse; }
 
 th {
-  font-size: 0.67rem; font-weight: 600;
+  font-size: var(--fs-2xs); font-weight: 600;
   letter-spacing: 0.07em; text-transform: uppercase;
   color: var(--text-3); padding: 0.5rem 0.75rem;
   background: var(--surface-2); border-bottom: 1px solid var(--border);
@@ -511,7 +549,7 @@ th {
 
 td {
   padding: 0.58rem 0.75rem;
-  font-size: 0.81rem;
+  font-size: var(--fs-sm);
   border-bottom: 1px solid var(--border);
   color: var(--text-2);
   transition: background 0.1s;
@@ -575,13 +613,13 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
   opacity: 0;
   position: fixed; /* Use fixed so it is never clipped by any ancestor overflow */
   /* Position is set dynamically via JS — fallback values below */
-  background: #1c2128;
+  background: var(--surface-2);
   border: 1px solid rgba(88,101,242,0.35);
   color: var(--text-1);
-  font-size: 0.73rem;
+  font-size: var(--fs-xs);
   line-height: 1.55;
   padding: 0.6rem 0.875rem;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   white-space: normal;
   width: 240px;
   max-width: min(280px, calc(100vw - 32px));
@@ -610,7 +648,7 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
   left: 50%;
   transform: translateX(-50%);
   border: 5px solid transparent;
-  border-top-color: #1c2128;
+  border-top-color: var(--surface-2);
   pointer-events: none;
 }
 
@@ -619,7 +657,7 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
   flex: 1; min-width: 150px;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 8px; padding: 0.875rem;
+  border-radius: var(--radius-sm); padding: 0.875rem;
   cursor: pointer;
   /* Only transition specific safe properties — 'all' causes bounce */
   transition: border-color 0.14s ease, background-color 0.14s ease, box-shadow 0.14s ease, opacity 0.14s ease;
@@ -634,7 +672,7 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
 
 /* ── Charts ─────────────────────────────────────────────────── */
 .chart-container { width: 100%; height: 280px; margin-top: 0.75rem; }
-.chart-title { font-size: 0.8rem; font-weight: 600; color: var(--text-2); margin-bottom: 0.5rem; }
+.chart-title { font-size: var(--fs-base); font-weight: 700; letter-spacing: -0.01em; color: var(--text-1); margin-bottom: 0.5rem; }
 .chart-header {
   display: flex; align-items: center;
   justify-content: space-between; margin-bottom: 0.5rem;
@@ -690,8 +728,28 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
 .metric-card {
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 8px; padding: 0.875rem;
-  display: flex; flex-direction: column; gap: 0.25rem;
+  border-radius: var(--radius-md); padding: 0.875rem 1rem;
+  display: flex; flex-direction: column; gap: 0.3rem;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.metric-card:hover {
+  border-color: rgba(88,101,242,0.2);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+}
+.metric-card h3 {
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 0;
+}
+.metric-card .value {
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-1);
+  line-height: 1.15;
 }
 .value-success { color: var(--success); font-weight: 700; }
 .value-danger  { color: var(--danger);  font-weight: 700; }
@@ -715,15 +773,15 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
 .insight-card {
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 8px; padding: 0.75rem;
+  border-radius: var(--radius-sm); padding: 0.75rem;
   display: flex; flex-direction: column; gap: 0.25rem;
 }
 
 /* breach badge */
 .breach-rate-badge {
   display: inline-flex; align-items: center; gap: 0.25rem;
-  padding: 0.15rem 0.45rem; border-radius: 4px;
-  font-size: 0.68rem; font-weight: 600;
+  padding: 0.15rem 0.45rem; border-radius: var(--radius-xs);
+  font-size: var(--fs-2xs); font-weight: 600;
 }
 .breach-rate-badge.breach-critical { background: rgba(248,81,73,0.14);  color: #ff9492; border: 1px solid rgba(248,81,73,0.22); }
 .breach-rate-badge.breach-high     { background: rgba(248,81,73,0.09);  color: #ff7b72; border: 1px solid rgba(248,81,73,0.18); }
@@ -769,7 +827,7 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
 }
 
 .header h1 {
-  font-size: 1rem;
+  font-size: var(--fs-lg);
   font-weight: 700;
   letter-spacing: -0.03em;
   color: var(--text-1);
@@ -777,9 +835,9 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
 }
 
 .header-logo {
-  width: 28px; height: 28px;
-  background: linear-gradient(135deg, #5865f2 0%, #2dd4bf 100%);
-  border-radius: 7px;
+  width: 30px; height: 30px;
+  background: linear-gradient(135deg, var(--violet) 0%, var(--teal) 100%);
+  border-radius: var(--radius-sm);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
   box-shadow: 0 0 0 1px rgba(88,101,242,0.3), 0 2px 8px rgba(0,0,0,0.3);
@@ -799,7 +857,7 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
   margin-bottom: 1.125rem;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   padding: 0.25rem;
   width: fit-content;
   box-shadow: 0 1px 3px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.02);
@@ -808,7 +866,7 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
 .nav-btn {
   /* Larger, more inviting tap targets for the 5 main panel buttons */
   padding: 0.5rem 1.1rem;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: transparent;
   border: none;
   color: var(--text-3);
@@ -818,7 +876,7 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  font-size: 0.83rem;
+  font-size: var(--fs-sm);
   font-family: 'Inter', sans-serif;
   letter-spacing: 0;
   white-space: nowrap;
@@ -870,7 +928,7 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  font-size: 0.79rem;
+  font-size: var(--fs-sm);
   margin-bottom: -1px;
   font-family: 'Inter', sans-serif;
 }
@@ -887,11 +945,11 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
 .backend-banner {
   background: var(--amber-subtle);
   border: 1px solid rgba(227,160,8,0.22);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 0.475rem 0.875rem;
   margin-bottom: 0.875rem;
   color: var(--amber);
-  font-size: 0.79rem;
+  font-size: var(--fs-sm);
   display: flex;
   align-items: center;
   justify-content: space-between;

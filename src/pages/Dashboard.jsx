@@ -165,7 +165,7 @@ export default function Dashboard() {
       {/* Header */}
       <header className="header">
         <div className="header-logo">
-          <Zap size={15} color="#fff" strokeWidth={2.5} />
+          <Zap size={16} color="#fff" strokeWidth={2.5} />
         </div>
         <h1>Velocity Engine</h1>
         <div className="header-right">
