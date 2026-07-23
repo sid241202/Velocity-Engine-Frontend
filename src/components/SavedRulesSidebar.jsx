@@ -4,7 +4,7 @@ import { getRuleColor } from '../constants';
 
 const SEV_COLORS = {
   CRITICAL: 'var(--danger)',
-  HIGH:     '#f87171',
+  HIGH:     '#ff7b72',
   MEDIUM:   'var(--amber)',
   LOW:      'var(--teal)',
 };
@@ -17,7 +17,7 @@ const STATUS_MAP = {
 };
 
 export default function SavedRulesSidebar({
-  rules, fetchRules, selectedRuleId, toggleRuleSelection, activeTab, navigateToSummary
+  rules, selectedRuleId, toggleRuleSelection, activeTab, navigateToSummary
 }) {
   const isAnalysisPage = ['live', 'agg', 'historical'].includes(activeTab);
   // Live and Agg analysis only work for non-DRAFT rules
@@ -39,7 +39,7 @@ export default function SavedRulesSidebar({
 
       {/* Selection hint */}
       {isAnalysisPage && rules.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.75rem', padding: '0.35rem 0.6rem', background: 'var(--violet-subtle)', borderRadius: '6px', border: '1px solid rgba(124,58,237,0.15)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.75rem', padding: '0.35rem 0.6rem', background: 'var(--violet-subtle)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(88,101,242,0.15)' }}>
           <TrendingUp size={11} color="var(--violet-light)" />
           <span style={{ fontSize: '0.68rem', color: 'var(--violet-light)', fontWeight: 500 }}>Click a rule to analyze it — selecting a new one replaces the current selection</span>
         </div>
@@ -71,7 +71,7 @@ export default function SavedRulesSidebar({
                 : ''}
               style={{
                 background: isSelected ? `${color}12` : 'var(--surface-2)',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-sm)',
                 border: `1px solid ${isSelected ? `${color}35` : 'var(--border)'}`,
                 borderLeft: `3px solid ${isSelected ? color : 'transparent'}`,
                 padding: '0.6rem 0.75rem',
@@ -127,7 +127,7 @@ export default function SavedRulesSidebar({
                       className="btn btn-ghost"
                       style={{
                         background: 'none', border: 'none', cursor: 'pointer',
-                        padding: '2px', borderRadius: '4px',
+                        padding: '2px', borderRadius: 'var(--radius-xs)',
                         display: 'flex', alignItems: 'center',
                         color: 'var(--text-3)', transition: 'color 0.15s',
                       }}

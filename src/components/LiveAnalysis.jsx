@@ -6,7 +6,7 @@ import {
   ResponsiveContainer, Brush, Cell, Scatter
 } from 'recharts';
 import { getRuleColor } from '../constants';
-import { formatISTTime, formatISTDateTime } from '../utils/istUtils';
+import { formatISTTime } from '../utils/istUtils';
 import { MockLiveTicker } from '../simulation/mockEngine';
 import { Modal, Drawer, RuleLink } from './ui/Overlay';
 
@@ -146,7 +146,7 @@ function getEventCount(row) {
 }
 
 // ─── Custom Tooltip for Event Volume chart ────────────────────────────────────
-function EventVolumeTooltip({ active, payload, label, getRuleName }) {
+function EventVolumeTooltip({ active, payload, label }) {
   if (!active || !payload || !payload.length) return null;
   const breached = payload.some(p => p.payload && isBreached(p.payload));
   return (
@@ -827,7 +827,7 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
           {hasDraftOnly ? (
             <>
               <p style={{ color: 'var(--warning)', fontSize: '1rem', textAlign: 'center', maxWidth: 440, fontWeight: 600 }}>The selected rule is still in Draft</p>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', maxWidth: 440 }}>Draft rules aren't live yet, so there's no real-time traffic to show. Publish the rule to make it Active, or use Historical Replay to test it against past data first.</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', maxWidth: 440 }}>Draft rules aren&apos;t live yet, so there&apos;s no real-time traffic to show. Publish the rule to make it Active, or use Historical Replay to test it against past data first.</p>
             </>
           ) : (
             <>
@@ -1248,7 +1248,7 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
         <div className="chart-title" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1rem' }}>
           <AlertTriangle size={15} style={{ opacity: 0.7 }} />
           Top Groups by Breach Activity
-          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: 4 }}>· click a row for the entity's full history</span>
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: 4 }}>· click a row for the entity&apos;s full history</span>
         </div>
         <div ref={tableRef} style={{ overflowX: 'auto', maxHeight: 520, overflowY: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>

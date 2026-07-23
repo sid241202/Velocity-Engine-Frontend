@@ -120,14 +120,14 @@ export default function RuleBuilderHelper({ focusedField }) {
   return (
     <div className="glass-panel" style={{ height: 'calc(100vh - 180px)', overflowY: 'auto', padding: '1.25rem' }}>
       {help && (
-        <div className="animate-fade-in" style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.5rem' }}>
+        <div className="animate-fade-in" style={{ background: 'var(--violet-subtle)', border: '1px solid rgba(88,101,242,0.25)', borderRadius: 'var(--radius-md)', padding: '1.25rem', marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-            <Lightbulb size={18} color="#60a5fa" />
-            <h4 style={{ color: '#93c5fd', margin: 0, fontSize: '1rem' }}>{help.title}</h4>
+            <Lightbulb size={18} color="var(--violet-light)" />
+            <h4 style={{ color: 'var(--violet-light)', margin: 0, fontSize: 'var(--fs-md)' }}>{help.title}</h4>
           </div>
-          <p style={{ color: 'var(--text-main)', fontSize: '0.88rem', lineHeight: 1.6, marginBottom: '0.75rem' }}>{help.description}</p>
-          <div style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: '6px', padding: '0.75rem', fontSize: '0.82rem', color: '#c4b5fd' }}>
-            <strong>💡 Tip:</strong> {help.tip}
+          <p style={{ color: 'var(--text-main)', fontSize: 'var(--fs-base)', lineHeight: 1.6, marginBottom: '0.75rem' }}>{help.description}</p>
+          <div style={{ background: 'var(--teal-subtle)', border: '1px solid rgba(45,212,191,0.25)', borderRadius: 'var(--radius-xs)', padding: '0.75rem', fontSize: 'var(--fs-sm)', color: 'var(--teal)' }}>
+            <strong>Tip:</strong> {help.tip}
           </div>
         </div>
       )}
@@ -135,24 +135,24 @@ export default function RuleBuilderHelper({ focusedField }) {
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
           <BookOpen size={18} color="var(--accent)" />
-          <h3 style={{ color: 'white', margin: 0, fontSize: '1.05rem' }}>Sample Rule Reference</h3>
+          <h3 style={{ color: 'var(--text-1)', margin: 0, fontSize: 'var(--fs-lg)' }}>Sample Rule Reference</h3>
         </div>
-        <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '1rem', marginBottom: '1rem', fontSize: '0.85rem', lineHeight: 1.7 }}>
-          <h4 style={{ color: '#60a5fa', marginBottom: '0.75rem' }}>OTP Bypass Ring Detector</h4>
+        <div style={{ background: 'var(--surface-3)', borderRadius: 'var(--radius-sm)', padding: '1rem', marginBottom: '1rem', fontSize: 'var(--fs-sm)', lineHeight: 1.7 }}>
+          <h4 style={{ color: 'var(--violet-light)', marginBottom: '0.75rem' }}>OTP Bypass Ring Detector</h4>
           <div style={{ color: 'var(--text-main)' }}>
-            <p style={{ marginBottom: '0.5rem' }}><strong style={{ color: 'var(--text-muted)' }}>Grouping:</strong> <code style={{ color: '#93c5fd' }}>_data.sa</code> (Sub-AUA)</p>
-            <p style={{ marginBottom: '0.5rem' }}><strong style={{ color: 'var(--text-muted)' }}>Filter:</strong> <code style={{ color: '#93c5fd' }}>_data.otpUsesFlag</code> EQUALS <code style={{ color: '#fcd34d' }}>1.0</code></p>
+            <p style={{ marginBottom: '0.5rem' }}><strong style={{ color: 'var(--text-muted)' }}>Grouping:</strong> <code style={{ color: 'var(--violet-light)' }}>_data.sa</code> (Sub-AUA)</p>
+            <p style={{ marginBottom: '0.5rem' }}><strong style={{ color: 'var(--text-muted)' }}>Filter:</strong> <code style={{ color: 'var(--violet-light)' }}>_data.otpUsesFlag</code> EQUALS <code style={{ color: '#fcd34d' }}>1.0</code></p>
             <p style={{ marginBottom: '0.5rem' }}><strong style={{ color: 'var(--text-muted)' }}>Window:</strong> SLIDING, 10 min size, 2 min slide, Event Time</p>
             <p style={{ marginBottom: '0.5rem' }}><strong style={{ color: 'var(--text-muted)' }}>Aggregations:</strong></p>
             <ul style={{ paddingLeft: '1.25rem', marginBottom: '0.5rem' }}>
-              <li><code style={{ color: '#93c5fd' }}>total_otp</code> = COUNT(<code>_data.authCode</code>)</li>
-              <li><code style={{ color: '#93c5fd' }}>unique_auas</code> = COUNT_DISTINCT(<code>_data.aua</code>, LOW)</li>
+              <li><code style={{ color: 'var(--violet-light)' }}>total_otp</code> = COUNT(<code>_data.authCode</code>)</li>
+              <li><code style={{ color: 'var(--violet-light)' }}>unique_auas</code> = COUNT_DISTINCT(<code>_data.aua</code>, LOW)</li>
             </ul>
-            <p style={{ marginBottom: '0.5rem' }}><strong style={{ color: 'var(--text-muted)' }}>Threshold:</strong> <code style={{ color: '#a78bfa' }}>(total_otp &gt; 15) &amp;&amp; (unique_auas &gt;= 3)</code></p>
+            <p style={{ marginBottom: '0.5rem' }}><strong style={{ color: 'var(--text-muted)' }}>Threshold:</strong> <code style={{ color: 'var(--violet-light)' }}>(total_otp &gt; 15) &amp;&amp; (unique_auas &gt;= 3)</code></p>
             <p><strong style={{ color: 'var(--text-muted)' }}>Severity:</strong> <span style={{ color: '#fca5a5' }}>CRITICAL</span></p>
           </div>
         </div>
-        <div style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '8px', padding: '1rem', fontSize: '0.84rem', color: 'var(--text-main)', lineHeight: 1.6 }}>
+        <div style={{ background: 'var(--success-subtle)', border: '1px solid rgba(63,185,80,0.2)', borderRadius: 'var(--radius-sm)', padding: '1rem', fontSize: 'var(--fs-base)', color: 'var(--text-main)', lineHeight: 1.6 }}>
           <Zap size={14} color="var(--success)" style={{ display: 'inline', marginRight: '0.3rem', verticalAlign: 'middle' }} />
           <strong>What this rule does:</strong> Monitors each Sub-AUA (SA) for suspicious OTP authentication patterns. Within every 10-minute sliding window, it counts total OTP attempts and the number of distinct AUAs being targeted. If a single SA has more than 15 OTP attempts AND targets 3+ different AUAs in the same window, an alert fires — indicating a potential OTP bypass ring.
         </div>

@@ -68,7 +68,7 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
   const thresholds = rule.having_thresholds || {};
   const filters = rule.filters;
 
-  const statusColor = meta.status === 'ACTIVE' ? 'var(--success)' : meta.status === 'PAUSED' ? 'var(--warning)' : '#475569';
+  const statusColor = meta.status === 'ACTIVE' ? 'var(--success)' : meta.status === 'PAUSED' ? 'var(--warning)' : 'var(--gray-8)';
 
   const formatMs = (ms) => {
     if (!ms && ms !== 0) return 'N/A';
@@ -108,11 +108,14 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
     return `${hh}:${mm}:${ss}`;
   };
 
+  // Severity color-coding matches the same tiers used in Analytics' anomaly
+  // breakdown (AggregatedAnalysis.jsx) — CRITICAL/HIGH/MEDIUM/LOW should look
+  // identical wherever severity shows up in the app.
   const severityColorMap = {
-    CRITICAL: { bg: 'rgba(239,68,68,0.2)', color: '#fca5a5' },
-    HIGH: { bg: 'rgba(245,158,11,0.2)', color: '#fcd34d' },
-    MEDIUM: { bg: 'rgba(59,130,246,0.2)', color: '#93c5fd' },
-    LOW: { bg: 'rgba(16,185,129,0.2)', color: '#6ee7b7' }
+    CRITICAL: { bg: 'rgba(248,81,73,0.2)', color: 'var(--danger)' },
+    HIGH: { bg: 'rgba(255,123,114,0.2)', color: '#ff7b72' },
+    MEDIUM: { bg: 'rgba(227,160,8,0.2)', color: 'var(--warning)' },
+    LOW: { bg: 'rgba(63,185,80,0.2)', color: 'var(--success)' }
   };
   const sevStyle = severityColorMap[meta.severity_level] || severityColorMap.MEDIUM;
 
@@ -126,8 +129,8 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
     display: 'flex',
     alignItems: 'center',
     gap: '0.5rem',
-    color: 'white',
-    fontSize: '1rem',
+    color: 'var(--text-1)',
+    fontSize: 'var(--fs-md)',
     fontWeight: 600,
     marginBottom: '0.75rem'
   };
@@ -135,9 +138,9 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
   const readOnlyInputStyle = {
     width: '100%',
     padding: '0.5rem',
-    borderRadius: '6px',
+    borderRadius: 'var(--radius-sm)',
     border: '1px solid var(--glass-border)',
-    background: 'rgba(59,130,246,0.05)',
+    background: 'var(--violet-subtle)',
     color: 'var(--text-main)',
     fontFamily: "'Inter', sans-serif",
     marginTop: '0.25rem',
@@ -150,24 +153,15 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
     fontSize: '0.85rem'
   };
 
-  const fieldRowStyle = {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '0.35rem 0',
-    fontSize: '0.9rem'
-  };
-
   const fieldLabelStyle = { color: 'var(--text-muted)', fontSize: '0.85rem' };
-  const fieldValueStyle = { color: 'var(--text-main)', fontWeight: 500 };
 
   const chipStyle = {
     display: 'inline-block',
     padding: '0.2rem 0.6rem',
-    borderRadius: '12px',
-    background: 'rgba(59, 130, 246, 0.2)',
-    border: '1px solid rgba(59, 130, 246, 0.3)',
-    color: '#93c5fd',
+    borderRadius: 'var(--radius-lg)',
+    background: 'rgba(88,101,242,0.2)',
+    border: '1px solid rgba(88,101,242,0.3)',
+    color: 'var(--violet-light)',
     fontSize: '0.8rem',
     marginRight: '0.4rem',
     marginBottom: '0.3rem'
@@ -178,7 +172,7 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
     if (node.type === 'group') {
       return (
         <div style={{ borderLeft: '2px solid var(--primary)', marginLeft: depth > 0 ? '1rem' : '0', paddingLeft: '0.75rem', marginTop: '0.3rem', marginBottom: '0.3rem' }}>
-          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#93c5fd', textTransform: 'uppercase' }}>{node.logic || 'AND'}</span>
+          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--violet-light)', textTransform: 'uppercase' }}>{node.logic || 'AND'}</span>
           {node.conditions && node.conditions.map((child, i) => (
             <div key={i}>{renderFilterTree(child, depth + 1)}</div>
           ))}
@@ -186,8 +180,8 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
       );
     }
     return (
-      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '0.35rem 0.6rem', borderRadius: '4px', marginTop: '0.25rem', fontSize: '0.85rem' }}>
-        <span style={{ color: '#93c5fd', fontFamily: 'monospace' }}>{fieldLabel(node.field)}</span>
+      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '0.35rem 0.6rem', borderRadius: 'var(--radius-xs)', marginTop: '0.25rem', fontSize: '0.85rem' }}>
+        <span style={{ color: 'var(--violet-light)', fontFamily: 'monospace' }}>{fieldLabel(node.field)}</span>
         <span style={{ color: 'var(--warning)', fontWeight: 600 }}>{node.operator}</span>
         <span style={{ color: 'var(--text-main)', fontFamily: 'monospace' }}>{Array.isArray(node.value) ? node.value.join(', ') : String(node.value ?? '')}</span>
       </div>
@@ -250,12 +244,12 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
       {/* Top Section — Header */}
       <div style={{ ...sectionStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <h2 style={{ color: 'white', margin: 0, marginBottom: '0.75rem', fontSize: '1.4rem' }}>{meta.rule_name || 'Unnamed Rule'}</h2>
+          <h2 style={{ color: 'var(--text-1)', margin: 0, marginBottom: '0.75rem', fontSize: 'var(--fs-xl)' }}>{meta.rule_name || 'Unnamed Rule'}</h2>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.8rem', padding: '0.25rem 0.6rem', borderRadius: '4px', background: statusColor, color: 'white', fontWeight: 600 }}>
+            <span style={{ fontSize: '0.8rem', padding: '0.25rem 0.6rem', borderRadius: 'var(--radius-xs)', background: statusColor, color: 'white', fontWeight: 600 }}>
               {meta.status || 'UNKNOWN'}
             </span>
-            <span style={{ fontSize: '0.8rem', padding: '0.25rem 0.6rem', borderRadius: '4px', background: sevStyle.bg, color: sevStyle.color, fontWeight: 600 }}>
+            <span style={{ fontSize: '0.8rem', padding: '0.25rem 0.6rem', borderRadius: 'var(--radius-xs)', background: sevStyle.bg, color: sevStyle.color, fontWeight: 600 }}>
               {meta.severity_level}
             </span>
           </div>
@@ -270,7 +264,7 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
         <div style={sectionHeaderStyle}>
           <Zap size={16} color="var(--success)" /> What This Rule Does
         </div>
-        <div style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '8px', padding: '1rem', fontSize: '0.84rem', color: 'var(--text-main)', lineHeight: 1.7 }}>
+        <div style={{ background: 'var(--success-subtle)', border: '1px solid rgba(63,185,80,0.2)', borderRadius: 'var(--radius-sm)', padding: '1rem', fontSize: '0.84rem', color: 'var(--text-main)', lineHeight: 1.7 }}>
           {generateSummary(rule)}
         </div>
       </div>
@@ -410,7 +404,7 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
               <tbody>
                 {aggregations.map((a, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                    <td style={{ padding: '0.4rem 0.5rem', fontFamily: 'monospace', color: '#93c5fd' }}>{a.alias}</td>
+                    <td style={{ padding: '0.4rem 0.5rem', fontFamily: 'monospace', color: 'var(--violet-light)' }}>{a.alias}</td>
                     <td style={{ padding: '0.4rem 0.5rem', fontFamily: 'monospace' }}>{fieldLabel(a.field)}</td>
                     <td style={{ padding: '0.4rem 0.5rem' }}>{a.function}</td>
                     <td style={{ padding: '0.4rem 0.5rem' }}>{a.cardinality_hint || '—'}</td>
@@ -429,7 +423,7 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
         <div style={sectionHeaderStyle}>
           <AlertTriangle size={16} color="var(--danger)" /> Thresholds
         </div>
-        <div style={{ padding: '0.6rem', background: 'rgba(0,0,0,0.4)', borderRadius: '4px', fontFamily: 'monospace', color: '#a78bfa', fontSize: '0.85rem' }}>
+        <div style={{ padding: '0.6rem', background: 'var(--surface-3)', borderRadius: 'var(--radius-xs)', fontFamily: 'monospace', color: 'var(--violet-light)', fontSize: '0.85rem' }}>
           {thresholds.expression || 'No threshold expression'}
         </div>
       </div>
@@ -445,7 +439,7 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
             </button>
             <button
               className="btn"
-              style={{ background: 'rgba(99,102,241,0.2)', border: '1px solid rgba(99,102,241,0.4)', color: '#a5b4fc', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
+              style={{ background: 'rgba(88,101,242,0.2)', border: '1px solid rgba(88,101,242,0.4)', color: 'var(--violet-light)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
               onClick={() => navigateToEdit && navigateToEdit(rule)}
             >
               <Pencil size={15} /> Edit Rule
@@ -474,7 +468,7 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
             </button>
             <button
               className="btn"
-              style={{ background: 'rgba(99,102,241,0.2)', border: '1px solid rgba(99,102,241,0.4)', color: '#a5b4fc', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
+              style={{ background: 'rgba(88,101,242,0.2)', border: '1px solid rgba(88,101,242,0.4)', color: 'var(--violet-light)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
               onClick={() => navigateToEdit && navigateToEdit(rule)}
             >
               <Pencil size={15} /> Edit Rule

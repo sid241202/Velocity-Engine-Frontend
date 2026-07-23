@@ -63,17 +63,20 @@ function getAggResults(row) {
 }
 
 // ─── Design System ─────────────────────────────────────────────────────────
+// Reads from the shared token system (src/index.css) instead of a duplicate,
+// local palette — same pattern established on the Live Stream panel, so
+// charts/markers/tooltips stay in lockstep across both panels.
 
 const TOOLTIP_STYLE = {
   contentStyle: {
-    background: 'rgba(13,17,23,0.97)',
-    border: '1px solid rgba(88,101,242,0.3)',
-    borderRadius: '10px',
-    color: '#e6edf3',
-    fontSize: '0.79rem',
+    background: 'rgba(19,22,25,0.97)', // var(--surface-2), opaque for chart overlays
+    border: '1px solid var(--border-2)',
+    borderRadius: 'var(--radius-md)',
+    color: 'var(--text-1)',
+    fontSize: 'var(--fs-sm)',
     boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
   },
-  labelStyle: { color: '#8b949e', marginBottom: '0.25rem', fontWeight: 600 },
+  labelStyle: { color: 'var(--text-2)', marginBottom: '0.25rem', fontWeight: 600 },
   // Recharts renders each tooltip row with an inline color pulled from that
   // series' resolved stroke/fill. The Window Intensity bars use per-cell
   // gradient fills (url(#gradBarBreachAgg) / url(#gradBarNormalAgg)), which
@@ -81,20 +84,24 @@ const TOOLTIP_STYLE = {
   // black — unreadable against the dark tooltip background. itemStyle
   // overrides that per-row color explicitly for every Tooltip using
   // TOOLTIP_STYLE in this file.
-  itemStyle: { color: '#e6edf3' },
+  itemStyle: { color: 'var(--text-1)' },
 };
 
-const AXIS_STROKE = '#545d68';
+const AXIS_STROKE = 'var(--gray-7)';
 const GRID_PROPS = { strokeDasharray: '3 3', stroke: 'rgba(255,255,255,0.06)' };
 const DASH_PATTERNS = ['', '5 5', '8 4', '3 6', '10 3', '4 4 2 4'];
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
-// Semantic colors — exact match to test-simulation branch
-const BREACH_RED   = '#f85149';
-const BREACH_AMBER = '#ff7b72';
-const SAFE_GREEN   = '#3fb950';
-const ACCENT_BLUE  = '#5865f2';
-const ACCENT_CYAN  = '#2dd4bf';
+// Severity tiers — same colors used for the Severity Mix pie, the per-event
+// badge in the breach feed below, and RuleSummaryPanel's severity badge, so
+// CRITICAL/HIGH/MEDIUM/LOW read identically everywhere in the app.
+const SEVERITY_COLORS = { CRITICAL: 'var(--danger)', HIGH: '#ff7b72', MEDIUM: 'var(--warning)', LOW: 'var(--success)', UNKNOWN: 'var(--text-3)' };
+
+// Semantic colors — sourced from the shared danger/warning/success + violet/teal tokens
+const BREACH_RED   = 'var(--danger)';
+const SAFE_GREEN   = 'var(--success)';
+const ACCENT_BLUE  = 'var(--violet)';
+const ACCENT_CYAN  = 'var(--teal)';
 
 // formatTime: always display timestamps in IST (short form for chart axes)
 function formatTime(ts) {
@@ -111,19 +118,15 @@ function getISTHour(ts) {
   return ist.getUTCHours();
 }
 
+// Returns a literal hex (not a var()) — callers alpha-suffix the result
+// (`${color}22`) to derive a translucent background, which only works with
+// a literal hex string. Values match the shared --success/--warning/--danger
+// tokens exactly, just can't reference them by name here.
 function getBreachColor(rate) {
-  if (rate < 5)   return '#3fb950';
-  if (rate <= 20) return '#e3a008';
+  if (rate < 5)   return '#3fb950'; // var(--success)
+  if (rate <= 20) return '#e3a008'; // var(--warning)
   if (rate <= 50) return '#ff7b72';
-  return '#f85149';
-}
-
-function getSeverityBadge(sev) {
-  const s = String(sev || '').toUpperCase();
-  if (s === 'CRITICAL') return { bg: 'rgba(248,81,73,0.15)', color: '#f85149', border: 'rgba(248,81,73,0.3)' };
-  if (s === 'HIGH')     return { bg: 'rgba(255,123,114,0.12)', color: '#ff7b72', border: 'rgba(255,123,114,0.25)' };
-  if (s === 'MEDIUM')   return { bg: 'rgba(227,160,8,0.12)', color: '#e3a008', border: 'rgba(227,160,8,0.25)' };
-  return { bg: 'rgba(45,212,191,0.1)', color: '#2dd4bf', border: 'rgba(45,212,191,0.2)' };
+  return '#f85149'; // var(--danger)
 }
 
 function formatHourRange(hour) {
@@ -134,19 +137,19 @@ function formatHourRange(hour) {
 
 // ─── Custom Tooltip for the ComposedChart ──────────────────────────────────
 
-function EventVolumeTooltip({ active, payload, label, getRuleName }) {
+function EventVolumeTooltip({ active, payload, label }) {
   if (!active || !payload || !payload.length) return null;
   const breached = payload.some(p => p.payload && isBreached(p.payload));
   return (
     <div style={{
       ...TOOLTIP_STYLE.contentStyle,
       minWidth: 180,
-      borderColor: breached ? 'rgba(239,68,68,0.5)' : 'rgba(99,102,241,0.3)',
+      borderColor: breached ? 'rgba(248,81,73,0.5)' : 'rgba(88,101,242,0.3)',
     }}>
       <div style={{ ...TOOLTIP_STYLE.labelStyle, display: 'flex', alignItems: 'center', gap: 6 }}>
-        {breached && <span style={{ color: BREACH_RED, fontSize: '0.85rem' }}>⚡</span>}
+        {breached && <Zap size={12} color={BREACH_RED} fill={BREACH_RED} />}
         {formatTime(label)}
-        {breached && <span style={{ color: BREACH_RED, fontSize: '0.7rem', fontWeight: 700, marginLeft: 4 }}>BREACH</span>}
+        {breached && <span style={{ color: BREACH_RED, fontSize: 'var(--fs-3xs)', fontWeight: 700, marginLeft: 4 }}>BREACH</span>}
       </div>
       {payload.map((p, i) => {
         if (p.dataKey === 'breachMarker') return null;
@@ -155,13 +158,13 @@ function EventVolumeTooltip({ active, payload, label, getRuleName }) {
         else if (p.dataKey.startsWith('agg_')) label = 'Metric Value';
         return (
           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 2 }}>
-            <span style={{ color: '#94a3b8' }}>{label}</span>
-            <span style={{ color: p.stroke || p.fill || '#e2e8f0', fontWeight: 700 }}>{p.value}</span>
+            <span style={{ color: 'var(--text-3)' }}>{label}</span>
+            <span style={{ color: p.stroke || p.fill || 'var(--text-1)', fontWeight: 700 }}>{p.value}</span>
           </div>
         );
       })}
       {breached && (
-        <div style={{ marginTop: 6, padding: '4px 8px', background: 'rgba(239,68,68,0.12)', borderRadius: 4, fontSize: '0.72rem', color: BREACH_RED, textAlign: 'center', fontWeight: 700 }}>
+        <div style={{ marginTop: 6, padding: '4px 8px', background: 'var(--danger-subtle)', borderRadius: 'var(--radius-xs)', fontSize: 'var(--fs-xs)', color: BREACH_RED, textAlign: 'center', fontWeight: 700 }}>
           Threshold Exceeded
         </div>
       )}
@@ -202,7 +205,7 @@ const CustomXAxisTick = (props) => {
   const isBreach = breachTs && breachTs.includes(payload.value);
   return (
     <g transform={`translate(${x},${y})`}>
-      <text x={0} y={0} dy={16} textAnchor="middle" fill={isBreach ? BREACH_RED : '#64748b'} fontSize={11} fontWeight={isBreach ? 700 : 400}>
+      <text x={0} y={0} dy={16} textAnchor="middle" fill={isBreach ? BREACH_RED : 'var(--text-3)'} fontSize={11} fontWeight={isBreach ? 700 : 400}>
         {formatTime(payload.value)}
       </text>
     </g>
@@ -634,8 +637,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
       const sev = String(ev.severity || ev.severityLevel || 'UNKNOWN').toUpperCase();
       counts[sev] = (counts[sev] || 0) + 1;
     }
-    const colorMap = { CRITICAL: '#f85149', HIGH: '#ff7b72', MEDIUM: '#e3a008', LOW: '#3fb950', UNKNOWN: '#8b949e' };
-    return Object.entries(counts).map(([name, value]) => ({ name, value, color: colorMap[name] || '#8b949e' }));
+    return Object.entries(counts).map(([name, value]) => ({ name, value, color: SEVERITY_COLORS[name] || 'var(--text-3)' }));
   }, [anomalyData]);
 
   // Own bucket resolution for the anomaly rate sparkline — anomaly-analysis
@@ -759,18 +761,18 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
   const hasData = allRows.length > 0;
 
   const thStyle = {
-    textAlign: 'left', padding: '0.5rem 0.6rem', color: 'var(--text-muted)', fontWeight: 500, fontSize: '0.75rem',
+    textAlign: 'left', padding: '0.5rem 0.6rem', color: 'var(--text-muted)', fontWeight: 600, fontSize: 'var(--fs-2xs)',
     textTransform: 'uppercase', letterSpacing: '0.04em', cursor: 'pointer', userSelect: 'none',
     borderBottom: '1px solid var(--glass-border)',
   };
-  const tdStyle = { padding: '0.45rem 0.6rem', fontSize: '0.8rem', borderBottom: '1px solid rgba(255,255,255,0.04)' };
+  const tdStyle = { padding: '0.45rem 0.6rem', fontSize: 'var(--fs-sm)', borderBottom: '1px solid rgba(255,255,255,0.04)' };
 
   const insightCardStyle = {
     background: 'rgba(255,255,255,0.03)',
     backdropFilter: 'blur(12px)',
     WebkitBackdropFilter: 'blur(12px)',
-    border: '1px solid rgba(255,255,255,0.08)',
-    borderRadius: '12px',
+    border: '1px solid var(--border-2)',
+    borderRadius: 'var(--radius-lg)',
     padding: '1rem 1.2rem',
     display: 'flex',
     flexDirection: 'column',
@@ -778,10 +780,10 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
   };
 
   const insightLabelStyle = {
-    fontSize: '0.7rem',
+    fontSize: 'var(--fs-2xs)',
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
-    color: '#94a3b8',
+    color: 'var(--text-3)',
     fontWeight: 600,
     display: 'flex',
     alignItems: 'center',
@@ -789,8 +791,8 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
   };
 
   const insightValueStyle = {
-    fontSize: '0.85rem',
-    color: '#e2e8f0',
+    fontSize: 'var(--fs-base)',
+    color: 'var(--text-2)',
     lineHeight: 1.5,
   };
 
@@ -799,12 +801,12 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
       {/* Header */}
       <div className="glass-panel" style={{ paddingBottom: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
-          <div style={{ width: 30, height: 30, borderRadius: 8, background: 'linear-gradient(135deg, #5865f2, #2dd4bf)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <BarChart3 size={16} color="#fff" strokeWidth={2.2} />
+          <div style={{ width: 32, height: 32, borderRadius: 'var(--radius-sm)', background: 'linear-gradient(135deg, var(--violet), var(--teal))', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <BarChart3 size={17} color="#fff" strokeWidth={2.2} />
           </div>
-          <h2 style={{ color: 'var(--text-1)', margin: 0, fontSize: '0.95rem', fontWeight: 700, letterSpacing: '-0.02em' }}>Aggregated Rule Analysis</h2>
+          <h2 style={{ color: 'var(--text-1)', margin: 0, fontSize: 'var(--fs-lg)', fontWeight: 700, letterSpacing: '-0.02em' }}>Aggregated Rule Analysis</h2>
         </div>
-        <p style={{ color: 'var(--text-3)', fontSize: '0.73rem', margin: 0 }}>
+        <p style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)', margin: 0 }}>
           Analyze up to 7 days of historical results for the selected rule. Breach events are overlaid on every chart as red markers.
         </p>
       </div>
@@ -846,12 +848,12 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
 
       {error && (
         <div style={{
-          background: 'rgba(239,68,68,0.1)',
-          border: '1px solid rgba(239,68,68,0.3)',
-          borderRadius: '8px',
+          background: 'var(--danger-subtle)',
+          border: '1px solid rgba(248,81,73,0.3)',
+          borderRadius: 'var(--radius-sm)',
           padding: '0.6rem 1rem',
           color: '#fca5a5',
-          fontSize: '0.85rem',
+          fontSize: 'var(--fs-base)',
         }}>
           {error}
         </div>
@@ -873,7 +875,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
               <>
                 <p style={{ color: 'var(--amber)', fontSize: '0.9rem', fontWeight: 600, margin: '0 0 0.3rem' }}>The selected rule is still in Draft</p>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: 0, maxWidth: 360 }}>
-                  Draft rules aren't live yet, so there's no historical data to show.
+                  Draft rules aren&apos;t live yet, so there&apos;s no historical data to show.
                   Publish the rule to make it Active, or use Historical Replay to test it against past traffic instead.
                 </p>
               </>
@@ -881,7 +883,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
               <>
                 <p style={{ color: 'var(--text-2)', fontSize: '0.9rem', fontWeight: 600, margin: '0 0 0.3rem' }}>No data yet</p>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: 0, maxWidth: 320 }}>
-                  Select a rule from the sidebar, pick a time range, and click "Load Analytics".
+                  Select a rule from the sidebar, pick a time range, and click &quot;Load Analytics&quot;.
                 </p>
               </>
             )}
@@ -913,13 +915,13 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
             backdropFilter: 'blur(16px)',
             WebkitBackdropFilter: 'blur(16px)',
             border: '1px solid rgba(255,255,255,0.06)',
-            borderRadius: '16px',
+            borderRadius: 'var(--radius-lg)',
             padding: '1.25rem',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
               <TrendingUp size={18} color="var(--violet-light)" />
               <span style={{ color: 'var(--text-1)', fontSize: '0.9rem', fontWeight: 700, letterSpacing: '-0.01em' }}>Intelligent Insights</span>
-              <span style={{ marginLeft: 'auto', padding: '0.1rem 0.55rem', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.05em', background: 'rgba(88,101,242,0.15)', color: 'var(--violet-light)', border: '1px solid rgba(88,101,242,0.3)' }}>Auto-generated</span>
+              <span style={{ marginLeft: 'auto', padding: '0.1rem 0.55rem', borderRadius: 'var(--radius-xs)', fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.05em', background: 'rgba(88,101,242,0.15)', color: 'var(--violet-light)', border: '1px solid rgba(88,101,242,0.3)' }}>Auto-generated</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
               {/* 1. Peak Breach Period */}
@@ -1000,14 +1002,14 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
 
           {/* Anomaly Feed Section */}
           {sortedAnomalyData.length > 0 && (
-            <div style={{ background: 'rgba(248,81,73,0.06)', border: '1px solid rgba(248,81,73,0.2)', borderRadius: '12px', overflow: 'hidden' }}>
+            <div style={{ background: 'rgba(248,81,73,0.06)', border: '1px solid rgba(248,81,73,0.2)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
               <div
                 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.875rem 1.125rem', borderBottom: '1px solid rgba(248,81,73,0.15)', cursor: 'pointer' }}
                 onClick={() => setShowAnomalyFeed(v => !v)}
               >
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--danger)', boxShadow: '0 0 6px rgba(248,81,73,0.6)', animation: 'pulse-dot 1.5s ease-in-out infinite', flexShrink: 0 }} />
                 <span style={{ color: 'var(--danger)', fontSize: '0.83rem', fontWeight: 600 }}>Breach Events</span>
-                <span style={{ marginLeft: '0.5rem', padding: '0.1rem 0.55rem', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 700, background: 'rgba(248,81,73,0.15)', color: 'var(--danger)', border: '1px solid rgba(248,81,73,0.25)' }}>
+                <span style={{ marginLeft: '0.5rem', padding: '0.1rem 0.55rem', borderRadius: 'var(--radius-xs)', fontSize: '0.68rem', fontWeight: 700, background: 'rgba(248,81,73,0.15)', color: 'var(--danger)', border: '1px solid rgba(248,81,73,0.25)' }}>
                   {sortedAnomalyData.length} breach event{sortedAnomalyData.length !== 1 ? 's' : ''}
                 </span>
                 <span style={{ color: 'var(--text-3)', fontSize: '0.72rem', marginLeft: 'auto' }}>{showAnomalyFeed ? '▲ Hide' : '▼ Show'}</span>
@@ -1089,7 +1091,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
                                   title="Cooldown remaining — time left before this entity could be flagged again"
                                   style={{
                                     flexShrink: 0, fontSize: '0.66rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: 4,
-                                    color: ttl.active ? '#e3a008' : 'var(--text-3)',
+                                    color: ttl.active ? 'var(--warning)' : 'var(--text-3)',
                                     background: ttl.active ? 'rgba(227,160,8,0.12)' : 'rgba(255,255,255,0.04)',
                                     display: 'inline-flex', alignItems: 'center', gap: 3,
                                   }}
@@ -1135,11 +1137,17 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
                           <div style={{ fontSize: '0.67rem' }}><RuleLink ruleName={getRuleName(ruleId)} ruleId={ruleId} onRuleClick={handleRuleClick} style={{ color: 'var(--text-3)' }} /></div>
                           <div style={{ color: 'var(--teal)', fontFamily: 'monospace', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entity}</div>
                         </div>
-                        {sev && (
-                          <span style={{ padding: '0.1rem 0.45rem', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.04em', flexShrink: 0, background: 'rgba(248,81,73,0.15)', color: 'var(--danger)', border: '1px solid rgba(248,81,73,0.25)' }}>
-                            {sev}
-                          </span>
-                        )}
+                        {sev && (() => {
+                          const sevColor = SEVERITY_COLORS[String(sev).toUpperCase()] || SEVERITY_COLORS.UNKNOWN;
+                          return (
+                            <span style={{
+                              padding: '0.1rem 0.45rem', borderRadius: 'var(--radius-xs)', fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.04em', flexShrink: 0,
+                              background: `color-mix(in srgb, ${sevColor} 15%, transparent)`, color: sevColor, border: `1px solid color-mix(in srgb, ${sevColor} 25%, transparent)`,
+                            }}>
+                              {sev}
+                            </span>
+                          );
+                        })()}
                         <span style={{ color: 'var(--text-3)', fontSize: '0.7rem', flexShrink: 0 }}>{formatISTDateTime(ts)}</span>
                       </div>
                     );
@@ -1166,7 +1174,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
               title={totalBreaches > 0 ? 'View every breach in this range' : undefined}
             >
               <h3>Threshold Breaches</h3>
-              <div className="value" style={totalBreaches > 0 ? { background: 'linear-gradient(135deg, #f85149, #ff7b72)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' } : undefined}>{totalBreaches.toLocaleString()}</div>
+              <div className="value" style={totalBreaches > 0 ? { background: 'linear-gradient(135deg, var(--danger), #ff7b72)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' } : undefined}>{totalBreaches.toLocaleString()}</div>
               <div style={{ fontSize: '0.7rem', color: 'var(--text-3)', marginTop: 2 }}>{totalBreaches > 0 ? 'Rule conditions triggered' : 'No breaches'}</div>
             </div>
             <div className="metric-card" style={{ minWidth: 0 }}>
@@ -1199,10 +1207,16 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
 
             {/* Window Intensity */}
             <div className="chart-container">
-              <div className="chart-title" style={{ marginBottom: '1.25rem' }}>
+              <div className="chart-title" style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.6rem' }}>
                 Window Intensity
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: 10 }}>
-                  🟥 breach&nbsp;·&nbsp; 🟦 normal &nbsp;·&nbsp; click a bar for details
+                <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)', fontWeight: 400, display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 2, background: BREACH_RED, display: 'inline-block' }} /> breach
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 2, background: ACCENT_BLUE, display: 'inline-block' }} /> normal
+                  </span>
+                  <span>· click a bar for details</span>
                 </span>
               </div>
               <div style={{ width: '100%', height: 280 }}>
@@ -1222,18 +1236,18 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
                     <XAxis
                       dataKey="windowStart"
                       stroke={AXIS_STROKE}
-                      tick={{ fontSize: 10, fill: '#64748b' }}
+                      tick={{ fontSize: 10, fill: 'var(--text-3)' }}
                       tickFormatter={formatTime}
                       minTickGap={40}
                       dy={6}
                     />
-                    <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 10, fill: '#64748b' }} width={36} allowDecimals={false} />
+                    <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 10, fill: 'var(--text-3)' }} width={36} allowDecimals={false} />
                     <Tooltip
                       {...TOOLTIP_STYLE}
                       labelFormatter={formatTime}
                       formatter={(value, name, props) => {
                         const breached = props.payload?.breached;
-                        return [value, breached ? '⚡ Events (BREACH)' : '📊 Events'];
+                        return [value, breached ? 'Events (BREACH)' : 'Events'];
                       }}
                     />
                     <Bar
@@ -1273,12 +1287,12 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
                     <XAxis
                       dataKey="windowStart"
                       stroke={AXIS_STROKE}
-                      tick={{ fontSize: 10, fill: '#64748b' }}
+                      tick={{ fontSize: 10, fill: 'var(--text-3)' }}
                       tickFormatter={formatTime}
                       minTickGap={40}
                       dy={6}
                     />
-                    <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 10, fill: '#64748b' }} width={36} allowDecimals={false} />
+                    <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 10, fill: 'var(--text-3)' }} width={36} allowDecimals={false} />
                     <Tooltip
                       {...TOOLTIP_STYLE}
                       labelFormatter={formatTime}
@@ -1309,7 +1323,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
                             if (!cumulativeData.breachIncrementTs.has(payload.windowStart)) return null;
                             return (
                               <g key={`dot_${payload.windowStart}`}>
-                                <circle cx={cx} cy={cy} r={10} fill="rgba(239,68,68,0.15)" />
+                                <circle cx={cx} cy={cy} r={10} fill="rgba(248,81,73,0.15)" />
                                 <circle cx={cx} cy={cy} r={5} fill={BREACH_RED} stroke="#fff" strokeWidth={1.5} />
                               </g>
                             );
@@ -1349,10 +1363,10 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
                   />
                   <YAxis
                     stroke={AXIS_STROKE}
-                    tick={{ fontSize: 11, fill: '#64748b' }}
+                    tick={{ fontSize: 11, fill: 'var(--text-3)' }}
                     allowDecimals={false}
                     width={44}
-                    label={{ value: 'Events / Window', angle: -90, position: 'insideLeft', offset: 12, style: { fill: '#64748b', fontSize: 10 } }}
+                    label={{ value: 'Events / Window', angle: -90, position: 'insideLeft', offset: 12, style: { fill: 'var(--text-3)', fontSize: 10 } }}
                   />
 
                   <Tooltip content={<EventVolumeTooltip getRuleName={getRuleName} />} />
@@ -1362,9 +1376,9 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
                     wrapperStyle={{ paddingBottom: '0.75rem', fontSize: '0.78rem', cursor: 'pointer' }}
                     onClick={handleLegendClick}
                     formatter={(value) => {
-                      if (String(value).startsWith('evt_')) return `📊 Events`;
-                      if (String(value).startsWith('agg_')) return `〰 Metric Value`;
-                      if (value === 'breachMarker') return `🔴 Breaches`;
+                      if (String(value).startsWith('evt_')) return 'Events';
+                      if (String(value).startsWith('agg_')) return 'Metric Value';
+                      if (value === 'breachMarker') return 'Breaches';
                       return value;
                     }}
                   />
@@ -1428,7 +1442,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
                   <Brush
                     dataKey="windowStart"
                     height={22}
-                    stroke="rgba(99,102,241,0.4)"
+                    stroke="rgba(88,101,242,0.4)"
                     fill="rgba(8,12,28,0.9)"
                     tickFormatter={formatTime}
                     travellerWidth={6}
@@ -1441,7 +1455,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
           {/* Entity Breach Ranking Table */}
           <div className="chart-container">
             <div className="chart-title">Entity Breach Ranking</div>
-            <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>Top 20 tracked entities ranked by breach rate. Click column headers to sort, or a row for that entity's full history.</div>
+            <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>Top 20 tracked entities ranked by breach rate. Click column headers to sort, or a row for that entity&apos;s full history.</div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
@@ -1486,7 +1500,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
                           <span style={{
                             display: 'inline-block',
                             padding: '0.1rem 0.5rem',
-                            borderRadius: '4px',
+                            borderRadius: 'var(--radius-xs)',
                             fontSize: '0.72rem',
                             fontWeight: 700,
                             background: `${rateColor}20`,

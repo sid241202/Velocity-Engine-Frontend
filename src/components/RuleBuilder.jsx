@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Save, Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, Zap, Clock, Database, Filter, BarChart2, Bell, Radio } from 'lucide-react';
+import { Save, Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, Zap, Clock, Database, Filter, BarChart2, Bell } from 'lucide-react';
 import VisualThresholdBuilder from './VisualThresholdBuilder';
 import VisualFilterBuilder, { processFilterTree } from './VisualFilterBuilder';
 import FieldSelect from './FieldSelect';
-import { API_BASE, DEFAULT_SOURCE_TOPIC, DEFAULT_PENALTY_TTL_SEC, DEFAULT_WINDOW_SIZE_SEC, DEFAULT_SLIDE_SEC } from '../config/appConfig';
+import { API_BASE, DEFAULT_SOURCE_TOPIC, DEFAULT_WINDOW_SIZE_SEC, DEFAULT_SLIDE_SEC } from '../config/appConfig';
 import { isValidRuleId, isNonEmpty, isValidJexlAlias, isPositiveInt } from '../utils/validators';
 import { ENVELOPE_FIELD_OPTIONS, DATA_FIELD_OPTIONS } from '../constants/eventFields';
 
@@ -111,7 +111,7 @@ function Section({ icon: Icon, iconColor = 'var(--violet-light)', title, tip, ba
   return (
     <div style={{
       marginBottom: '0.75rem',
-      borderRadius: '8px',
+      borderRadius: 'var(--radius-sm)',
       background: 'var(--surface-2)',
       border: '1px solid var(--border)',
       /* overflow visible is CRITICAL — overflow:hidden clips tooltips */
@@ -125,14 +125,16 @@ function Section({ icon: Icon, iconColor = 'var(--violet-light)', title, tip, ba
         padding: '0.7rem 1rem',
         background: 'var(--surface-3)',
         borderBottom: '1px solid var(--border)',
-        borderRadius: '8px 8px 0 0',
+        borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0',
         /* overflow visible so tooltip inside header is not clipped */
         overflow: 'visible',
       }}>
         <div style={{
           width: 24, height: 24, borderRadius: 6,
-          background: `${iconColor}15`,
-          border: `1px solid ${iconColor}25`,
+          // color-mix (not a `${iconColor}15` string suffix) — iconColor is
+          // usually a var(...) reference, which a hex-alpha suffix can't blend.
+          background: `color-mix(in srgb, ${iconColor} 8%, transparent)`,
+          border: `1px solid color-mix(in srgb, ${iconColor} 15%, transparent)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
         }}>
           <Icon size={13} color={iconColor} strokeWidth={2.2} />
@@ -164,9 +166,10 @@ function SinkCard({ id, accentColor, title, subtitle, checked, onChange, onFocus
         alignItems: 'flex-start',
         gap: '0.6rem',
         padding: '0.75rem 0.875rem',
-        borderRadius: '7px',
-        border: checked ? `1px solid ${accentColor}40` : '1px solid var(--border)',
-        background: checked ? `${accentColor}0d` : 'var(--surface-3)',
+        borderRadius: 'var(--radius-sm)',
+        // color-mix, not a hex-alpha suffix — accentColor is usually var(...).
+        border: checked ? `1px solid color-mix(in srgb, ${accentColor} 25%, transparent)` : '1px solid var(--border)',
+        background: checked ? `color-mix(in srgb, ${accentColor} 5%, transparent)` : 'var(--surface-3)',
         cursor: disabled ? 'not-allowed' : 'pointer',
         /* Specific transitions only — never 'all' which causes layout bounce */
         transition: 'border-color 0.14s ease, background 0.14s ease, opacity 0.14s ease',
@@ -226,7 +229,7 @@ function describeSeconds(totalSeconds) {
 }
 
 /* ─── Main Component ─────────────────────────────────────────── */
-export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRule, onEditComplete }) {
+export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onEditComplete }) {
 
   // ── Core ───────────────────────────────────────────────────────
   const [ruleName, setRuleName]     = useState('');
@@ -489,18 +492,18 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
       {/* ── Header ────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
         <div style={{
-          width: 28, height: 28, borderRadius: 7,
-          background: 'linear-gradient(135deg, #5865f2 0%, #2dd4bf 100%)',
+          width: 32, height: 32, borderRadius: 'var(--radius-sm)',
+          background: 'linear-gradient(135deg, var(--violet), var(--teal))',
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
           boxShadow: '0 0 0 1px rgba(88,101,242,0.3), 0 2px 8px rgba(0,0,0,0.3)',
         }}>
-          <Zap size={14} color="#fff" strokeWidth={2.5} />
+          <Zap size={17} color="#fff" strokeWidth={2.5} />
         </div>
         <div>
-          <h2 style={{ fontSize: '0.92rem', fontWeight: 700, letterSpacing: '-0.025em', color: 'var(--text-1)', margin: 0 }}>
+          <h2 style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, letterSpacing: '-0.025em', color: 'var(--text-1)', margin: 0 }}>
             {isEditing ? 'Edit Detection Rule' : 'New Detection Rule'}
           </h2>
-          <p style={{ fontSize: '0.7rem', color: 'var(--text-3)', margin: 0 }}>
+          <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)', margin: 0 }}>
             {isEditing ? 'Editing draft — changes saved as new version' : 'Saved as draft — publish when ready'}
           </p>
         </div>
@@ -619,7 +622,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
           </div>
 
           {(anomalySinkEnabled || anomalyStoreSinkEnabled) && (
-            <div style={{ marginTop: '0.875rem', padding: '0.7rem 0.875rem', background: 'rgba(124,58,237,0.06)', borderRadius: '7px', border: '1px solid rgba(124,58,237,0.15)' }}>
+            <div style={{ marginTop: '0.875rem', padding: '0.7rem 0.875rem', background: 'var(--violet-subtle)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(88,101,242,0.15)' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', cursor: 'pointer', fontSize: '0.78rem', color: 'var(--violet-light)', fontWeight: 500, marginBottom: useAnomalyEntityField ? '0.5rem' : 0 }}>
                 <input type="checkbox" checked={useAnomalyEntityField} onChange={e => setUseAnomalyEntityField(e.target.checked)} onFocus={() => onFieldFocus && onFieldFocus('anomaly_entity_field')} style={{ width: 'auto', accentColor: 'var(--violet)' }} />
                 Use a specific field as the alert identifier
@@ -668,9 +671,9 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
               <label key={String(val)} style={{
                 display: 'flex', alignItems: 'center', gap: '0.5rem',
                 padding: '0.65rem 1rem',
-                borderRadius: '8px',
-                border: noWindowing === val ? '1px solid rgba(99,102,241,0.6)' : '1px solid var(--border)',
-                background: noWindowing === val ? 'rgba(99,102,241,0.12)' : 'var(--surface-3)',
+                borderRadius: 'var(--radius-sm)',
+                border: noWindowing === val ? '1px solid rgba(88,101,242,0.6)' : '1px solid var(--border)',
+                background: noWindowing === val ? 'rgba(88,101,242,0.12)' : 'var(--surface-3)',
                 cursor: 'pointer', fontSize: '0.82rem', fontWeight: 500,
                 color: noWindowing === val ? 'var(--violet-light)' : 'var(--text-2)',
                 /* Specific transitions only — 'all' causes bounce */
@@ -693,10 +696,10 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
 
           {noWindowing ? (
             <div style={{
-              padding: '0.875rem 1rem', borderRadius: '8px',
+              padding: '0.875rem 1rem', borderRadius: 'var(--radius-sm)',
               background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.25)',
             }}>
-              <p style={{ margin: 0, fontSize: '0.8rem', color: '#fbbf24', fontWeight: 500 }}>⚡ Real-Time Mode Active</p>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: '#fbbf24', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}><Zap size={13} color="#fbbf24" fill="#fbbf24" /> Real-Time Mode Active</p>
               <p style={{ margin: '0.35rem 0 0', fontSize: '0.74rem', color: 'var(--text-2)', lineHeight: 1.6 }}>
                 Every event that passes your filters above will be evaluated immediately against the Alert Condition below.
                 If the condition matches (or is left blank), an anomaly is flagged instantly — with <strong>near-zero latency</strong>.
@@ -720,7 +723,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
 
               {/* Event Time Source */}
               {timeType === 'EVENT_TIME' && (
-                <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'var(--surface-3)', borderRadius: '7px', border: '1px solid var(--border)' }}>
+                <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'var(--surface-3)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
                   <p className="form-label" style={{ marginBottom: '0.5rem' }}>Timestamp Source</p>
                   <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap' }}>
                     {[
@@ -886,7 +889,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
                   alignItems: 'center',
                   padding: '0.5rem 0.625rem',
                   background: 'var(--surface-3)',
-                  borderRadius: a.function === 'COUNT_DISTINCT' ? '6px 6px 0 0' : '6px',
+                  borderRadius: a.function === 'COUNT_DISTINCT' ? 'var(--radius-xs) var(--radius-xs) 0 0' : 'var(--radius-xs)',
                   border: '1px solid var(--border)',
                   borderBottom: a.function === 'COUNT_DISTINCT' ? 'none' : '1px solid var(--border)',
                 }}>
@@ -945,7 +948,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
                   <div style={{
                     padding: '0.35rem 0.625rem',
                     background: 'var(--surface-3)',
-                    borderRadius: '0 0 6px 6px',
+                    borderRadius: '0 0 var(--radius-xs) var(--radius-xs)',
                     border: '1px solid var(--border)',
                     borderTop: '1px solid var(--border-2)',
                     display: 'flex', alignItems: 'center', gap: '0.5rem',
@@ -991,7 +994,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
         {/* ── Section 6: Alert Condition ──────────────────────── */}
         <Section
           icon={Bell}
-          iconColor="#f472b6"
+          iconColor="var(--pink)"
           title="Alert Condition"
           tip={noWindowing
             ? 'In real-time mode, write a condition that checks event fields directly. Leave blank to alert on every matching event.'
@@ -999,8 +1002,8 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
         >
           {noWindowing ? (
             <>
-              <div style={{ marginBottom: '0.75rem', padding: '0.6rem 0.875rem', background: 'rgba(251,191,36,0.06)', borderRadius: '7px', border: '1px solid rgba(251,191,36,0.2)' }}>
-                <p style={{ margin: 0, fontSize: '0.74rem', color: '#fbbf24', fontWeight: 500 }}>⚡ No-Window mode — checking raw event fields</p>
+              <div style={{ marginBottom: '0.75rem', padding: '0.6rem 0.875rem', background: 'rgba(251,191,36,0.06)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(251,191,36,0.2)' }}>
+                <p style={{ margin: 0, fontSize: '0.74rem', color: '#fbbf24', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}><Zap size={12} color="#fbbf24" fill="#fbbf24" /> No-Window mode — checking raw event fields</p>
                 <p style={{ margin: '0.3rem 0 0', fontSize: '0.71rem', color: 'var(--text-3)', lineHeight: 1.55 }}>
                   Reference event fields directly using dot notation.<br />
                   Examples: <code style={{ color: 'var(--violet-light)' }}>_data.authCode == &quot;Y&quot;</code>&nbsp;&nbsp;
@@ -1077,7 +1080,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
             />
             <SinkCard
               id="sink-anomaly"
-              accentColor="#f472b6"
+              accentColor="var(--pink)"
               title="Send Breach Alerts"
               subtitle="Emit a real-time alert the moment a threshold is crossed."
               checked={anomalySinkEnabled}
@@ -1096,7 +1099,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
           </div>
           {noWindowing && (
             <p className="helper" style={{ marginTop: '0.5rem' }}>
-              "Save Summary Data" is not available in No-Window mode — there is no aggregation to store.
+              &quot;Save Summary Data&quot; is not available in No-Window mode — there is no aggregation to store.
             </p>
           )}
         </Section>
@@ -1111,7 +1114,7 @@ export default function RuleBuilder({ rules, fetchRules, onFieldFocus, editingRu
             fontSize: '0.83rem',
             fontWeight: 600,
             padding: '0.7rem 1rem',
-            borderRadius: '7px',
+            borderRadius: 'var(--radius-sm)',
             opacity: (hasErrors || isSaving) ? 0.4 : 1,
             marginTop: '0.625rem',
             letterSpacing: '0.01em',

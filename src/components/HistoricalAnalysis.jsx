@@ -16,23 +16,28 @@ import {
 import { generateHistoricalAnalysisData, generateHistoricalBreakdown } from '../simulation/mockEngine';
 import { Modal, Drawer } from './ui/Overlay';
 
+// Reads from the shared token system (src/index.css) — same pattern used on
+// the Live Stream and Analytics panels, so this panel's charts/tooltips stay
+// in lockstep with the rest of the app instead of a disconnected palette.
 const TOOLTIP_STYLE = {
   contentStyle: {
-    background: 'rgba(15,23,42,0.95)',
-    border: '1px solid #334155',
-    borderRadius: '8px',
-    color: '#e2e8f0',
-    fontSize: '0.8rem',
+    background: 'rgba(19,22,25,0.97)', // var(--surface-2), opaque for chart overlays
+    border: '1px solid var(--border-2)',
+    borderRadius: 'var(--radius-md)',
+    color: 'var(--text-1)',
+    fontSize: 'var(--fs-sm)',
   },
-  labelStyle: { color: '#94a3b8' },
+  labelStyle: { color: 'var(--text-3)' },
 };
 
-const AXIS_STROKE = '#94a3b8';
-const GRID_PROPS = { strokeDasharray: '3 3', stroke: '#334155' };
+const AXIS_STROKE = 'var(--gray-7)';
+const GRID_PROPS = { strokeDasharray: '3 3', stroke: 'rgba(255,255,255,0.06)' };
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-const BREACH_RED = '#ef4444';
-const ACCENT_BLUE = '#6366f1';
-const DONUT_PALETTE = ['#6366f1', '#06b6d4', '#f59e0b', '#ef4444', '#10b981', '#a855f7'];
+const BREACH_RED = 'var(--danger)';
+const ACCENT_BLUE = 'var(--violet)';
+// Categorical palette for multi-slice breakdowns (e.g. modality mix) — reuses
+// the app's own accent tokens instead of a disconnected rainbow.
+const DONUT_PALETTE = ['var(--violet)', 'var(--teal)', 'var(--amber)', 'var(--danger)', 'var(--success)', 'var(--pink)'];
 
 /** IST day-key ("YYYY-MM-DD") + hour-of-day for a window_start timestamp —
  * shared by the heatmap grid and the hour-detail overlay it drives, so a
@@ -365,11 +370,11 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill, sim
   const hasData = data.length > 0;
 
   const thStyle = {
-    textAlign: 'left', padding: '0.5rem 0.6rem', color: 'var(--text-muted)', fontWeight: 500, fontSize: '0.75rem',
+    textAlign: 'left', padding: '0.5rem 0.6rem', color: 'var(--text-muted)', fontWeight: 600, fontSize: 'var(--fs-2xs)',
     textTransform: 'uppercase', letterSpacing: '0.04em', cursor: 'pointer', userSelect: 'none',
     borderBottom: '1px solid var(--glass-border)',
   };
-  const tdStyle = { padding: '0.45rem 0.6rem', fontSize: '0.8rem', borderBottom: '1px solid rgba(255,255,255,0.04)' };
+  const tdStyle = { padding: '0.45rem 0.6rem', fontSize: 'var(--fs-sm)', borderBottom: '1px solid rgba(255,255,255,0.04)' };
 
   /* ───── Empty state: no selected rule ───── */
   if (!selectedRuleId) {
@@ -391,12 +396,12 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill, sim
       {/* Header */}
       <div className="glass-panel" style={{ paddingBottom: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
-          <div style={{ width: 30, height: 30, borderRadius: 8, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Database size={16} color="#fff" strokeWidth={2.2} />
+          <div style={{ width: 32, height: 32, borderRadius: 'var(--radius-sm)', background: 'linear-gradient(135deg, var(--violet), var(--teal))', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Database size={17} color="#fff" strokeWidth={2.2} />
           </div>
-          <h2 style={{ color: 'var(--text-1)', margin: 0, fontSize: '0.95rem', fontWeight: 700, letterSpacing: '-0.02em' }}>Historical Rule Replay</h2>
+          <h2 style={{ color: 'var(--text-1)', margin: 0, fontSize: 'var(--fs-lg)', fontWeight: 700, letterSpacing: '-0.02em' }}>Historical Rule Replay</h2>
         </div>
-        <p style={{ color: 'var(--text-3)', fontSize: '0.73rem', margin: 0 }}>
+        <p style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)', margin: 0 }}>
           Test how this rule would have performed against real past traffic — no need to wait and see it happen live. Max lookback: 7 days.
         </p>
       </div>
@@ -412,12 +417,12 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill, sim
         selectedRule.windowing?.timestamp_field &&
         selectedRule.windowing.timestamp_field !== '_event_timestamp_epoch_ms' && (
         <div style={{
-          background: 'rgba(234,179,8,0.1)',
-          border: '1px solid rgba(234,179,8,0.3)',
-          borderRadius: '8px',
+          background: 'var(--warning-subtle)',
+          border: '1px solid rgba(227,160,8,0.3)',
+          borderRadius: 'var(--radius-sm)',
           padding: '0.6rem 1rem',
           color: '#fde68a',
-          fontSize: '0.78rem',
+          fontSize: 'var(--fs-xs)',
         }}>
           Heads up: this rule normally times events using its own <strong>{selectedRule.windowing.timestamp_field}</strong> field,
           but this replay uses the time each event first arrived in our system instead — so results here may differ slightly from what this rule does live.
@@ -480,12 +485,12 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill, sim
 
       {error && (
         <div style={{
-          background: 'rgba(239,68,68,0.1)',
-          border: '1px solid rgba(239,68,68,0.3)',
-          borderRadius: '8px',
+          background: 'var(--danger-subtle)',
+          border: '1px solid rgba(248,81,73,0.3)',
+          borderRadius: 'var(--radius-sm)',
           padding: '0.6rem 1rem',
           color: '#fca5a5',
-          fontSize: '0.85rem',
+          fontSize: 'var(--fs-base)',
         }}>
           {error}
         </div>
@@ -536,7 +541,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill, sim
               <h3>Unique Entities</h3>
               <div className="value">{uniqueGroupKeys.toLocaleString()}</div>
             </div>
-            {aggAliases.map((alias, ai) => {
+            {aggAliases.map((alias) => {
               const total = chartRows.reduce((s, r) => s + (r[alias] || 0), 0);
               return (
                 <div key={alias} className="metric-card" style={{ flex: 1, minWidth: 140 }}>
@@ -622,7 +627,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill, sim
           <div className="chart-container" style={{ height: 'auto' }}>
             <div className="chart-title">
               Entity Details
-              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: 10 }}>click a row for that entity's full history</span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: 10 }}>click a row for that entity&apos;s full history</span>
             </div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -651,7 +656,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill, sim
                       style={{ borderLeft: `3px solid ${ruleColor}`, cursor: 'pointer' }}
                     >
                       <td style={tdStyle}>{i + 1}</td>
-                      <td style={{ ...tdStyle, fontFamily: 'monospace', color: '#93c5fd' }}>{g.groupKey}</td>
+                      <td style={{ ...tdStyle, fontFamily: 'monospace', color: 'var(--violet-light)' }}>{g.groupKey}</td>
                       <td style={{ ...tdStyle, fontWeight: 600 }}>{g.count.toLocaleString()}</td>
                       <td style={{ ...tdStyle, fontWeight: 600 }}>{typeof g.totalValue === 'number' ? g.totalValue.toLocaleString() : g.totalValue}</td>
                       <td style={{ ...tdStyle, fontSize: '0.75rem', color: 'var(--text-muted)' }}>{formatTime(g.lastSeen)}</td>
@@ -692,8 +697,8 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill, sim
                         const bg = cell.count === 0
                           ? 'rgba(255,255,255,0.03)'
                           : cell.breached
-                            ? `rgba(239,68,68,${intensity})`
-                            : `rgba(99,102,241,${intensity})`;
+                            ? `rgba(248,81,73,${intensity})`  // var(--danger)'s rgb — dynamic alpha can't use var()
+                            : `rgba(88,101,242,${intensity})`; // var(--violet)'s rgb
                         return (
                           <div
                             key={h}
@@ -708,8 +713,8 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill, sim
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: '0.75rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(99,102,241,0.7)' }} /> Normal</span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(239,68,68,0.7)' }} /> Breach present</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--violet)' }} /> Normal</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--danger)' }} /> Breach present</span>
               </div>
             </div>
           )}
@@ -782,7 +787,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill, sim
                         {breakdown.geo_hotspot.map((g, i) => (
                           <tr key={g.label}>
                             <td style={tdStyle}>{i + 1}</td>
-                            <td style={{ ...tdStyle, fontFamily: 'monospace', color: '#93c5fd' }}>{g.label}</td>
+                            <td style={{ ...tdStyle, fontFamily: 'monospace', color: 'var(--violet-light)' }}>{g.label}</td>
                             <td style={{ ...tdStyle, fontWeight: 600 }}>{g.count.toLocaleString()}</td>
                           </tr>
                         ))}
@@ -925,12 +930,12 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill, sim
                         onClick={() => openEntityDetail(r.groupKey)}
                         style={{
                           display: 'flex', alignItems: 'center', gap: '0.7rem', padding: '0.55rem 0.75rem',
-                          background: breached ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.03)', borderRadius: 8, cursor: 'pointer',
+                          background: breached ? 'rgba(248,81,73,0.08)' : 'rgba(255,255,255,0.03)', borderRadius: 8, cursor: 'pointer',
                           borderLeft: `3px solid ${breached ? BREACH_RED : ACCENT_BLUE}`,
                         }}
                       >
                         <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', flexShrink: 0, minWidth: 56 }}>{formatTime(r.window_start)}</span>
-                        <span style={{ fontFamily: 'monospace', color: '#93c5fd', fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.groupKey}</span>
+                        <span style={{ fontFamily: 'monospace', color: 'var(--violet-light)', fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.groupKey}</span>
                         {aggAliases.map(alias => (
                           <span key={alias} style={{ fontSize: '0.72rem', color: 'var(--text-2)' }}>{alias}: <strong>{r[alias]?.toLocaleString?.() ?? r[alias]}</strong></span>
                         ))}

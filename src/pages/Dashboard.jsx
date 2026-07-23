@@ -205,7 +205,7 @@ export default function Dashboard() {
             <X size={14} />
           </button>
           <p style={{ margin: '0 0 0.65rem', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-1)' }}>
-            New here? This is a fraud-detection tool for Aadhaar authentication traffic. Here's how it works:
+            New here? This is a fraud-detection tool for Aadhaar authentication traffic. Here&apos;s how it works:
           </p>
           <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
             {[
