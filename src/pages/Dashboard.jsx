@@ -293,7 +293,7 @@ export default function Dashboard() {
                className={activeTab === 'live' ? 'animate-fade-in' : ''}>
             <ErrorBoundary label="Live Analysis" showDetails={true}>
               <PermissionGuard permission={PERMISSIONS.LIVE_ANALYSIS_READ} label="Live Stream">
-                <LiveAnalysis rules={rules} selectedRuleId={prodSelectedId} allSelectedRuleId={selectedRuleId} />
+                <LiveAnalysis rules={rules} selectedRuleId={prodSelectedId} allSelectedRuleId={selectedRuleId} onRuleClick={navigateToSummary} />
               </PermissionGuard>
             </ErrorBoundary>
           </div>
@@ -303,7 +303,7 @@ export default function Dashboard() {
                className={activeTab === 'agg' ? 'animate-fade-in' : ''}>
             <ErrorBoundary label="Aggregated Analysis">
               <PermissionGuard permission={PERMISSIONS.AGGREGATED_ANALYSIS_READ} label="Analytics">
-                <AggregatedAnalysis rules={rules} selectedRuleId={prodSelectedId} allSelectedRuleId={selectedRuleId} onDrillToHistorical={drillToHistorical} />
+                <AggregatedAnalysis rules={rules} selectedRuleId={prodSelectedId} allSelectedRuleId={selectedRuleId} onDrillToHistorical={drillToHistorical} onRuleClick={navigateToSummary} />
               </PermissionGuard>
             </ErrorBoundary>
           </div>

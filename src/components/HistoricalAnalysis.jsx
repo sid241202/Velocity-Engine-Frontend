@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { History, Loader2, ArrowUpDown, Database, XCircle, Fingerprint, MapPin, ShieldCheck } from 'lucide-react';
+import { History, Loader2, ArrowUpDown, Database, XCircle, Fingerprint, MapPin, ShieldCheck, Layers, Zap } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -13,6 +13,7 @@ import {
   istDatetimeLocalToBackendStr,
   formatISTDateTime,
 } from '../utils/istUtils';
+import { Modal, Drawer } from './ui/Overlay';
 
 const TOOLTIP_STYLE = {
   contentStyle: {
@@ -32,6 +33,19 @@ const BREACH_RED = '#ef4444';
 const ACCENT_BLUE = '#6366f1';
 const DONUT_PALETTE = ['#6366f1', '#06b6d4', '#f59e0b', '#ef4444', '#10b981', '#a855f7'];
 
+/** IST day-key ("YYYY-MM-DD") + hour-of-day for a window_start timestamp —
+ * shared by the heatmap grid and the hour-detail overlay it drives, so a
+ * clicked cell always maps back to exactly the rows that built it. */
+function getISTDayHour(ts) {
+  if (!ts) return null;
+  const raw = String(ts).replace(' ', 'T');
+  const d = new Date(raw.includes('+') || raw.endsWith('Z') ? raw : raw + '+05:30');
+  if (isNaN(d.getTime())) return null;
+  const istDate = new Date(d.getTime() + IST_OFFSET_MS);
+  const dayKey = `${istDate.getUTCFullYear()}-${String(istDate.getUTCMonth() + 1).padStart(2, '0')}-${String(istDate.getUTCDate()).padStart(2, '0')}`;
+  return { dayKey, hour: istDate.getUTCHours() };
+}
+
 // formatTime: always display timestamps in IST
 function formatTime(ts) {
   return formatISTDateTime(ts);
@@ -50,8 +64,16 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill }) {
   const [selectedGroup, setSelectedGroup] = useState('__ALL__');
   const abortRef = useRef(null);
 
-  // A rule change should reset any group filter left over from the previous rule.
-  useEffect(() => { setSelectedGroup('__ALL__'); }, [selectedRuleId]);
+  // ── Click-to-detail overlay state — same shared-slot pattern as the other
+  // panels: Entity Detail drawer (from the Entity Details table) and an Hour
+  // Detail modal (from the Breach Density Heatmap). ──────────────────────────
+  const [overlay, setOverlay] = useState(null); // { type: 'entity'|'hour', ...payload } | null
+  const openEntityDetail = useCallback((groupKey) => setOverlay({ type: 'entity', groupKey }), []);
+  const openHourDetail   = useCallback((dayKey, hour) => setOverlay({ type: 'hour', dayKey, hour }), []);
+  const closeOverlay     = useCallback(() => setOverlay(null), []);
+
+  // A rule change should reset any group filter (and any open overlay) left over from the previous rule.
+  useEffect(() => { setSelectedGroup('__ALL__'); setOverlay(null); }, [selectedRuleId]);
 
   const selectedRule = useMemo(
     () => rules.find(r => r.rule_metadata.rule_id === selectedRuleId),
@@ -255,14 +277,9 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill }) {
   const heatmapData = useMemo(() => {
     const grid = {}; // dayKey -> [{count, breached}] x24
     for (const row of chartRows) {
-      const ts = row.window_start;
-      if (!ts) continue;
-      const raw = String(ts).replace(' ', 'T');
-      const d = new Date(raw.includes('+') || raw.endsWith('Z') ? raw : raw + '+05:30');
-      if (isNaN(d.getTime())) continue;
-      const istDate = new Date(d.getTime() + IST_OFFSET_MS);
-      const dayKey = `${istDate.getUTCFullYear()}-${String(istDate.getUTCMonth() + 1).padStart(2, '0')}-${String(istDate.getUTCDate()).padStart(2, '0')}`;
-      const hour = istDate.getUTCHours();
+      const dh = getISTDayHour(row.window_start);
+      if (!dh) continue;
+      const { dayKey, hour } = dh;
       if (!grid[dayKey]) grid[dayKey] = Array.from({ length: 24 }, () => ({ count: 0, breached: false }));
       grid[dayKey][hour].count += 1;
       if (row.threshold_met === true || row.threshold_met === 1) grid[dayKey][hour].breached = true;
@@ -271,6 +288,43 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill }) {
     const maxCount = Math.max(1, ...dayKeys.flatMap(dk => grid[dk].map(c => c.count)));
     return { dayKeys, grid, maxCount };
   }, [chartRows]);
+
+  // ─── Entity Detail drawer data — every matched window for one entity,
+  // over the full replayed range (independent of the group filter above). ───
+  const entityDetail = useMemo(() => {
+    if (!overlay || overlay.type !== 'entity') return null;
+    const primaryAlias = aggAliases[0];
+    const raw = data.filter(r => r.groupKey === overlay.groupKey);
+    const sortedDesc = [...raw].sort((a, b) => new Date(b.window_start) - new Date(a.window_start));
+    const totalValue = raw.reduce((s, r) => s + (primaryAlias ? (r[primaryAlias] || 0) : 0), 0);
+    const breaches = raw.filter(r => r.threshold_met === true || r.threshold_met === 1).length;
+    const windows = raw.length;
+    const breachRate = windows > 0 ? (breaches / windows * 100) : 0;
+    return {
+      groupKey: overlay.groupKey, primaryAlias, totalValue, breaches, windows, breachRate,
+      timeline: [...sortedDesc].reverse().map(r => ({
+        window_start: r.window_start,
+        value: primaryAlias ? (r[primaryAlias] || 0) : 1,
+        breached: r.threshold_met === true || r.threshold_met === 1,
+      })),
+      history: sortedDesc.slice(0, 15),
+    };
+  }, [overlay, data, aggAliases]);
+
+  // ─── Hour Detail modal data — every row (across all entities) that landed
+  // in the clicked heatmap cell, built from the exact same chartRows the
+  // heatmap itself is aggregated from. ───────────────────────────────────────
+  const hourDetail = useMemo(() => {
+    if (!overlay || overlay.type !== 'hour') return null;
+    const rows = chartRows
+      .filter(row => {
+        const dh = getISTDayHour(row.window_start);
+        return dh && dh.dayKey === overlay.dayKey && dh.hour === overlay.hour;
+      })
+      .sort((a, b) => new Date(b.window_start) - new Date(a.window_start));
+    const breachedCount = rows.filter(r => r.threshold_met === true || r.threshold_met === 1).length;
+    return { dayKey: overlay.dayKey, hour: overlay.hour, rows, breachedCount };
+  }, [overlay, chartRows]);
 
   /* Bar chart: group key distribution */
   const groupBarData = useMemo(() => {
@@ -549,7 +603,10 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill }) {
               20 rows) isn't clipped/overflowed the same way the charts above
               were. Spacing above comes from the outer flex column's gap. */}
           <div className="chart-container" style={{ height: 'auto' }}>
-            <div className="chart-title">Entity Details</div>
+            <div className="chart-title">
+              Entity Details
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: 10 }}>click a row for that entity&apos;s full history</span>
+            </div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
@@ -571,7 +628,11 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill }) {
                 </thead>
                 <tbody>
                   {groupTableData.map((g, i) => (
-                    <tr key={g.groupKey} style={{ borderLeft: `3px solid ${ruleColor}` }}>
+                    <tr
+                      key={g.groupKey}
+                      onClick={() => openEntityDetail(g.groupKey)}
+                      style={{ borderLeft: `3px solid ${ruleColor}`, cursor: 'pointer' }}
+                    >
                       <td style={tdStyle}>{i + 1}</td>
                       <td style={{ ...tdStyle, fontFamily: 'monospace', color: '#93c5fd' }}>{g.groupKey}</td>
                       <td style={{ ...tdStyle, fontWeight: 600 }}>{g.count.toLocaleString()}</td>
@@ -598,7 +659,7 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill }) {
             <div className="chart-container" style={{ height: 'auto' }}>
               <div className="chart-title">
                 Breach Density Heatmap
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: 10 }}>IST hour of day × date</span>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: 10 }}>IST hour of day × date · click a cell for details</span>
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '70px repeat(24, 1fr)', gap: 2, minWidth: 620 }}>
@@ -619,8 +680,9 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill }) {
                         return (
                           <div
                             key={h}
+                            onClick={() => cell.count > 0 && openHourDetail(dayKey, h)}
                             title={`${dayKey} ${String(h).padStart(2, '0')}:00 IST — ${cell.count} matched window${cell.count !== 1 ? 's' : ''}${cell.breached ? ' (breach)' : ''}`}
-                            style={{ height: 16, borderRadius: 3, background: bg }}
+                            style={{ height: 16, borderRadius: 3, background: bg, cursor: cell.count > 0 ? 'pointer' : 'default' }}
                           />
                         );
                       })}
@@ -731,6 +793,138 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill }) {
               )}
             </div>
           )}
+
+          {/* ═══════════════════════════════════════════════════════════════
+              Click-to-detail overlays — Entity Detail drawer (from the
+              Entity Details table) and Hour Detail modal (from the Breach
+              Density Heatmap). Same shared-slot pattern as the other panels.
+              ═══════════════════════════════════════════════════════════════ */}
+
+          <Drawer
+            open={overlay?.type === 'entity'}
+            onClose={closeOverlay}
+            icon={Fingerprint}
+            title={entityDetail?.groupKey || ''}
+            subtitle={selectedRule ? `Historical Replay · ${selectedRule.rule_metadata.rule_name}` : 'Historical Replay · Entity Snapshot'}
+          >
+            {entityDetail && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <div className="metric-card">
+                    <h3>Times Matched</h3>
+                    <div className="value">{entityDetail.windows.toLocaleString()}</div>
+                  </div>
+                  {entityDetail.primaryAlias && (
+                    <div className="metric-card">
+                      <h3>Total {entityDetail.primaryAlias}</h3>
+                      <div className="value">{entityDetail.totalValue.toLocaleString()}</div>
+                    </div>
+                  )}
+                  <div className={`metric-card ${entityDetail.breaches > 0 ? 'breach-glow' : ''}`}>
+                    <h3>Threshold Breaches</h3>
+                    <div className="value" style={{ color: entityDetail.breaches > 0 ? BREACH_RED : undefined }}>{entityDetail.breaches.toLocaleString()}</div>
+                  </div>
+                  <div className="metric-card">
+                    <h3>Breach Rate</h3>
+                    <div className="value">{entityDetail.breachRate.toFixed(1)}%</div>
+                  </div>
+                </div>
+
+                {entityDetail.primaryAlias && (
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
+                      Activity Timeline — {entityDetail.primaryAlias}
+                    </div>
+                    <div style={{ width: '100%', height: 130 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={entityDetail.timeline} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+                          <Bar dataKey="value" radius={[2, 2, 0, 0]} maxBarSize={10}>
+                            {entityDetail.timeline.map((e, i) => (
+                              <Cell key={i} fill={e.breached ? BREACH_RED : ACCENT_BLUE} opacity={e.breached ? 1 : 0.55} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
+                    Recent Matches
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    {entityDetail.history.map((r, i) => {
+                      const breached = r.threshold_met === true || r.threshold_met === 1;
+                      return (
+                        <div key={i} style={{
+                          display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.45rem 0.6rem',
+                          background: 'rgba(255,255,255,0.03)', borderRadius: 6, fontSize: '0.78rem',
+                          borderLeft: `3px solid ${breached ? BREACH_RED : 'transparent'}`,
+                        }}>
+                          <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>{formatTime(r.window_start)}</span>
+                          {entityDetail.primaryAlias && (
+                            <span style={{ marginLeft: 'auto', fontWeight: 600 }}>{r[entityDetail.primaryAlias]?.toLocaleString?.() ?? r[entityDetail.primaryAlias]}</span>
+                          )}
+                          {breached && <Zap size={11} color={BREACH_RED} />}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </Drawer>
+
+          <Modal
+            open={overlay?.type === 'hour'}
+            onClose={closeOverlay}
+            icon={Layers}
+            title={hourDetail ? `${hourDetail.dayKey} ${String(hourDetail.hour).padStart(2, '0')}:00–${String((hourDetail.hour + 1) % 24).padStart(2, '0')}:00 IST` : ''}
+            subtitle={hourDetail ? `${hourDetail.rows.length} matched window${hourDetail.rows.length !== 1 ? 's' : ''} in this hour` : ''}
+            width={580}
+          >
+            {hourDetail && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <div className="metric-card" style={{ flex: 1, minWidth: 110 }}>
+                    <h3>Matched Windows</h3>
+                    <div className="value">{hourDetail.rows.length.toLocaleString()}</div>
+                  </div>
+                  <div className={`metric-card ${hourDetail.breachedCount > 0 ? 'breach-glow' : ''}`} style={{ flex: 1, minWidth: 110 }}>
+                    <h3>Breaches</h3>
+                    <div className="value" style={{ color: hourDetail.breachedCount > 0 ? BREACH_RED : undefined }}>{hourDetail.breachedCount}</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Per-Entity Breakdown <span style={{ textTransform: 'none', fontWeight: 400 }}>· click one for its full history</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  {hourDetail.rows.map((r, i) => {
+                    const breached = r.threshold_met === true || r.threshold_met === 1;
+                    return (
+                      <div
+                        key={i}
+                        onClick={() => openEntityDetail(r.groupKey)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '0.7rem', padding: '0.55rem 0.75rem',
+                          background: breached ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.03)', borderRadius: 8, cursor: 'pointer',
+                          borderLeft: `3px solid ${breached ? BREACH_RED : ACCENT_BLUE}`,
+                        }}
+                      >
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', flexShrink: 0, minWidth: 56 }}>{formatTime(r.window_start)}</span>
+                        <span style={{ fontFamily: 'monospace', color: '#93c5fd', fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.groupKey}</span>
+                        {aggAliases.map(alias => (
+                          <span key={alias} style={{ fontSize: '0.72rem', color: 'var(--text-2)' }}>{alias}: <strong>{r[alias]?.toLocaleString?.() ?? r[alias]}</strong></span>
+                        ))}
+                        {breached && <Zap size={13} color={BREACH_RED} />}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </Modal>
         </>
       )}
     </div>

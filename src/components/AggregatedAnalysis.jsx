@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { BarChart3, ArrowUpDown, Loader2, TrendingUp, AlertTriangle, Target, Activity, RefreshCw, Repeat, Timer } from 'lucide-react';
+import { BarChart3, ArrowUpDown, Loader2, TrendingUp, AlertTriangle, Target, Activity, RefreshCw, Repeat, Timer, Fingerprint, Layers, ArrowRight, Zap } from 'lucide-react';
 
 import {
   AreaChart, Area, BarChart, Bar, Line, ComposedChart,
@@ -15,6 +15,7 @@ import {
   formatISTDateTime,
   parseISTStringToEpochMs,
 } from '../utils/istUtils';
+import { Modal, Drawer, RuleLink } from './ui/Overlay';
 
 // ─── Data helpers (schema-agnostic) ─────────────────────────────────────────
 
@@ -199,7 +200,7 @@ const CustomXAxisTick = (props) => {
 
 // ─── Main Component ────────────────────────────────────────────────────────
 
-export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedRuleId, onDrillToHistorical }) {
+export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedRuleId, onDrillToHistorical, onRuleClick }) {
   // Initialize datetime-local values in IST (not browser local time)
   const [startTs, setStartTs] = useState(() => toISTDatetimeLocal(Date.now() - 24 * 60 * 60 * 1000));
   const [endTs, setEndTs] = useState(() => toISTDatetimeLocal(Date.now()));
@@ -213,8 +214,17 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
   const [hiddenSeries, setHiddenSeries] = useState({});
   const [selectedGroup, setSelectedGroup] = useState('__ALL__');
 
-  // A rule change should reset any group filter left over from the previous rule.
-  useEffect(() => { setSelectedGroup('__ALL__'); }, [selectedRuleId]);
+  // ── Click-to-detail overlay state — same shared-slot pattern as LiveAnalysis,
+  // so entity/window/breach-list detail views never stack on top of each other. ──
+  const [overlay, setOverlay] = useState(null); // { type: 'entity'|'window'|'breachList', ...payload } | null
+  const openEntityDetail = useCallback((groupKey) => setOverlay({ type: 'entity', groupKey }), []);
+  const openWindowDetail = useCallback((bucketKey) => setOverlay({ type: 'window', bucketKey }), []);
+  const openBreachList   = useCallback(() => setOverlay({ type: 'breachList' }), []);
+  const closeOverlay     = useCallback(() => setOverlay(null), []);
+  const handleRuleClick  = useCallback((ruleId) => { closeOverlay(); onRuleClick && onRuleClick(ruleId); }, [onRuleClick, closeOverlay]);
+
+  // A rule change should reset any group filter (and any open overlay) left over from the previous rule.
+  useEffect(() => { setSelectedGroup('__ALL__'); setOverlay(null); }, [selectedRuleId]);
 
   const handleLegendClick = useCallback((e) => {
     const key = e.dataKey;
@@ -684,6 +694,50 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
     return arr.slice(0, 20);
   }, [allRows, sortCol, sortDir]);
 
+  // ─── Entity Detail drawer data — full per-window history for one entity,
+  // independent of the group filter above. ──────────────────────────────────
+  const entityDetail = useMemo(() => {
+    if (!overlay || overlay.type !== 'entity') return null;
+    const raw = allRows.filter(r => r.groupKey === overlay.groupKey);
+    const sortedDesc = [...raw].sort((a, b) => new Date(b.windowStart) - new Date(a.windowStart));
+    const totalEvents = raw.reduce((s, r) => s + getRowEventCount(r), 0);
+    const breaches = raw.filter(isBreached).length;
+    const totalWindows = raw.length;
+    const breachRate = totalWindows > 0 ? (breaches / totalWindows * 100) : 0;
+    return {
+      groupKey: overlay.groupKey,
+      totalEvents, breaches, totalWindows, breachRate,
+      timeline: [...sortedDesc].reverse().map(r => ({ windowStart: r.windowStart, count: getRowEventCount(r), breached: isBreached(r) })),
+      history: sortedDesc.slice(0, 15),
+    };
+  }, [overlay, allRows]);
+
+  // ─── Window Detail modal data — every entity's row within the clicked
+  // bucket (bucket-resolution-aware, since Window Intensity here can be
+  // bucketed to the hour or day for wide date ranges). ───────────────────────
+  const windowDetail = useMemo(() => {
+    if (!overlay || overlay.type !== 'window') return null;
+    const rows = allRows
+      .filter(r => getBucketKey(r.windowStart, bucketResolution) === overlay.bucketKey)
+      .sort((a, b) => getRowEventCount(b) - getRowEventCount(a));
+    const totalCount = rows.reduce((s, r) => s + getRowEventCount(r), 0);
+    const breachedCount = rows.filter(isBreached).length;
+    return { bucketKey: overlay.bucketKey, rows, totalCount, breachedCount };
+  }, [overlay, allRows, bucketResolution]);
+
+  // ─── Breach List modal data — respects the group filter, matching the
+  // "Threshold Breaches" KPI tile that opens it. ─────────────────────────────
+  const breachListRows = useMemo(() => {
+    if (!overlay || overlay.type !== 'breachList') return [];
+    return [...chartRows].filter(isBreached).sort((a, b) => new Date(b.windowStart) - new Date(a.windowStart));
+  }, [overlay, chartRows]);
+
+  // having_thresholds on a real rule is a JEXL boolean expression (e.g.
+  // "count > 100"), not a single numeric value — there's no reliable way to
+  // reduce an arbitrary expression to one number, so the window overlay
+  // below shows the condition text rather than fabricating a margin.
+  const currentThresholdExpr = currentRule?.having_thresholds?.expression;
+
   const handleSort = (col) => {
     if (sortCol === col) {
       setSortDir(d => d === 'desc' ? 'asc' : 'desc');
@@ -1010,8 +1064,16 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
                           const ttl = formatTtlCountdown(g.lastSeen, g.penaltyTtlSeconds, nowTick);
                           return (
                             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.4rem 0.6rem', background: 'rgba(255,255,255,0.03)', borderRadius: 6, fontSize: '0.76rem' }}>
-                              <span style={{ fontFamily: 'monospace', color: 'var(--teal)', fontWeight: 600, minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.entity}</span>
-                              <span style={{ color: 'var(--text-3)', flexShrink: 0, fontSize: '0.72rem' }}>{getRuleName(g.ruleId)}</span>
+                              <span
+                                onClick={() => openEntityDetail(g.entity)}
+                                title="View this entity's full history"
+                                style={{ fontFamily: 'monospace', color: 'var(--teal)', fontWeight: 600, minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}
+                              >
+                                {g.entity}
+                              </span>
+                              <span style={{ flexShrink: 0, fontSize: '0.72rem' }}>
+                                <RuleLink ruleName={getRuleName(g.ruleId)} ruleId={g.ruleId} onRuleClick={handleRuleClick} style={{ color: 'var(--text-3)' }} />
+                              </span>
                               <span style={{ color: 'var(--danger)', fontWeight: 700, flexShrink: 0 }}>×{g.count}</span>
                               {ttl && (
                                 <span
@@ -1054,9 +1116,14 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
                     const sev    = ev.severity || ev.severityLevel || '';
                     const rColor = getRuleColor(rules, ruleId);
                     return (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.5rem 0.75rem', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', borderLeft: `3px solid ${rColor}`, fontSize: '0.78rem' }}>
+                      <div
+                        key={i}
+                        onClick={() => openEntityDetail(entity)}
+                        title="View this entity's full history"
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.5rem 0.75rem', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', borderLeft: `3px solid ${rColor}`, fontSize: '0.78rem', cursor: 'pointer' }}
+                      >
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ color: 'var(--text-3)', fontSize: '0.67rem' }}>{getRuleName(ruleId)}</div>
+                          <div style={{ fontSize: '0.67rem' }}><RuleLink ruleName={getRuleName(ruleId)} ruleId={ruleId} onRuleClick={handleRuleClick} style={{ color: 'var(--text-3)' }} /></div>
                           <div style={{ color: 'var(--teal)', fontFamily: 'monospace', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entity}</div>
                         </div>
                         {sev && (
@@ -1083,7 +1150,12 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
               <div className="value">{totalWindows.toLocaleString()}</div>
               <div style={{ fontSize: '0.7rem', color: 'var(--text-3)', marginTop: 2 }}>Evaluation periods</div>
             </div>
-            <div className={`metric-card ${totalBreaches > 0 ? 'breach-glow' : ''}`} style={{ minWidth: 0 }}>
+            <div
+              className={`metric-card ${totalBreaches > 0 ? 'breach-glow' : ''}`}
+              style={{ minWidth: 0, cursor: totalBreaches > 0 ? 'pointer' : 'default' }}
+              onClick={totalBreaches > 0 ? openBreachList : undefined}
+              title={totalBreaches > 0 ? 'View every breach in this range' : undefined}
+            >
               <h3>Threshold Breaches</h3>
               <div className="value" style={totalBreaches > 0 ? { background: 'linear-gradient(135deg, #f85149, #ff7b72)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' } : undefined}>{totalBreaches.toLocaleString()}</div>
               <div style={{ fontSize: '0.7rem', color: 'var(--text-3)', marginTop: 2 }}>{totalBreaches > 0 ? 'Rule conditions triggered' : 'No breaches'}</div>
@@ -1121,7 +1193,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
               <div className="chart-title" style={{ marginBottom: '1.25rem' }}>
                 Window Intensity
                 <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: 10 }}>
-                  🟥 breach&nbsp;·&nbsp; 🟦 normal
+                  🟥 breach&nbsp;·&nbsp; 🟦 normal &nbsp;·&nbsp; click a bar for details
                 </span>
               </div>
               <div style={{ width: '100%', height: 280 }}>
@@ -1155,7 +1227,14 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
                         return [value, breached ? '⚡ Events (BREACH)' : '📊 Events'];
                       }}
                     />
-                    <Bar dataKey="count" name="Events" radius={[3, 3, 0, 0]} maxBarSize={32}>
+                    <Bar
+                      dataKey="count"
+                      name="Events"
+                      radius={[3, 3, 0, 0]}
+                      maxBarSize={32}
+                      cursor="pointer"
+                      onClick={(entry) => entry && openWindowDetail(entry.windowStart)}
+                    >
                       {breachBarData.map((entry, index) => (
                         <Cell
                           key={`cell_${index}`}
@@ -1353,7 +1432,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
           {/* Entity Breach Ranking Table */}
           <div className="chart-container">
             <div className="chart-title">Entity Breach Ranking</div>
-            <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>Top 20 tracked entities ranked by breach rate. Click column headers to sort.</div>
+            <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>Top 20 tracked entities ranked by breach rate. Click column headers to sort, or a row for that entity&apos;s full history.</div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
@@ -1384,10 +1463,14 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
                     const color = getRuleColor(rules, g.ruleId);
                     const rateColor = getBreachColor(g.breachRate);
                     return (
-                      <tr key={g.groupKey + g.ruleId} style={{ borderLeft: `3px solid ${g.breaches > 0 ? color : 'transparent'}` }}>
+                      <tr
+                        key={g.groupKey + g.ruleId}
+                        onClick={() => openEntityDetail(g.groupKey)}
+                        style={{ borderLeft: `3px solid ${g.breaches > 0 ? color : 'transparent'}`, cursor: 'pointer' }}
+                      >
                         <td style={tdStyle}>{i + 1}</td>
                         <td style={{ ...tdStyle, fontFamily: 'monospace', color: 'var(--teal)', fontWeight: 600 }}>{g.groupKey}</td>
-                        <td style={tdStyle}>{getRuleName(g.ruleId)}</td>
+                        <td style={tdStyle}><RuleLink ruleName={getRuleName(g.ruleId)} ruleId={g.ruleId} onRuleClick={handleRuleClick} /></td>
                         <td style={{ ...tdStyle, fontWeight: 600 }}>{g.totalEvents.toLocaleString()}</td>
                         <td style={{ ...tdStyle, color: g.breaches > 0 ? 'var(--danger)' : 'var(--text-3)', fontWeight: g.breaches > 0 ? 700 : 400 }}>{g.breaches}</td>
                         <td style={tdStyle}>
@@ -1419,6 +1502,176 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
               </table>
             </div>
           </div>
+
+          {/* ═══════════════════════════════════════════════════════════════
+              Click-to-detail overlays — same shared-slot pattern as Live
+              Stream: Entity Detail drawer, Window/Bucket Detail modal,
+              Breach List modal.
+              ═══════════════════════════════════════════════════════════════ */}
+
+          <Drawer
+            open={overlay?.type === 'entity'}
+            onClose={closeOverlay}
+            icon={Fingerprint}
+            title={entityDetail?.groupKey || ''}
+            subtitle="Analytics · Entity Snapshot"
+            footer={currentRule && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ width: '100%', justifyContent: 'center' }}
+                onClick={() => handleRuleClick(currentRule.rule_metadata.rule_id)}
+              >
+                Watched by {currentRule.rule_metadata.rule_name} <ArrowRight size={14} />
+              </button>
+            )}
+          >
+            {entityDetail && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <div className="metric-card">
+                    <h3>Total Events</h3>
+                    <div className="value">{entityDetail.totalEvents.toLocaleString()}</div>
+                  </div>
+                  <div className="metric-card">
+                    <h3>Windows Tracked</h3>
+                    <div className="value">{entityDetail.totalWindows.toLocaleString()}</div>
+                  </div>
+                  <div className={`metric-card ${entityDetail.breaches > 0 ? 'breach-glow' : ''}`}>
+                    <h3>Breaches</h3>
+                    <div className="value" style={{ color: entityDetail.breaches > 0 ? BREACH_RED : undefined }}>{entityDetail.breaches.toLocaleString()}</div>
+                  </div>
+                  <div className="metric-card">
+                    <h3>Breach Rate</h3>
+                    <div className="value" style={{ color: getBreachColor(entityDetail.breachRate) }}>{entityDetail.breachRate.toFixed(1)}%</div>
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
+                    Activity Timeline
+                  </div>
+                  <div style={{ width: '100%', height: 130 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={entityDetail.timeline} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+                        <Bar dataKey="count" radius={[2, 2, 0, 0]} maxBarSize={10}>
+                          {entityDetail.timeline.map((e, i) => (
+                            <Cell key={i} fill={e.breached ? BREACH_RED : ACCENT_BLUE} opacity={e.breached ? 1 : 0.55} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
+                    Recent Windows <span style={{ textTransform: 'none', fontWeight: 400 }}>· click one for details</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    {entityDetail.history.map((r, i) => (
+                      <div
+                        key={i}
+                        onClick={() => openWindowDetail(getBucketKey(r.windowStart, bucketResolution))}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.45rem 0.6rem',
+                          background: 'rgba(255,255,255,0.03)', borderRadius: 6, fontSize: '0.78rem', cursor: 'pointer',
+                          borderLeft: `3px solid ${isBreached(r) ? BREACH_RED : 'transparent'}`,
+                        }}
+                      >
+                        <span style={{ color: 'var(--text-3)', flexShrink: 0 }}>{formatTime(r.windowStart)}</span>
+                        <span style={{ marginLeft: 'auto', fontWeight: 600 }}>{getRowEventCount(r)} events</span>
+                        {isBreached(r) && <Zap size={11} color={BREACH_RED} />}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </Drawer>
+
+          <Modal
+            open={overlay?.type === 'window'}
+            onClose={closeOverlay}
+            icon={Layers}
+            title={windowDetail ? formatTime(windowDetail.bucketKey) : ''}
+            subtitle={windowDetail ? `${windowDetail.rows.length} entit${windowDetail.rows.length !== 1 ? 'ies' : 'y'} active in this ${bucketResolution === 'minute' ? 'window' : bucketResolution}` : ''}
+            width={580}
+          >
+            {windowDetail && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <div className="metric-card" style={{ flex: 1, minWidth: 110 }}>
+                    <h3>Total Events</h3>
+                    <div className="value">{windowDetail.totalCount.toLocaleString()}</div>
+                  </div>
+                  <div className="metric-card" style={{ flex: 1, minWidth: 110 }}>
+                    <h3>Alert Condition</h3>
+                    <div className="value" style={{ fontSize: '0.85rem', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={currentThresholdExpr}>{currentThresholdExpr || '—'}</div>
+                  </div>
+                  <div className={`metric-card ${windowDetail.breachedCount > 0 ? 'breach-glow' : ''}`} style={{ flex: 1, minWidth: 110 }}>
+                    <h3>Breaching Entities</h3>
+                    <div className="value" style={{ color: windowDetail.breachedCount > 0 ? BREACH_RED : undefined }}>{windowDetail.breachedCount}</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Per-Entity Breakdown <span style={{ textTransform: 'none', fontWeight: 400 }}>· click one for its full history</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  {windowDetail.rows.map((r, i) => {
+                    const breached = isBreached(r);
+                    const count = getRowEventCount(r);
+                    return (
+                      <div
+                        key={i}
+                        onClick={() => openEntityDetail(r.groupKey)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '0.7rem', padding: '0.55rem 0.75rem',
+                          background: breached ? 'rgba(248,81,73,0.08)' : 'rgba(255,255,255,0.03)', borderRadius: 8, cursor: 'pointer',
+                          borderLeft: `3px solid ${breached ? BREACH_RED : ACCENT_BLUE}`,
+                        }}
+                      >
+                        <span style={{ fontFamily: 'monospace', color: 'var(--teal)', fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.groupKey}</span>
+                        <span style={{ fontWeight: 700 }}>{count} events</span>
+                        {breached && <Zap size={13} color={BREACH_RED} />}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </Modal>
+
+          <Modal
+            open={overlay?.type === 'breachList'}
+            onClose={closeOverlay}
+            icon={Zap}
+            iconColor={BREACH_RED}
+            title="Breach Events"
+            subtitle={showGroupFilter && selectedGroup !== '__ALL__' ? `Filtered to ${selectedGroup}` : 'All entities · queried range'}
+            width={580}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              {breachListRows.length === 0 && (
+                <p style={{ color: 'var(--text-3)', textAlign: 'center', padding: '1.5rem' }}>No breaches in this range.</p>
+              )}
+              {breachListRows.map((r, i) => (
+                <div
+                  key={i}
+                  onClick={() => openEntityDetail(r.groupKey)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '0.7rem', padding: '0.55rem 0.75rem',
+                    background: 'rgba(248,81,73,0.07)', borderRadius: 8, cursor: 'pointer', borderLeft: `3px solid ${BREACH_RED}`,
+                  }}
+                >
+                  <span style={{ color: 'var(--text-3)', fontSize: '0.75rem', flexShrink: 0, minWidth: 90 }}>{formatTime(r.windowStart)}</span>
+                  <span style={{ fontFamily: 'monospace', color: 'var(--teal)', fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.groupKey}</span>
+                  <span style={{ fontWeight: 700 }}>{getRowEventCount(r)} events</span>
+                  <Zap size={13} color={BREACH_RED} />
+                </div>
+              ))}
+            </div>
+          </Modal>
         </>
       )}
     </div>
