@@ -9,6 +9,10 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Runtime config override (window._env_), read by getEnvVar() in
+         src/config/appConfig.js — must load before main.jsx so any
+         window._env_ values are already set when appConfig.js runs. -->
+    <script src="/env-config.js"></script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
