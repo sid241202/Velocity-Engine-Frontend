@@ -190,8 +190,8 @@ export default function Dashboard() {
           workflow once, dismissible, remembered via localStorage. */}
       {showOnboarding && (
         <div style={{
-          background: 'linear-gradient(90deg, rgba(99,102,241,0.12), rgba(45,212,191,0.05))',
-          border: '1px solid rgba(99,102,241,0.3)',
+          background: 'linear-gradient(90deg, rgba(var(--violet-rgb),0.12), rgba(var(--teal-rgb),0.05))',
+          border: '1px solid rgba(var(--violet-rgb),0.3)',
           borderRadius: '8px',
           margin: '0.5rem 1rem',
           padding: '0.75rem 2.25rem 0.75rem 1rem',
@@ -215,7 +215,7 @@ export default function Dashboard() {
             ].map(({ icon: Icon, label, desc }, i, arr) => (
               <React.Fragment key={label}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 200 }}>
-                  <div style={{ width: 26, height: 26, borderRadius: 7, background: 'rgba(99,102,241,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <div style={{ width: 26, height: 26, borderRadius: 7, background: 'rgba(var(--violet-rgb),0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <Icon size={13} color="var(--violet-light)" />
                   </div>
                   <div>

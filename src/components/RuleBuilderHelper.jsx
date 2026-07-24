@@ -120,13 +120,13 @@ export default function RuleBuilderHelper({ focusedField }) {
   return (
     <div className="glass-panel" style={{ height: 'calc(100vh - 180px)', overflowY: 'auto', padding: '1.25rem' }}>
       {help && (
-        <div className="animate-fade-in" style={{ background: 'var(--violet-subtle)', border: '1px solid rgba(88,101,242,0.25)', borderRadius: 'var(--radius-md)', padding: '1.25rem', marginBottom: '1.5rem' }}>
+        <div className="animate-fade-in" style={{ background: 'var(--violet-subtle)', border: '1px solid rgba(var(--violet-rgb),0.25)', borderRadius: 'var(--radius-md)', padding: '1.25rem', marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
             <Lightbulb size={18} color="var(--violet-light)" />
             <h4 style={{ color: 'var(--violet-light)', margin: 0, fontSize: 'var(--fs-md)' }}>{help.title}</h4>
           </div>
           <p style={{ color: 'var(--text-main)', fontSize: 'var(--fs-base)', lineHeight: 1.6, marginBottom: '0.75rem' }}>{help.description}</p>
-          <div style={{ background: 'var(--teal-subtle)', border: '1px solid rgba(45,212,191,0.25)', borderRadius: 'var(--radius-xs)', padding: '0.75rem', fontSize: 'var(--fs-sm)', color: 'var(--teal)' }}>
+          <div style={{ background: 'var(--teal-subtle)', border: '1px solid rgba(var(--teal-rgb),0.25)', borderRadius: 'var(--radius-xs)', padding: '0.75rem', fontSize: 'var(--fs-sm)', color: 'var(--teal)' }}>
             <strong>Tip:</strong> {help.tip}
           </div>
         </div>

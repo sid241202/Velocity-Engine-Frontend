@@ -159,8 +159,8 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
     display: 'inline-block',
     padding: '0.2rem 0.6rem',
     borderRadius: 'var(--radius-lg)',
-    background: 'rgba(88,101,242,0.2)',
-    border: '1px solid rgba(88,101,242,0.3)',
+    background: 'rgba(var(--violet-rgb),0.2)',
+    border: '1px solid rgba(var(--violet-rgb),0.3)',
     color: 'var(--violet-light)',
     fontSize: '0.8rem',
     marginRight: '0.4rem',
@@ -439,7 +439,7 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
             </button>
             <button
               className="btn"
-              style={{ background: 'rgba(88,101,242,0.2)', border: '1px solid rgba(88,101,242,0.4)', color: 'var(--violet-light)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
+              style={{ background: 'rgba(var(--violet-rgb),0.2)', border: '1px solid rgba(var(--violet-rgb),0.4)', color: 'var(--violet-light)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
               onClick={() => navigateToEdit && navigateToEdit(rule)}
             >
               <Pencil size={15} /> Edit Rule
@@ -468,7 +468,7 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
             </button>
             <button
               className="btn"
-              style={{ background: 'rgba(88,101,242,0.2)', border: '1px solid rgba(88,101,242,0.4)', color: 'var(--violet-light)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
+              style={{ background: 'rgba(var(--violet-rgb),0.2)', border: '1px solid rgba(var(--violet-rgb),0.4)', color: 'var(--violet-light)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
               onClick={() => navigateToEdit && navigateToEdit(rule)}
             >
               <Pencil size={15} /> Edit Rule

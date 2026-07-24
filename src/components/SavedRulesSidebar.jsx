@@ -39,7 +39,7 @@ export default function SavedRulesSidebar({
 
       {/* Selection hint */}
       {isAnalysisPage && rules.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.75rem', padding: '0.35rem 0.6rem', background: 'var(--violet-subtle)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(88,101,242,0.15)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.75rem', padding: '0.35rem 0.6rem', background: 'var(--violet-subtle)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(var(--violet-rgb),0.15)' }}>
           <TrendingUp size={11} color="var(--violet-light)" />
           <span style={{ fontSize: '0.68rem', color: 'var(--violet-light)', fontWeight: 500 }}>Click a rule to analyze it — selecting a new one replaces the current selection</span>
         </div>

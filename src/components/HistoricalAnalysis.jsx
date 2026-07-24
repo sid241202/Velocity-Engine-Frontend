@@ -697,8 +697,8 @@ export default function HistoricalAnalysis({ rules, selectedRuleId, prefill, sim
                         const bg = cell.count === 0
                           ? 'rgba(255,255,255,0.03)'
                           : cell.breached
-                            ? `rgba(248,81,73,${intensity})`  // var(--danger)'s rgb — dynamic alpha can't use var()
-                            : `rgba(88,101,242,${intensity})`; // var(--violet)'s rgb
+                            ? `rgba(var(--danger-rgb),${intensity})`
+                            : `rgba(var(--violet-rgb),${intensity})`;
                         return (
                           <div
                             key={h}

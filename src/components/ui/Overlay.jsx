@@ -32,7 +32,7 @@ function OverlayHeader({ icon: Icon, iconColor, title, subtitle, onClose }) {
       {Icon && (
         <div style={{
           width: 32, height: 32, borderRadius: 8,
-          background: 'rgba(88,101,242,0.12)',
+          background: 'rgba(var(--violet-rgb),0.12)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           flexShrink: 0, marginTop: 1,
         }}>

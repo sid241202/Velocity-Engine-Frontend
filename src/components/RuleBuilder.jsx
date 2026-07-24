@@ -495,7 +495,7 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
           width: 32, height: 32, borderRadius: 'var(--radius-sm)',
           background: 'linear-gradient(135deg, var(--violet), var(--teal))',
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          boxShadow: '0 0 0 1px rgba(88,101,242,0.3), 0 2px 8px rgba(0,0,0,0.3)',
+          boxShadow: '0 0 0 1px rgba(var(--violet-rgb),0.3), 0 2px 8px rgba(0,0,0,0.3)',
         }}>
           <Zap size={17} color="#fff" strokeWidth={2.5} />
         </div>
@@ -622,7 +622,7 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
           </div>
 
           {(anomalySinkEnabled || anomalyStoreSinkEnabled) && (
-            <div style={{ marginTop: '0.875rem', padding: '0.7rem 0.875rem', background: 'var(--violet-subtle)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(88,101,242,0.15)' }}>
+            <div style={{ marginTop: '0.875rem', padding: '0.7rem 0.875rem', background: 'var(--violet-subtle)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(var(--violet-rgb),0.15)' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', cursor: 'pointer', fontSize: '0.78rem', color: 'var(--violet-light)', fontWeight: 500, marginBottom: useAnomalyEntityField ? '0.5rem' : 0 }}>
                 <input type="checkbox" checked={useAnomalyEntityField} onChange={e => setUseAnomalyEntityField(e.target.checked)} onFocus={() => onFieldFocus && onFieldFocus('anomaly_entity_field')} style={{ width: 'auto', accentColor: 'var(--violet)' }} />
                 Use a specific field as the alert identifier
@@ -672,8 +672,8 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
                 display: 'flex', alignItems: 'center', gap: '0.5rem',
                 padding: '0.65rem 1rem',
                 borderRadius: 'var(--radius-sm)',
-                border: noWindowing === val ? '1px solid rgba(88,101,242,0.6)' : '1px solid var(--border)',
-                background: noWindowing === val ? 'rgba(88,101,242,0.12)' : 'var(--surface-3)',
+                border: noWindowing === val ? '1px solid rgba(var(--violet-rgb),0.6)' : '1px solid var(--border)',
+                background: noWindowing === val ? 'rgba(var(--violet-rgb),0.12)' : 'var(--surface-3)',
                 cursor: 'pointer', fontSize: '0.82rem', fontWeight: 500,
                 color: noWindowing === val ? 'var(--violet-light)' : 'var(--text-2)',
                 /* Specific transitions only — 'all' causes bounce */

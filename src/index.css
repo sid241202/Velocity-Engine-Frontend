@@ -9,25 +9,26 @@
    them gets more disciplined.
 ================================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;1,14..32,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
 
 /* ── Design Tokens ──────────────────────────────────────────── */
 :root {
-  /* Neutral scale — 12 steps, near-black to near-white, cool slate
-     undertone. Everything below (backgrounds, surfaces, text) is
-     drawn from this ramp instead of one-off hex values. */
-  --gray-1:  #0c0e12;
-  --gray-2:  #131619;
-  --gray-3:  #191d22;
-  --gray-4:  #20242a;
-  --gray-5:  #262b32;
-  --gray-6:  #2e343c;
-  --gray-7:  #3a414a;
-  --gray-8:  #4c5560;
-  --gray-9:  #6b7280;
-  --gray-10: #838a98;
-  --gray-11: #b4bac4;
-  --gray-12: #eef0f3;
+  /* Neutral scale — Castle.io's actual extracted 12-step scale
+     (computed styles, not an approximation). Everything below
+     (backgrounds, surfaces, text) is drawn from this ramp instead
+     of one-off hex values. */
+  --gray-1:  #111113;
+  --gray-2:  #18191b;
+  --gray-3:  #212225;
+  --gray-4:  #272a2d;
+  --gray-5:  #2e3135;
+  --gray-6:  #363a3f;
+  --gray-7:  #43484e;
+  --gray-8:  #5a6169;
+  --gray-9:  #696e77;
+  --gray-10: #777b84;
+  --gray-11: #b0b4ba;
+  --gray-12: #edeef0;
 
   /* Base backgrounds — deep slate-navy, NOT pure black */
   --bg:              var(--gray-1);
@@ -40,23 +41,27 @@
   /* Borders — very subtle, layered */
   --border:          rgba(255, 255, 255, 0.07);
   --border-2:        rgba(255, 255, 255, 0.12);
-  --border-focus:    rgba(88, 101, 242, 0.60);
+  --border-focus:    rgba(var(--violet-rgb), 0.60);
 
   /* Text — proper contrast hierarchy, off the neutral scale */
   --text-1:    var(--gray-12);
   --text-2:    var(--gray-11);
   --text-3:    var(--gray-9);
 
-  /* Primary — refined indigo (not electric violet) */
-  --violet:          #5865f2;
-  --violet-light:    #7983f5;
-  --violet-glow:     rgba(88, 101, 242, 0.22);
-  --violet-subtle:   rgba(88, 101, 242, 0.09);
+  /* Primary — Castle's actual blue-9/blue-11, not an approximation */
+  --violet-rgb:      61, 99, 221;
+  --violet:          #3d63dd;
+  --violet-light:    #93b4ff;
+  --violet-glow:     rgba(var(--violet-rgb), 0.22);
+  --violet-subtle:   rgba(var(--violet-rgb), 0.09);
+  --violet-dark:     #2e4aa6;
 
-  /* Data accent — teal/jade, slightly more saturated */
-  --teal:            #2dd4bf;
-  --teal-glow:       rgba(45, 212, 191, 0.14);
-  --teal-subtle:     rgba(45, 212, 191, 0.08);
+  /* Data accent — Castle's actual jade-9/jade-11 */
+  --teal-rgb:        41, 163, 131;
+  --teal:            #29a383;
+  --teal-light:      #1fd8a4;
+  --teal-glow:       rgba(var(--teal-rgb), 0.14);
+  --teal-subtle:     rgba(var(--teal-rgb), 0.08);
 
   /* Alert — warm amber */
   --amber:           #e3a008;
@@ -64,21 +69,22 @@
   --amber-subtle:    rgba(227, 160, 8, 0.07);
 
   /* Semantic — danger / warning / success, for breach & anomaly states */
+  --danger-rgb:      248, 81, 73;
   --success:         #3fb950;
   --success-subtle:  rgba(63, 185, 80, 0.10);
   --warning:         #e3a008;
   --warning-subtle:  rgba(227, 160, 8, 0.10);
   --danger:          #f85149;
-  --danger-subtle:   rgba(248, 81, 73, 0.10);
-  --info:            #2dd4bf;
+  --danger-subtle:   rgba(var(--danger-rgb), 0.10);
+  --info:            var(--teal);
 
   /* Pink accent for anomaly/breach */
   --pink:            #e879f9;
   --pink-subtle:     rgba(232, 121, 249, 0.08);
 
   /* Legacy compat */
-  --primary:         #5865f2;
-  --accent:          #2dd4bf;
+  --primary:         var(--violet);
+  --accent:          var(--teal);
   --text-main:       var(--gray-12);
   --text-muted:      var(--gray-9);
   --glass-border:    rgba(255,255,255,0.07);
@@ -97,10 +103,10 @@
   --fs-sm:   0.79rem;  /* table cells, body small */
   --fs-base: 0.86rem;  /* default body */
   --fs-md:   0.95rem;  /* section subheadings */
-  --fs-lg:   1.1rem;   /* panel titles */
-  --fs-xl:   1.35rem;  /* app brand / hero stat */
-  --fs-2xl:  1.75rem;  /* large stat values */
-  --fs-3xl:  2.25rem;  /* rare hero numbers */
+  --fs-lg:   1.2rem;   /* panel titles */
+  --fs-xl:   1.5rem;   /* app brand / hero stat */
+  --fs-2xl:  2rem;     /* large stat values */
+  --fs-3xl:  2.75rem;  /* rare hero numbers */
 }
 
 /* ── Base ──────────────────────────────────────────────────── */
@@ -119,8 +125,8 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   background-image:
-    radial-gradient(ellipse 70% 40% at 50% -10%, rgba(88,101,242,0.07), transparent),
-    radial-gradient(ellipse 50% 30% at 85% 110%, rgba(45,212,191,0.04), transparent);
+    radial-gradient(ellipse 70% 40% at 50% -10%, rgba(var(--violet-rgb),0.07), transparent),
+    radial-gradient(ellipse 50% 30% at 85% 110%, rgba(var(--teal-rgb),0.04), transparent);
   background-attachment: fixed;
 }
 
@@ -157,9 +163,9 @@ h1, h2, h3, h4 {
   border-radius: inherit;
   background: linear-gradient(
     135deg,
-    rgba(88, 101, 242, 0.035) 0%,
+    rgba(var(--violet-rgb), 0.035) 0%,
     transparent 50%,
-    rgba(45, 212, 191, 0.015) 100%
+    rgba(var(--teal-rgb), 0.015) 100%
   );
   pointer-events: none;
   z-index: 0;
@@ -176,8 +182,8 @@ h1, h2, h3, h4 {
 }
 
 .card:hover {
-  border-color: rgba(88, 101, 242, 0.22);
-  box-shadow: 0 0 0 1px rgba(88,101,242,0.06), 0 4px 16px rgba(0,0,0,0.3);
+  border-color: rgba(var(--violet-rgb), 0.22);
+  box-shadow: 0 0 0 1px rgba(var(--violet-rgb),0.06), 0 4px 16px rgba(0,0,0,0.3);
 }
 
 .card-sm {
@@ -224,7 +230,7 @@ h1, h2, h3, h4 {
 
 .btn-primary {
   background: var(--violet);
-  border-color: rgba(88,101,242,0.5);
+  border-color: rgba(var(--violet-rgb),0.5);
   color: #fff;
   font-weight: 600;
 }
@@ -236,7 +242,7 @@ h1, h2, h3, h4 {
 }
 
 .btn-accent {
-  background: linear-gradient(135deg, #5865f2 0%, #4752c4 100%);
+  background: linear-gradient(135deg, var(--violet) 0%, var(--violet-dark) 100%);
   border-color: transparent;
   color: #fff;
   font-weight: 600;
@@ -244,7 +250,7 @@ h1, h2, h3, h4 {
 }
 
 .btn-accent:hover {
-  background: linear-gradient(135deg, #6870f3 0%, #5865f2 100%);
+  background: linear-gradient(135deg, var(--violet-light) 0%, var(--violet) 100%);
   box-shadow: 0 0 0 3px var(--violet-glow), 0 2px 10px rgba(0,0,0,0.4);
   filter: brightness(1.06);
 }
@@ -274,11 +280,11 @@ h1, h2, h3, h4 {
 
 .btn-teal {
   background: var(--teal-subtle);
-  border-color: rgba(45,212,191,0.22);
+  border-color: rgba(var(--teal-rgb),0.22);
   color: var(--teal);
 }
 
-.btn-teal:hover { background: rgba(45,212,191,0.14); }
+.btn-teal:hover { background: rgba(var(--teal-rgb),0.14); }
 
 /* ── Forms ─────────────────────────────────────────────────── */
 .form-group {
@@ -321,7 +327,7 @@ input:hover:not(:focus), select:hover:not(:focus), textarea:hover:not(:focus) {
 
 input:focus, select:focus, textarea:focus {
   border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px rgba(88,101,242,0.14);
+  box-shadow: 0 0 0 3px rgba(var(--violet-rgb),0.14);
   background: var(--surface-4);
 }
 
@@ -385,8 +391,8 @@ select {
 .badge-success { background: var(--success-subtle); color: var(--success);      border: 1px solid rgba(63,185,80,0.2); }
 .badge-warning { background: var(--warning-subtle); color: var(--warning);      border: 1px solid rgba(227,160,8,0.2); }
 .badge-danger  { background: var(--danger-subtle);  color: var(--danger);       border: 1px solid rgba(248,81,73,0.2); }
-.badge-violet  { background: var(--violet-subtle);  color: var(--violet-light); border: 1px solid rgba(88,101,242,0.2); }
-.badge-teal    { background: var(--teal-subtle);    color: var(--teal);         border: 1px solid rgba(45,212,191,0.2); }
+.badge-violet  { background: var(--violet-subtle);  color: var(--violet-light); border: 1px solid rgba(var(--violet-rgb),0.2); }
+.badge-teal    { background: var(--teal-subtle);    color: var(--teal);         border: 1px solid rgba(var(--teal-rgb),0.2); }
 .badge-amber   { background: var(--amber-subtle);   color: var(--amber);        border: 1px solid rgba(227,160,8,0.2); }
 .badge-muted   { background: var(--surface-3);      color: var(--text-3);       border: 1px solid var(--border); }
 .badge-draft   { background: var(--surface-4);      color: var(--text-2);       border: 1px solid var(--border-2); }
@@ -440,7 +446,7 @@ select {
 
 .rule-card.selected {
   background: var(--violet-subtle);
-  border-color: rgba(88,101,242,0.25);
+  border-color: rgba(var(--violet-rgb),0.25);
 }
 
 .rule-color-dot {
@@ -475,7 +481,7 @@ select {
 }
 
 .stat-tile:hover {
-  border-color: rgba(88,101,242,0.2);
+  border-color: rgba(var(--violet-rgb),0.2);
   box-shadow: 0 2px 12px rgba(0,0,0,0.2);
 }
 
@@ -491,8 +497,8 @@ select {
 
 .stat-value {
   font-size: var(--fs-2xl);
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  font-weight: 800;
+  letter-spacing: -0.04em;
   color: var(--text-1);
   line-height: 1;
 }
@@ -582,7 +588,7 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
   margin-top: 0.625rem;
 }
 .accordion-trigger:hover { color: var(--text-2); }
-.accordion-trigger.open { color: var(--violet-light); border-top-color: rgba(88,101,242,0.25); }
+.accordion-trigger.open { color: var(--violet-light); border-top-color: rgba(var(--violet-rgb),0.25); }
 .accordion-content { padding-top: 0.875rem; animation: fadeIn 0.18s ease; }
 
 /* ── Tooltip ────────────────────────────────────────────────── */
@@ -614,7 +620,7 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
   position: fixed; /* Use fixed so it is never clipped by any ancestor overflow */
   /* Position is set dynamically via JS — fallback values below */
   background: var(--surface-2);
-  border: 1px solid rgba(88,101,242,0.35);
+  border: 1px solid rgba(var(--violet-rgb),0.35);
   color: var(--text-1);
   font-size: var(--fs-xs);
   line-height: 1.55;
@@ -626,7 +632,7 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
   transition: opacity 0.15s ease, visibility 0.15s ease;
   z-index: 9999;
   pointer-events: none;
-  box-shadow: 0 8px 28px rgba(0,0,0,0.55), 0 0 0 1px rgba(88,101,242,0.15);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.55), 0 0 0 1px rgba(var(--violet-rgb),0.15);
 }
 /* For the simple CSS hover fallback (without JS), position relative to icon */
 .tooltip-wrap:hover .tooltip-text {
@@ -664,7 +670,7 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
   position: relative; overflow: hidden;
 }
 .sink-card:hover { border-color: var(--border-2); background: var(--surface-3); }
-.sink-card.active { border-color: rgba(88,101,242,0.28); background: var(--violet-subtle); }
+.sink-card.active { border-color: rgba(var(--violet-rgb),0.28); background: var(--violet-subtle); }
 .sink-card .sink-dot {
   width: 7px; height: 7px; border-radius: 50%;
   margin-bottom: 0.5rem; flex-shrink: 0;
@@ -672,7 +678,7 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
 
 /* ── Charts ─────────────────────────────────────────────────── */
 .chart-container { width: 100%; height: 280px; margin-top: 0.75rem; }
-.chart-title { font-size: var(--fs-base); font-weight: 700; letter-spacing: -0.01em; color: var(--text-1); margin-bottom: 0.5rem; }
+.chart-title { font-size: var(--fs-md); font-weight: 800; letter-spacing: -0.02em; color: var(--text-1); margin-bottom: 0.5rem; }
 .chart-header {
   display: flex; align-items: center;
   justify-content: space-between; margin-bottom: 0.5rem;
@@ -733,7 +739,7 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 .metric-card:hover {
-  border-color: rgba(88,101,242,0.2);
+  border-color: rgba(var(--violet-rgb),0.2);
   box-shadow: 0 2px 12px rgba(0,0,0,0.2);
 }
 .metric-card h3 {
@@ -746,8 +752,8 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
 }
 .metric-card .value {
   font-size: var(--fs-2xl);
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-weight: 800;
+  letter-spacing: -0.03em;
   color: var(--text-1);
   line-height: 1.15;
 }
@@ -786,7 +792,7 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
 .breach-rate-badge.breach-critical { background: rgba(248,81,73,0.14);  color: #ff9492; border: 1px solid rgba(248,81,73,0.22); }
 .breach-rate-badge.breach-high     { background: rgba(248,81,73,0.09);  color: #ff7b72; border: 1px solid rgba(248,81,73,0.18); }
 .breach-rate-badge.breach-medium   { background: rgba(227,160,8,0.09);  color: var(--amber); border: 1px solid rgba(227,160,8,0.18); }
-.breach-rate-badge.breach-low      { background: var(--teal-subtle);    color: var(--teal);  border: 1px solid rgba(45,212,191,0.2); }
+.breach-rate-badge.breach-low      { background: var(--teal-subtle);    color: var(--teal);  border: 1px solid rgba(var(--teal-rgb),0.2); }
 .breach-rate-badge.breach-none     { background: var(--surface-3); color: var(--text-3); border: 1px solid var(--border); }
 
 /* date picker row */
@@ -827,8 +833,8 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
 }
 
 .header h1 {
-  font-size: var(--fs-lg);
-  font-weight: 700;
+  font-size: var(--fs-xl);
+  font-weight: 800;
   letter-spacing: -0.03em;
   color: var(--text-1);
   margin: 0;
@@ -840,7 +846,7 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
   border-radius: var(--radius-sm);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 0 0 1px rgba(88,101,242,0.3), 0 2px 8px rgba(0,0,0,0.3);
+  box-shadow: 0 0 0 1px rgba(var(--violet-rgb),0.3), 0 2px 8px rgba(0,0,0,0.3);
 }
 
 .header-right {
@@ -891,7 +897,7 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
   background: var(--violet);
   color: #fff;
   font-weight: 600;
-  box-shadow: 0 1px 6px rgba(88,101,242,0.4), 0 0 0 1px rgba(88,101,242,0.4);
+  box-shadow: 0 1px 6px rgba(var(--violet-rgb),0.4), 0 0 0 1px rgba(var(--violet-rgb),0.4);
 }
 
 /* ── Main layout grid ────────────────────────────────────────── */
@@ -957,9 +963,9 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
 }
 
 /* ── Legacy badge aliases ──────────────────────────────────── */
-.badge-indigo  { background: var(--violet-subtle);  color: var(--violet-light); border: 1px solid rgba(88,101,242,0.2); }
-.badge-cyan    { background: var(--teal-subtle);    color: var(--teal);         border: 1px solid rgba(45,212,191,0.2); }
-.badge-info    { background: var(--teal-subtle);    color: var(--teal);         border: 1px solid rgba(45,212,191,0.2); }
+.badge-indigo  { background: var(--violet-subtle);  color: var(--violet-light); border: 1px solid rgba(var(--violet-rgb),0.2); }
+.badge-cyan    { background: var(--teal-subtle);    color: var(--teal);         border: 1px solid rgba(var(--teal-rgb),0.2); }
+.badge-info    { background: var(--teal-subtle);    color: var(--teal);         border: 1px solid rgba(var(--teal-rgb),0.2); }
 .badge-success { background: var(--success-subtle); color: var(--success);      border: 1px solid rgba(63,185,80,0.2); }
 
 /* ================================================================
@@ -995,11 +1001,11 @@ input[type="number"] { -moz-appearance: textfield; }
 .glass-panel::-webkit-scrollbar { width: 4px; }
 .glass-panel::-webkit-scrollbar-track { background: transparent; }
 .glass-panel::-webkit-scrollbar-thumb {
-  background: rgba(88,101,242,0.25);
+  background: rgba(var(--violet-rgb),0.25);
   border-radius: 4px;
 }
 .glass-panel::-webkit-scrollbar-thumb:hover {
-  background: rgba(88,101,242,0.4);
+  background: rgba(var(--violet-rgb),0.4);
 }
 
 /* ── Section panel header — rounded top corners ──────────────── */
@@ -1034,7 +1040,7 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 button:focus-visible {
-  outline: 2px solid rgba(88,101,242,0.7);
+  outline: 2px solid rgba(var(--violet-rgb),0.7);
   outline-offset: 2px;
 }
 
@@ -1064,3 +1070,173 @@ tr { transition: background 0.1s ease; }
   0%, 100% { box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.25), 0 0 16px rgba(239, 68, 68, 0.12); }
   50%       { box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.45), 0 0 24px rgba(239, 68, 68, 0.22); }
 }
+
+/* ================================================================
+   CASTLE-INSPIRED COMPONENT PATTERNS
+   Score triad, JSON payload viewer, linked-entity list, chart switcher
+================================================================ */
+
+/* ── Score Triad — compact 3-number colored badge (Castle's inline
+   abuse/ATO/bot score cluster), used for showing related numbers
+   together per table row instead of scattering them across cells. ── */
+.score-triad {
+  display: inline-flex;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border-2);
+  background: var(--surface-3);
+}
+.score-triad-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.22rem 0.6rem;
+  min-width: 48px;
+  border-right: 1px solid var(--border);
+}
+.score-triad-cell:last-child { border-right: none; }
+.score-triad-value {
+  font-size: var(--fs-sm);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--text-1);
+}
+.score-triad-label {
+  font-size: var(--fs-3xs);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-top: 1px;
+  white-space: nowrap;
+}
+.score-triad-cell.tone-danger  { background: var(--danger-subtle); }
+.score-triad-cell.tone-warning { background: var(--warning-subtle); }
+.score-triad-cell.tone-success { background: var(--success-subtle); }
+.score-triad-cell.tone-violet  { background: var(--violet-subtle); }
+.score-triad-cell.tone-teal    { background: var(--teal-subtle); }
+.score-triad-cell.tone-danger  .score-triad-value { color: var(--danger); }
+.score-triad-cell.tone-warning .score-triad-value { color: var(--warning); }
+.score-triad-cell.tone-success .score-triad-value { color: var(--success); }
+.score-triad-cell.tone-violet  .score-triad-value { color: var(--violet-light); }
+.score-triad-cell.tone-teal    .score-triad-value { color: var(--teal); }
+
+/* ── JSON Payload Viewer — line-numbered raw data view, for "show me
+   the underlying event" drill-downs. ── */
+.json-viewer {
+  display: flex;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: var(--fs-xs);
+  line-height: 1.65;
+  background: var(--gray-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: auto;
+  max-height: 380px;
+}
+.json-viewer-lines {
+  flex-shrink: 0;
+  padding: 0.75rem 0.65rem;
+  text-align: right;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border-right: 1px solid var(--border);
+  user-select: none;
+}
+.json-viewer-code {
+  flex: 1;
+  padding: 0.75rem 0.9rem;
+  white-space: pre;
+  overflow-x: auto;
+  color: var(--text-2);
+}
+.json-key      { color: var(--violet-light); }
+.json-string   { color: var(--teal); }
+.json-number   { color: var(--amber); }
+.json-boolean, .json-null { color: var(--text-3); font-style: italic; }
+.json-punct    { color: var(--text-3); }
+
+/* ── Linked Entity List — collapsible groups with per-row hide/show,
+   for the "related identifiers" side panels. ── */
+.linked-entity-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.6rem;
+  overflow: hidden;
+}
+.linked-entity-group-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  background: var(--surface-3);
+  border: none;
+  cursor: pointer;
+  user-select: none;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-2);
+  font-family: 'Inter', sans-serif;
+  transition: background 0.14s ease;
+}
+.linked-entity-group-header:hover { background: var(--surface-4); }
+.linked-entity-group-count {
+  margin-left: auto;
+  font-size: var(--fs-2xs);
+  color: var(--text-3);
+  font-weight: 600;
+}
+.linked-entity-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid var(--border);
+  transition: opacity 0.14s ease, background 0.14s ease;
+}
+.linked-entity-row:hover { background: rgba(255,255,255,0.02); }
+.linked-entity-row.row-hidden { opacity: 0.32; }
+.linked-entity-row-toggle {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 3px;
+  cursor: pointer;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+  transition: color 0.14s ease, background 0.14s ease;
+}
+.linked-entity-row-toggle:hover { color: var(--text-1); background: rgba(255,255,255,0.06); }
+
+/* ── Chart Switcher — tabs to flip a chart between equivalent views
+   of the same underlying time series. ── */
+.chart-switcher-tabs {
+  display: inline-flex;
+  gap: 0.15rem;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.2rem;
+}
+.chart-switcher-tab {
+  padding: 0.3rem 0.75rem;
+  border-radius: calc(var(--radius-sm) - 3px);
+  background: transparent;
+  border: none;
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+  font-family: 'Inter', sans-serif;
+  white-space: nowrap;
+}
+.chart-switcher-tab:hover { color: var(--text-1); }
+.chart-switcher-tab.active { background: var(--violet); color: #fff; }

@@ -17,6 +17,7 @@ import {
 } from '../utils/istUtils';
 import { generateHistoricalData } from '../simulation/mockEngine';
 import { Modal, Drawer, RuleLink } from './ui/Overlay';
+import ScoreTriad from './ui/ScoreTriad';
 
 // ─── Data helpers (schema-agnostic) ─────────────────────────────────────────
 
@@ -144,7 +145,7 @@ function EventVolumeTooltip({ active, payload, label }) {
     <div style={{
       ...TOOLTIP_STYLE.contentStyle,
       minWidth: 180,
-      borderColor: breached ? 'rgba(248,81,73,0.5)' : 'rgba(88,101,242,0.3)',
+      borderColor: breached ? 'rgba(248,81,73,0.5)' : 'rgba(var(--violet-rgb),0.3)',
     }}>
       <div style={{ ...TOOLTIP_STYLE.labelStyle, display: 'flex', alignItems: 'center', gap: 6 }}>
         {breached && <Zap size={12} color={BREACH_RED} fill={BREACH_RED} />}
@@ -921,7 +922,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
               <TrendingUp size={18} color="var(--violet-light)" />
               <span style={{ color: 'var(--text-1)', fontSize: '0.9rem', fontWeight: 700, letterSpacing: '-0.01em' }}>Intelligent Insights</span>
-              <span style={{ marginLeft: 'auto', padding: '0.1rem 0.55rem', borderRadius: 'var(--radius-xs)', fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.05em', background: 'rgba(88,101,242,0.15)', color: 'var(--violet-light)', border: '1px solid rgba(88,101,242,0.3)' }}>Auto-generated</span>
+              <span style={{ marginLeft: 'auto', padding: '0.1rem 0.55rem', borderRadius: 'var(--radius-xs)', fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.05em', background: 'rgba(var(--violet-rgb),0.15)', color: 'var(--violet-light)', border: '1px solid rgba(var(--violet-rgb),0.3)' }}>Auto-generated</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
               {/* 1. Peak Breach Period */}
@@ -1229,7 +1230,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
                       </linearGradient>
                       <linearGradient id="gradBarNormalAgg" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor={ACCENT_BLUE} stopOpacity={0.9} />
-                        <stop offset="100%" stopColor="#1e1b4b" stopOpacity={0.7} />
+                        <stop offset="100%" stopColor="#1c2f66" stopOpacity={0.7} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid {...GRID_PROPS} />
@@ -1442,7 +1443,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
                   <Brush
                     dataKey="windowStart"
                     height={22}
-                    stroke="rgba(88,101,242,0.4)"
+                    stroke="rgba(var(--violet-rgb),0.4)"
                     fill="rgba(8,12,28,0.9)"
                     tickFormatter={formatTime}
                     travellerWidth={6}
@@ -1484,7 +1485,6 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
                 <tbody>
                   {groupTableData.map((g, i) => {
                     const color = getRuleColor(rules, g.ruleId);
-                    const rateColor = getBreachColor(g.breachRate);
                     return (
                       <tr
                         key={g.groupKey + g.ruleId}
@@ -1494,21 +1494,12 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
                         <td style={tdStyle}>{i + 1}</td>
                         <td style={{ ...tdStyle, fontFamily: 'monospace', color: 'var(--teal)', fontWeight: 600 }}>{g.groupKey}</td>
                         <td style={tdStyle}><RuleLink ruleName={getRuleName(g.ruleId)} ruleId={g.ruleId} onRuleClick={handleRuleClick} /></td>
-                        <td style={{ ...tdStyle, fontWeight: 600 }}>{g.totalEvents.toLocaleString()}</td>
-                        <td style={{ ...tdStyle, color: g.breaches > 0 ? 'var(--danger)' : 'var(--text-3)', fontWeight: g.breaches > 0 ? 700 : 400 }}>{g.breaches}</td>
-                        <td style={tdStyle}>
-                          <span style={{
-                            display: 'inline-block',
-                            padding: '0.1rem 0.5rem',
-                            borderRadius: 'var(--radius-xs)',
-                            fontSize: '0.72rem',
-                            fontWeight: 700,
-                            background: `${rateColor}20`,
-                            color: rateColor,
-                            border: `1px solid ${rateColor}40`,
-                          }}>
-                            {g.breachRate.toFixed(1)}%
-                          </span>
+                        <td style={{ ...tdStyle, padding: '0.4rem 0.8rem' }} colSpan={3}>
+                          <ScoreTriad items={[
+                            { label: 'Events', value: g.totalEvents.toLocaleString(), tone: 'muted' },
+                            { label: 'Breaches', value: g.breaches, tone: g.breaches > 0 ? 'danger' : 'muted' },
+                            { label: 'Rate', value: `${g.breachRate.toFixed(1)}%`, tone: g.breachRate > 50 ? 'danger' : g.breachRate > 20 ? 'warning' : 'success' },
+                          ]} />
                         </td>
                         <td style={{ ...tdStyle, fontSize: '0.75rem', color: 'var(--text-muted)' }}>{formatISTDateTime(g.lastSeen)}</td>
                       </tr>
