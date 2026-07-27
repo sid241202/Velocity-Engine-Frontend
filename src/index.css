@@ -293,7 +293,7 @@ select {
   cursor: pointer;
   -webkit-appearance: none;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%23545d68' d='M5 7L1 3h8z'/%3E%3C/svg%3E");
+  background-image: url("/select-chevron.svg");
   background-repeat: no-repeat;
   background-position: right 0.65rem center;
   padding-right: 1.75rem;
