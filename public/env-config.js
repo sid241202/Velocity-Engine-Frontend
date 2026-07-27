@@ -1,7 +1,6 @@
-// Runtime environment configuration — see the frontend CLAUDE.md and
-// WSO2_RBAC_STAGING_INTEGRATION_GUIDE.md (E:\Projects) for why this file,
-// not a build-time env var, is the channel that actually reaches the
-// browser (Vite's default envPrefix is "VITE_", so REACT_APP_* build-time
+// Runtime environment configuration — see the frontend CLAUDE.md for why
+// this file, not a build-time env var, is the channel that actually reaches
+// the browser (Vite's default envPrefix is "VITE_", so REACT_APP_* build-time
 // vars never reach import.meta.env in this app — window._env_, populated
 // here, is checked first by getEnvVar() in src/config/appConfig.js).
 //
