@@ -8,7 +8,7 @@ COPY . .
 RUN cyclonedx-npm --spec-version 1.6 --ignore-npm-errors --output-file /app/SCA-bom.json
 RUN npm run build
 
-FROM mndc-harbor-registry-non-prod.uidai.net.in/base/ubuntu22.04_nginx:latest AS runtime
+FROM mndc-harbor-registry-non-prod.uidai.net.in/base/nginx:ubuntu22.04_stable_20260623 AS runtime
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/SCA-bom.json /tmp/SCA-bom.json
