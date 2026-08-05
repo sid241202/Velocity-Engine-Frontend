@@ -32,7 +32,6 @@ FROM mndc-harbor-registry-non-prod.uidai.net.in/base/nginx:ubuntu22.04_stable_20
 # own default.conf server block so we control everything nginx loads
 RUN rm -rf /etc/nginx/nginx.conf
 COPY nginx.conf /etc/nginx/nginx.conf
-COPY default.conf /etc/nginx/conf.d/default.conf
 
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY --from=build /app/SCA-bom.json /tmp/SCA-bom.json
