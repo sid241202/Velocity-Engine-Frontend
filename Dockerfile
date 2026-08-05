@@ -30,8 +30,9 @@ FROM mndc-harbor-registry-non-prod.uidai.net.in/base/nginx:ubuntu22.04_stable_20
 
 # Newly added: replace the base image's master nginx.conf and supply our
 # own default.conf server block so we control everything nginx loads
-RUN rm -rf /etc/nginx/nginx.conf
-COPY nginx.conf /etc/nginx/nginx.conf
+# RUN rm -rf /etc/nginx/nginx.conf
+# COPY nginx.conf /etc/nginx/nginx.conf
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY --from=build /app/SCA-bom.json /tmp/SCA-bom.json
