@@ -39,8 +39,8 @@ COPY --from=build /app/SCA-bom.json /tmp/SCA-bom.json
 # VITE_* env vars defined in deployment.yaml. The CMD below invokes this
 # script directly, so it must be executable (chmod +x below). Keep this
 # script's var list in sync with env.ts's RuntimeConfig and authConfig.js.
-COPY docker-entrypoint.d/40-env-config.sh /docker-entrypoint.d/40-env-config.sh
-RUN chmod +x /docker-entrypoint.d/40-env-config.sh
+# COPY docker-entrypoint.d/40-env-config.sh /docker-entrypoint.d/40-env-config.sh
+# RUN chmod +x /docker-entrypoint.d/40-env-config.sh
 
 EXPOSE 80
 # CMD ["/usr/sbin/nginx", "-g", "daemon off;"]
