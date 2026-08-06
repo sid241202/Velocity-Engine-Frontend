@@ -1,10 +1,9 @@
 FROM harbor-registry-non-prod.uidai.gov.in/base/node:24-alpine AS build
 WORKDIR /app
 
-RUN node -e "console.log('NODE_ENV=', process.env.NODE_ENV)"
-COPY package.json package-lock.json ./
-
 RUN npm config set registry http://10.10.206.59:8080/repository/npm-proxy/
+
+COPY package.json package-lock.json ./
 RUN npm ci --include=dev
 
 RUN npm install -g @cyclonedx/cyclonedx-npm@1.15.0
@@ -21,6 +20,9 @@ RUN npm run build
 
 #FROM harbor-registry-non-prod.uidai.gov.in/base/nginx:stable-alpine3.21-slim AS runtime
 FROM mndc-harbor-registry-non-prod.uidai.net.in/base/nginx:ubuntu22.04_stable_20260623 As runtime
+
+RUN rm -rf /usr/share/nginx/html/* \
+    && rm -f /etc/nginx/conf.d/default.conf
 
 # Removed for auth related issue
 # COPY nginx.conf /etc/nginx/templates/default.conf.template
