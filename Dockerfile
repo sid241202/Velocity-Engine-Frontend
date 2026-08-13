@@ -19,7 +19,7 @@ RUN cyclonedx-npm --spec-version 1.6 --ignore-npm-errors --output-file /app/SCA-
 RUN npm run build
 
 #FROM harbor-registry-non-prod.uidai.gov.in/base/nginx:stable-alpine3.21-slim AS runtime
-FROM mndc-harbor-registry-non-prod.uidai.net.in/base/nginx:ubuntu22.04_stable_20260623 As runtime
+FROM mndc-harbor-registry-non-prod.uidai.net.in/base/ubuntu22.04_nginx:latest As runtime
 
 RUN rm -rf /usr/share/nginx/html/* \
     && rm -f /etc/nginx/conf.d/default.conf
