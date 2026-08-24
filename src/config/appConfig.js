@@ -67,11 +67,11 @@ export const authConfig = {
   // WSO2 Identity Server Authority (Base URL)
   authority: getEnvVar('REACT_APP_WSO2_AUTHORITY', 'https://sso.uidai.net.in/oauth2'),
 
-  client_id: getEnvVar('REACT_APP_CLIENT_ID', '9HGuTetQjRjxkx1vHmoP1v0fXm8a'),
+  client_id: getEnvVar('REACT_APP_CLIENT_ID', 'f97jdeoYe5CEyMrcZFaG4Ey428ga'),
 
-  redirect_uri: getEnvVar('REACT_APP_REDIRECT_URI', 'http://10.10.79.27:32515/callback'),
+  redirect_uri: getEnvVar('REACT_APP_REDIRECT_URI', 'https://velocity.uidai.net.in/callback'),
 
-  post_logout_redirect_uri: getEnvVar('REACT_APP_POST_LOGOUT_REDIRECT_URI', 'http://10.10.79.27:32515'),
+  post_logout_redirect_uri: getEnvVar('REACT_APP_POST_LOGOUT_REDIRECT_URI', 'https://velocity.uidai.net.in'),
   // Response type - using authorization code flow
   response_type: 'code',
 
@@ -79,7 +79,7 @@ export const authConfig = {
 
   automaticSilentRenew: false,
 
-  silent_redirect_uri: getEnvVar('REACT_APP_SILENT_REDIRECT_URI', 'http://10.10.79.27:32515/silent-renew'),
+  silent_redirect_uri: getEnvVar('REACT_APP_SILENT_REDIRECT_URI', 'https://velocity.uidai.net.in/silent-renew'),
 
   // Explicit metadata for WSO2 IS
   metadata: {

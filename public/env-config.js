@@ -10,8 +10,8 @@
 // (see src/pages/ProtectedRoute.jsx), so that key would do nothing.
 window._env_ = window._env_ || {
   REACT_APP_WSO2_AUTHORITY: "https://sso.uidai.net.in/oauth2",
-  REACT_APP_CLIENT_ID: "9HGuTetQjRjxkx1vHmoP1v0fXm8a",
-  REACT_APP_REDIRECT_URI: "http://10.10.79.27:32515/callback",
-  REACT_APP_POST_LOGOUT_REDIRECT_URI: "http://10.10.79.27:32515",
-  REACT_APP_SILENT_REDIRECT_URI: "http://10.10.79.27:32515/silent-renew",
+  REACT_APP_CLIENT_ID: "f97jdeoYe5CEyMrcZFaG4Ey428ga",
+  REACT_APP_REDIRECT_URI: "https://velocity.uidai.net.in/callback",
+  REACT_APP_POST_LOGOUT_REDIRECT_URI: "https://velocity.uidai.net.in",
+  REACT_APP_SILENT_REDIRECT_URI: "https://velocity.uidai.net.in/silent-renew",
 };
