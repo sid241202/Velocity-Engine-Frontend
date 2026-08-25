@@ -38,13 +38,15 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY --from=build /app/SCA-bom.json /tmp/SCA-bom.json
+
 # Generates /usr/share/nginx/html/env-config.js at container start from the
-# VITE_* env vars defined in deployment.yaml. The CMD below invokes this
-# script directly, so it must be executable (chmod +x below). Keep this
-# script's var list in sync with env.ts's RuntimeConfig and authConfig.js.
-# COPY docker-entrypoint.d/40-env-config.sh /docker-entrypoint.d/40-env-config.sh
-# RUN chmod +x /docker-entrypoint.d/40-env-config.sh
+# REACT_APP_* env vars set on the container (sourced from the Gitea-managed
+# ConfigMap/Secret in deployment.yaml). The CMD below invokes this script
+# directly instead of nginx, so it must be executable. Keep this script's
+# var list in sync with getEnvVar() calls in src/config/appConfig.js.
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD curl -f http://localhost/ || exit 1
-CMD ["/usr/sbin/nginx", "-g", "daemon off;"]
+CMD ["/docker-entrypoint.sh"]

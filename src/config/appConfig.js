@@ -47,27 +47,34 @@ const getEnvVar = (key, defaultValue) => {
 // config file" note at the top of this file. Only src/services/AuthService.js
 // imports this today.
 //
-// client_secret was removed here (demo-wso2): this is now a pure public-
-// client PKCE flow (code_challenge_method: 'S256' below, already correct;
-// AuthService.js's login()/handleCallback() already generate and send a real
-// PKCE code_verifier/code_challenge). Requires the WSO2 service provider for
-// this client_id to be registered as a public client (no secret) IdP-side.
+// This is a confidential-client flow (client_secret_post at the token
+// endpoint — see AuthService.js's handleCallback()), matching how this
+// client_id's WSO2 service provider is actually registered IdP-side (same
+// auth method operator-360's proven-working SP uses). An earlier revision of
+// this file ran a public-client PKCE-only flow, but the WSO2 SP for this
+// client_id was never switched to "Public Client" IdP-side, so every token
+// exchange failed with invalid_client / "Unsupported Client Authentication
+// Method!". Reverting to client_secret_post here is what actually matches
+// the current IdP-side registration.
 //
-// Defaults below point at this app's actual staging target, 10.10.79.27:32515
-// (a raw IP:port — no DNS name, unlike operator-360's staging/prod, which
-// both use https://<dns-name>/... — hence http, not https, here; no TLS
-// termination on a bare IP). Path structure (bare origin for
-// post_logout_redirect_uri, "/callback" for redirect_uri, "/silent-renew"
-// for silent_redirect_uri) matches operator-360's actual
-// .env.staging/.env.production convention, cross-checked directly rather
-// than assumed. "/callback" also matches this app's own registered route in
-// App.jsx. Override via REACT_APP_REDIRECT_URI etc. (or public/env-config.js
-// at runtime) for any other environment.
+// No value is hardcoded below for client_id/client_secret/redirect_uris —
+// every one of them comes only from window._env_ (see public/env-config.js
+// and docker-entrypoint.sh, which regenerates that file from real container
+// env vars at startup — sourced from the Gitea-managed ConfigMap/Secret,
+// never checked into this repo). getEnvVar()'s hardcoded fallback below is
+// deliberately empty/generic so a misconfigured deployment fails obviously
+// (empty client_id → WSO2 rejects immediately) instead of silently running
+// on stale defaults baked into the image.
 export const authConfig = {
   // WSO2 Identity Server Authority (Base URL)
   authority: getEnvVar('REACT_APP_WSO2_AUTHORITY', 'https://sso.uidai.net.in/oauth2'),
 
-  client_id: getEnvVar('REACT_APP_CLIENT_ID', 'f97jdeoYe5CEyMrcZFaG4Ey428ga'),
+  client_id: getEnvVar('REACT_APP_CLIENT_ID', ''),
+
+  // Confidential client secret (client_secret_post at the token endpoint).
+  // Must be supplied at container runtime via window._env_ — see
+  // docker-entrypoint.sh — never hardcoded here or in public/env-config.js.
+  client_secret: getEnvVar('REACT_APP_CLIENT_SECRET', ''),
 
   redirect_uri: getEnvVar('REACT_APP_REDIRECT_URI', 'https://velocity.uidai.net.in/callback'),
 
@@ -90,9 +97,6 @@ export const authConfig = {
     end_session_endpoint: 'https://sso.uidai.net.in/oidc/logout',
     jwks_uri: 'https://sso.uidai.net.in/oauth2/jwks',
   },
-
-  // PKCE support - S256 is required by WSO2 when PKCE is mandatory (RFC 7636)
-  code_challenge_method: 'S256',
 
   // Load user info after authentication
   loadUserInfo: true,

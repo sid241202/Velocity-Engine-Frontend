@@ -16,11 +16,12 @@ autonomy/permission scope — this file only covers what's specific to this repo
 - Plain hooks + Context API for state — no Redux/Zustand.
 - Native `fetch` for all HTTP; no axios.
 - `oidc-client-ts` for WSO2/OIDC — **live** on this branch. `src/services/AuthService.js`
-  runs a real PKCE authorization-code flow against WSO2 (manual `fetch`-based
-  token exchange, not `oidc-client-ts`'s own redirect handling — see that
-  file). `src/pages/ProtectedRoute.jsx` does a real `authService.isAuthenticated()`
-  check, not a passthrough. Don't repurpose `ProtectedRoute` for RBAC — it's
-  authentication, RBAC is authorization, kept as separate concerns.
+  runs a real confidential-client authorization-code flow against WSO2
+  (manual `fetch`-based token exchange, not `oidc-client-ts`'s own redirect
+  handling — see that file). `src/pages/ProtectedRoute.jsx` does a real
+  `authService.isAuthenticated()` check, not a passthrough. Don't repurpose
+  `ProtectedRoute` for RBAC — it's authentication, RBAC is authorization,
+  kept as separate concerns.
 
 ## Config
 
@@ -30,12 +31,25 @@ WebSocket reconnect tuning, rule builder defaults, and the WSO2/OIDC
 Don't add another `src/config/*.js` file — extend this one. No debug-identity
 constants remain in this file on this branch.
 
-The WSO2 `client_secret` this file used to ship (flagged as a real exposure —
-not actually secret once bundled into browser JS) has been removed; this is
-now a pure public-client PKCE flow (`code_challenge_method: 'S256'`,
-`AuthService.js` generates a real `code_verifier`/`code_challenge`). Requires
-the WSO2 service provider for this `client_id` to be registered as a public
-client (no secret) IdP-side.
+WSO2/OIDC is a **confidential client**: `AuthService.js`'s `handleCallback()`
+sends `client_secret` (`client_secret_post`) to the token endpoint — no PKCE.
+A prior revision ran PKCE-only public-client auth instead, but the WSO2
+service provider for this `client_id` was never switched to "Public Client"
+IdP-side, so every token exchange failed with `invalid_client` /
+`"Unsupported Client Authentication Method!"`. Reverting to
+`client_secret_post` is what actually matches the SP's real registration
+(same auth method `operator-360-ui`'s proven-working SP uses).
+
+**No config value is ever hardcoded in this repo.** `getEnvVar()` in
+`appConfig.js` reads `window._env_` first, which `docker-entrypoint.sh`
+(wired into the Dockerfile's `CMD`) regenerates from real container env vars
+at every container start — sourced from the Gitea-managed
+ConfigMap/Secret, see `resources/configmap-release.txt`. The checked-in
+`public/env-config.js` is a local-dev-only fallback (empty `client_id`/
+`client_secret`, localhost URLs) — if you see a real client_id/secret show
+up in it, that's a mistake, not a deployment shortcut. `REACT_APP_CLIENT_SECRET`
+in particular must come from a Kubernetes **Secret** (`secretKeyRef`), never
+a plain ConfigMap value.
 
 ## RBAC (frontend half)
 

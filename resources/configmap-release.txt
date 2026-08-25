@@ -1,28 +1,44 @@
 # uid-dp-velocity-engine-control-plane-frontend @ release
 # Sourced from src/config/appConfig.js on this branch.
 # Kubernetes ConfigMap-data style: KEY=value, one per line.
-# Values shown are this branch's coded defaults (used when the key is
-# unset). <SET_IN_ENV> marks a key with no safe default here (never a real
-# value copied from any local .env/config).
+# <SET_IN_ENV> marks a key with no safe default here (never a real value
+# copied from any local .env/config).
 #
-# Only keys actually resolved from the environment are listed below — via
-# getEnvVar() in appConfig.js, which checks window._env_[key] (runtime
-# override, see public/env-config.js in Docker deployments) then
-# import.meta.env[key] (Vite build-time env var) before falling back to the
-# default shown. Everything else appConfig.js exports (API_BASE, WS_BASE,
-# WS_RECONNECT_*, LIVE_STORE_MAX_ROWS, LIVE_POLL_INTERVAL,
-# HISTORICAL_MAX_DAYS, DEFAULT_SOURCE_TOPIC, DEFAULT_PENALTY_TTL_SEC,
-# DEFAULT_WINDOW_SIZE_SEC, DEFAULT_SLIDE_SEC, MAX_AGGREGATIONS, ME_ENDPOINT)
-# is a hardcoded build-time constant with no environment override — there is
-# no env var name for these, so they have no entry in a ConfigMap.
+# These are consumed at CONTAINER START, not build time: docker-entrypoint.sh
+# (invoked by the Dockerfile's CMD) regenerates
+# /usr/share/nginx/html/env-config.js from the container's real environment
+# on every start, which is what getEnvVar() in appConfig.js reads via
+# window._env_. Nothing below is baked into the built image — the
+# checked-in public/env-config.js is a local-dev-only fallback (empty
+# client_id/client_secret, localhost URLs), never the deployed values. This
+# is the file that must be wired from the Gitea-managed ConfigMap/Secret for
+# this environment; if that wiring is missing, the container silently falls
+# back to the empty/localhost defaults above and WSO2 rejects every login.
 #
-# WSO2 client_id is intentionally shown as a real value, not <SET_IN_ENV>:
-# this branch runs a public-client PKCE flow with no client_secret (removed
-# from this codebase entirely — see appConfig.js's comment), so client_id is
-# not a credential and is already visible in the shipped browser bundle.
+# Only keys actually resolved from the environment are listed below.
+# Everything else appConfig.js exports (API_BASE, WS_BASE, WS_RECONNECT_*,
+# LIVE_STORE_MAX_ROWS, LIVE_POLL_INTERVAL, HISTORICAL_MAX_DAYS,
+# DEFAULT_SOURCE_TOPIC, DEFAULT_PENALTY_TTL_SEC, DEFAULT_WINDOW_SIZE_SEC,
+# DEFAULT_SLIDE_SEC, MAX_AGGREGATIONS, ME_ENDPOINT) is a hardcoded
+# build-time constant with no environment override — there is no env var
+# name for these, so they have no entry in a ConfigMap.
+#
+# This branch runs a CONFIDENTIAL client (client_secret_post at the WSO2
+# token endpoint — see appConfig.js's and AuthService.js's comments for why
+# the earlier public-client-PKCE attempt was reverted: the WSO2 service
+# provider for this client_id was never switched to "Public Client"
+# IdP-side, so every PKCE-only token exchange failed with invalid_client /
+# "Unsupported Client Authentication Method!"). REACT_APP_CLIENT_SECRET is a
+# real credential — it MUST come from a Kubernetes Secret (secretKeyRef),
+# never a plain ConfigMap value, and never a hardcoded default anywhere in
+# this repo.
 
+# ── ConfigMap data (non-sensitive) ──────────────────────────────────────────
 REACT_APP_WSO2_AUTHORITY=https://sso.uidai.net.in/oauth2  # WSO2 Identity Server authority (base URL)
-REACT_APP_CLIENT_ID=9HGuTetQjRjxkx1vHmoP1v0fXm8a  # WSO2 OAuth public client id (PKCE flow, no client_secret exists)
-REACT_APP_REDIRECT_URI=http://10.10.79.27:32515/callback  # OAuth redirect_uri after WSO2 login
-REACT_APP_POST_LOGOUT_REDIRECT_URI=http://10.10.79.27:32515  # redirect target after WSO2 logout
-REACT_APP_SILENT_REDIRECT_URI=http://10.10.79.27:32515/silent-renew  # redirect_uri used for silent token renewal
+REACT_APP_CLIENT_ID=<SET_IN_ENV>  # WSO2 OAuth client id (confidential client)
+REACT_APP_REDIRECT_URI=<SET_IN_ENV>  # OAuth redirect_uri after WSO2 login, e.g. https://velocity.uidai.net.in/callback
+REACT_APP_POST_LOGOUT_REDIRECT_URI=<SET_IN_ENV>  # redirect target after WSO2 logout
+REACT_APP_SILENT_REDIRECT_URI=<SET_IN_ENV>  # redirect_uri used for silent token renewal
+
+# ── Secret data (sensitive — Kubernetes Secret, not ConfigMap) ─────────────
+REACT_APP_CLIENT_SECRET=<SET_IN_GITEA_SECRET>  # WSO2 OAuth client secret — see k8s Secret example below

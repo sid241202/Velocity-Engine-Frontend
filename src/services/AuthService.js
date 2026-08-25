@@ -80,38 +80,6 @@ class AuthService {
   }
 
   /**
-   * Generates a PKCE code verifier (RFC 7636)
-   * @returns {string} A cryptographically random base64url-encoded string
-   */
-  generateCodeVerifier() {
-    const array = new Uint8Array(32);
-    window.crypto.getRandomValues(array);
-    return this.base64UrlEncode(array);
-  }
-
-  /**
-   * Base64URL encodes a buffer
-   * @param {Uint8Array} buffer - The buffer to encode
-   * @returns {string} Base64URL encoded string
-   */
-  base64UrlEncode(buffer) {
-    const base64 = btoa(String.fromCharCode(...buffer));
-    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-  }
-
-  /**
-   * Generates a PKCE code challenge from a verifier using SHA-256
-   * @param {string} verifier - The code verifier
-   * @returns {Promise<string>} The base64url-encoded SHA-256 hash
-   */
-  async generateCodeChallenge(verifier) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(verifier);
-    const hash = await window.crypto.subtle.digest('SHA-256', data);
-    return this.base64UrlEncode(new Uint8Array(hash));
-  }
-
-  /**
    * Initiates the login process by redirecting to WSO2 Identity Server
    */
   async login() {
@@ -136,34 +104,24 @@ class AuthService {
       const array = new Uint8Array(32);
       window.crypto.getRandomValues(array);
       const state = Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
-      
-      // Generate PKCE code verifier and challenge (RFC 7636)
-      const codeVerifier = this.generateCodeVerifier();
-      const codeChallenge = await this.generateCodeChallenge(codeVerifier);
-      
-      console.log('Generated PKCE code_verifier (length):', codeVerifier.length);
-      console.log('Generated PKCE code_challenge:', codeChallenge);
-      
-      // Store state, code verifier, and return URL (use both session and local storage for redundancy)
+
+      // Store state and return URL (use both session and local storage for redundancy)
       sessionStorage.setItem('oauth_state', state);
-      sessionStorage.setItem('oauth_code_verifier', codeVerifier);
       sessionStorage.setItem('oauth_return_url', returnUrl);
       localStorage.setItem('oauth_state', state);
-      localStorage.setItem('oauth_code_verifier', codeVerifier);
       localStorage.setItem('oauth_return_url', returnUrl);
-      
+
       console.log('Generated state:', state);
-      
-      // Construct authorization URL manually with PKCE parameters
+
+      // Construct authorization URL manually (confidential client — no PKCE
+      // params; client authentication happens at the token endpoint instead)
       const authUrl = new URL(authConfig.metadata.authorization_endpoint);
       authUrl.searchParams.set('client_id', authConfig.client_id);
       authUrl.searchParams.set('redirect_uri', authConfig.redirect_uri);
       authUrl.searchParams.set('response_type', authConfig.response_type);
       authUrl.searchParams.set('scope', authConfig.scope);
       authUrl.searchParams.set('state', state);
-      authUrl.searchParams.set('code_challenge', codeChallenge);
-      authUrl.searchParams.set('code_challenge_method', 'S256');
-      
+
       console.log('Authorization URL:', authUrl.toString());
       console.log('Redirecting to WSO2...');
       
@@ -233,33 +191,26 @@ class AuthService {
       }
       
       console.log('State validation successful');
-      
-      // Retrieve PKCE code verifier
-      const codeVerifier = sessionStorage.getItem('oauth_code_verifier') || localStorage.getItem('oauth_code_verifier');
-      if (!codeVerifier) {
-        throw new Error('Code verifier not found - PKCE flow cannot complete');
-      }
-      console.log('Retrieved code_verifier (length):', codeVerifier.length);
-      
-      // Exchange authorization code for tokens
+
+      // Exchange authorization code for tokens (confidential client —
+      // client_secret_post; never logged below, unlike the other fields)
       console.log('Exchanging code for tokens...');
-      
+
       const tokenRequestBody = {
         grant_type: 'authorization_code',
         code: code,
         redirect_uri: authConfig.redirect_uri,
         client_id: authConfig.client_id,
-        code_verifier: codeVerifier
+        client_secret: authConfig.client_secret
       };
-      
+
       console.log('Token request body (without secrets):', {
         grant_type: tokenRequestBody.grant_type,
         code: tokenRequestBody.code.substring(0, 20) + '...',
         redirect_uri: tokenRequestBody.redirect_uri,
-        client_id: tokenRequestBody.client_id,
-        code_verifier: tokenRequestBody.code_verifier.substring(0, 20) + '...'
+        client_id: tokenRequestBody.client_id
       });
-      
+
       const tokenResponse = await fetch(authConfig.metadata.token_endpoint, {
         method: 'POST',
         headers: {
@@ -342,10 +293,8 @@ class AuthService {
       
       // Clean up OAuth state from both storages
       sessionStorage.removeItem('oauth_state');
-      sessionStorage.removeItem('oauth_code_verifier');
       localStorage.removeItem('oauth_state');
-      localStorage.removeItem('oauth_code_verifier');
-      
+
       // Get and validate return URL against whitelist
       const unsafeReturnUrl = sessionStorage.getItem('oauth_return_url') || localStorage.getItem('oauth_return_url');
       const returnUrl = this.validateReturnUrl(unsafeReturnUrl);
@@ -370,10 +319,8 @@ class AuthService {
       console.error('Error handling authentication callback:', error);
       // Clean up on error from both storages
       sessionStorage.removeItem('oauth_state');
-      sessionStorage.removeItem('oauth_code_verifier');
       sessionStorage.removeItem('oauth_return_url');
       localStorage.removeItem('oauth_state');
-      localStorage.removeItem('oauth_code_verifier');
       localStorage.removeItem('oauth_return_url');
       throw error;
     }
