@@ -65,6 +65,7 @@ function getDateValueError(value, format) {
 }
 
 // ─── processFilterTree (exported — called by RuleBuilder before submit) ───────
+// eslint-disable-next-line react-refresh/only-export-components -- intentional: helper co-located with the component that owns its data shape
 export function processFilterTree(node) {
   if (!node) return node;
   const clone = JSON.parse(JSON.stringify(node));

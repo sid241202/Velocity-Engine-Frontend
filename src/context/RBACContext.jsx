@@ -83,6 +83,7 @@ export function RBACProvider({ children }) {
 }
 
 /** useRBAC — read the current user's roles/permissions and check helpers. */
+// eslint-disable-next-line react-refresh/only-export-components -- intentional: hook co-located with its provider
 export function useRBAC() {
   const ctx = useContext(RBACContext);
   if (!ctx) {
