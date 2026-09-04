@@ -1,7 +1,7 @@
 {
   "name": "velocity-engine-ui",
   "private": true,
-  "version": "1.0.8-RELEASE",
+  "version": "1.0.9-RELEASE",
   "type": "module",
   "scripts": {
     "dev": "vite",
