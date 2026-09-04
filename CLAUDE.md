@@ -61,14 +61,32 @@ a plain ConfigMap value.
   `GET /me` once at mount, fails **closed** (empty permission set) on any
   error — never fail open.
 - `src/services/apiClient.js` — `getAuthHeaders()` is the single place that
-  attaches `Authorization: Bearer <access_token>` (the WSO2 access token,
-  deliberately not the ID token) to an outgoing request. Every fetch that
-  hits a backend route gated with `RequirePermission` on the backend side
-  must call this and spread the result into its `headers` — a call that
-  forgets this will 401 once the corresponding backend route is gated (this
-  has happened before: `RuleBuilder.jsx`'s save call and
-  `RuleSummaryPanel.jsx`'s status-change call both shipped without it and
-  were fixed in 2026-07-20's RBAC audit pass).
+  attaches identity to an outgoing request: `Authorization: Bearer
+  <access_token>` (kept for forward-compat, not currently checked
+  backend-side) and `X-User-Subject: <sub>` (the WSO2 `sub` claim decoded
+  client-side from the id_token — **this is what the backend actually
+  trusts**, see below). Every fetch that hits a backend route gated with
+  `RequirePermission` on the backend side must call this and spread the
+  result into its `headers` — a call that forgets this will 401 once the
+  corresponding backend route is gated (this has happened before:
+  `RuleBuilder.jsx`'s save call and `RuleSummaryPanel.jsx`'s status-change
+  call both shipped without it and were fixed in 2026-07-20's RBAC audit
+  pass).
+
+  **2026-09-04, known/deliberate/temporary security gap**: the backend
+  (`internal/middleware/auth.go`'s `IdentityMiddleware`) no longer verifies
+  the WSO2 token's signature — it trusts `X-User-Subject` as-is. This
+  replaced real JWKS-based verification because the backend pod couldn't
+  reach `https://sso.uidai.net.in/oauth2/jwks` from its pod network in the
+  UIDAI prod cluster (TLS handshake timeout, then EOF). Mirrors
+  fraud-investigation-system-ui's (Prahari) `X-User-Adid` model — see that
+  repo's `docs/AUTHENTICATION.md` and `agentic-fms/auth/README.md`, which
+  document the same underlying WSO2-JWKS-unreachable problem. RBAC
+  (`RequirePermission` on the backend) is the only real access-control
+  boundary past this point; there is no server-side proof `X-User-Subject`
+  wasn't forged. Revisit once JWKS reachability from the backend's pod
+  network is fixed — the previous implementation is recoverable from git
+  history on both repos.
 - `src/components/RequirePermission.jsx` — component-level gate (hide or,
   via render-prop, disable-in-place). This is UX only; the backend
   independently re-verifies every permission-gated action.
