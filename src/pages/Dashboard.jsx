@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './Dashboard.css';
-import { Zap, History, PlusSquare, Activity, BarChart3, Shield, AlertTriangle, RefreshCw, Send, ArrowRight, X } from 'lucide-react';
+import { Zap, History, PlusSquare, Activity, BarChart3, Shield, AlertTriangle, RefreshCw, Send, ArrowRight, X, Settings } from 'lucide-react';
 import RuleBuilderPage from '../components/RuleBuilderPage';
 import SavedRulesSidebar from '../components/SavedRulesSidebar';
 import RuleSummaryPanel from '../components/RuleSummaryPanel';
 import LiveAnalysis from '../components/LiveAnalysis';
 import AggregatedAnalysis from '../components/AggregatedAnalysis';
 import HistoricalAnalysis from '../components/HistoricalAnalysis';
+import AdminPanel from '../components/AdminPanel/AdminPanel';
 import ErrorBoundary from '../components/ErrorBoundary';
 import PermissionGuard from '../components/PermissionGuard';
+import AccessDenied from '../components/AccessDenied';
 import { API_BASE } from '../config/appConfig';
 import { toISTDatetimeLocal, parseISTStringToEpochMs } from '../utils/istUtils';
 import { useRBAC } from '../context/RBACContext';
@@ -16,12 +18,18 @@ import { PERMISSIONS } from '../permissions';
 
 // build's tab also doubles as the rule-edit surface (navigateToEdit routes
 // here), so it accepts create OR update rather than requiring create alone.
+//
+// 'admin' has no `anyOf` — access isn't a flat PERMISSIONS.* key (a team
+// lead's scope is data — which team — not a boolean), so it's gated by
+// `custom: 'canAccessAdminPanel'` instead and checked separately everywhere
+// `anyOf` would normally be read below.
 const NAV_ITEMS = [
   { key: 'live',       label: 'Live Stream',       icon: Activity,   tip: 'Real-time event stream & breach detection', anyOf: [PERMISSIONS.LIVE_ANALYSIS_READ] },
   { key: 'agg',        label: 'Analytics',         icon: BarChart3,  tip: 'Aggregated rule analysis over a custom date range', anyOf: [PERMISSIONS.AGGREGATED_ANALYSIS_READ] },
   { key: 'historical', label: 'Historical Replay', icon: History,    tip: 'Replay and test rules on historical data', anyOf: [PERMISSIONS.HISTORICAL_ANALYSIS_READ] },
   { key: 'build',      label: 'Create Rule',       icon: PlusSquare, tip: 'Build a new anomaly detection rule', anyOf: [PERMISSIONS.RULES_CREATE, PERMISSIONS.RULES_UPDATE] },
   { key: 'summary',    label: 'Rule Summary',      icon: Shield,     tip: 'View and manage a specific rule', anyOf: [PERMISSIONS.RULES_READ] },
+  { key: 'admin',      label: 'Admin Panel',       icon: Settings,   tip: 'Manage users, teams, and roles', custom: 'canAccessAdminPanel' },
 ];
 
 /**
@@ -40,7 +48,13 @@ const NAV_ITEMS = [
  * because the JS runtime is destroyed — no extra logic needed.
  */
 export default function Dashboard() {
-  const { hasAnyPermission, loading: rbacLoading } = useRBAC();
+  const { hasAnyPermission, canAccessAdminPanel, loading: rbacLoading } = useRBAC();
+  // isNavAllowed: NAV_ITEMS' one non-permission-based entry ('admin') can't
+  // go through hasAnyPermission — see the NAV_ITEMS comment above.
+  const isNavAllowed = useCallback(
+    (item) => (item.custom === 'canAccessAdminPanel' ? canAccessAdminPanel : hasAnyPermission(item.anyOf)),
+    [canAccessAdminPanel, hasAnyPermission]
+  );
   const [activeTab, setActiveTab]         = useState('live');
   const [rules, setRules]                 = useState([]);
   // Single-select: choosing a rule replaces whatever was previously selected
@@ -96,8 +110,8 @@ export default function Dashboard() {
   useEffect(() => {
     if (rbacLoading) return;
     const current = NAV_ITEMS.find(n => n.key === activeTab);
-    if (current && !hasAnyPermission(current.anyOf)) {
-      const firstAllowed = NAV_ITEMS.find(n => hasAnyPermission(n.anyOf));
+    if (current && !isNavAllowed(current)) {
+      const firstAllowed = NAV_ITEMS.find(n => isNavAllowed(n));
       if (firstAllowed) handleTabChange(firstAllowed.key);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -246,8 +260,9 @@ export default function Dashboard() {
 
       {/* Nav */}
       <nav className="nav-bar">
-        {NAV_ITEMS.map(({ key, label, icon: Icon, tip, anyOf }) => {
-          const allowed = rbacLoading || hasAnyPermission(anyOf);
+        {NAV_ITEMS.map((item) => {
+          const { key, label, icon: Icon, tip, anyOf } = item;
+          const allowed = rbacLoading || isNavAllowed(item);
           return (
             <button
               key={key}
@@ -255,7 +270,7 @@ export default function Dashboard() {
               onClick={() => allowed && handleTabChange(key)}
               disabled={!allowed}
               style={!allowed ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
-              title={allowed ? tip : `Your role doesn't have access to ${label} (requires ${anyOf.join(' or ')})`}
+              title={allowed ? tip : (anyOf ? `Your role doesn't have access to ${label} (requires ${anyOf.join(' or ')})` : `You don't have access to ${label}`)}
             >
               <Icon size={15} />
               {label}
@@ -347,6 +362,16 @@ export default function Dashboard() {
                     navigateToEdit={navigateToEdit}
                   />
                 </PermissionGuard>
+              </ErrorBoundary>
+            </div>
+          )}
+
+          {/* Admin Panel — lazy mount on first visit */}
+          {visitedTabsRef.current.has('admin') && (
+            <div style={{ display: activeTab === 'admin' ? 'block' : 'none' }}
+                 className={activeTab === 'admin' ? 'animate-fade-in' : ''}>
+              <ErrorBoundary label="Admin Panel">
+                {canAccessAdminPanel ? <AdminPanel /> : <AccessDenied label="Admin Panel" />}
               </ErrorBoundary>
             </div>
           )}

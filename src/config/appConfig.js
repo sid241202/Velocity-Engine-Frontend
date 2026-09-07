@@ -32,8 +32,18 @@ export const MAX_AGGREGATIONS         = 3;
 
 // ── RBAC ──────────────────────────────────────────────────────────────────────
 // ME_ENDPOINT: hydrates the frontend's authorization context once at bootstrap
-// (see src/context/RBACContext.jsx). Returns { user_id, roles[], permissions[] }.
+// (see src/context/RBACContext.jsx). Returns { user_id, roles[], permissions[],
+// led_team_ids[] } — led_team_ids is which teams (if any) this user administers
+// as a team lead, independent of their functional role (see src/services/adminApi.js).
 export const ME_ENDPOINT = `${API_BASE}/me`;
+
+// ── Admin Panel ───────────────────────────────────────────────────────────────
+// Gated by PERMISSIONS.IAM_MANAGE (full access) or a non-empty led_team_ids
+// (scoped to the leader's own team + the unassigned pool) — see AdminPanel.jsx.
+export const ADMIN_USERS_ENDPOINT     = `${API_BASE}/admin/users`;
+export const ADMIN_TEAMS_ENDPOINT     = `${API_BASE}/admin/teams`;
+export const ADMIN_ROLES_ENDPOINT     = `${API_BASE}/admin/roles`;
+export const ADMIN_AUDIT_LOG_ENDPOINT = `${API_BASE}/admin/audit-log`;
 
 // getEnvVar: checks a runtime-injected window._env_ override first (see
 // public/env-config.js in Docker deployments), then build-time Vite env,
