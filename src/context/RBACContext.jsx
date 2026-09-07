@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { ME_ENDPOINT } from '../config/appConfig';
 import { getAuthHeaders } from '../services/apiClient';
+import { SIMULATION_MODE, getMe as getSimulatedMe } from '../simulation/mockAdminData';
 
 const RBACContext = createContext(null);
 
@@ -28,14 +29,16 @@ export function RBACProvider({ children }) {
   const fetchMe = useCallback(async () => {
     setState((prev) => ({ ...prev, loading: true, error: '' }));
     try {
-      const res = await fetch(ME_ENDPOINT, {
-        headers: await getAuthHeaders(),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail || `Authorization check failed (HTTP ${res.status})`);
-      }
-      const data = await res.json();
+      const data = SIMULATION_MODE
+        ? await getSimulatedMe()
+        : await (async () => {
+            const res = await fetch(ME_ENDPOINT, { headers: await getAuthHeaders() });
+            if (!res.ok) {
+              const body = await res.json().catch(() => ({}));
+              throw new Error(body.detail || `Authorization check failed (HTTP ${res.status})`);
+            }
+            return res.json();
+          })();
       setState({
         userId: data.user_id,
         roles: data.roles || [],

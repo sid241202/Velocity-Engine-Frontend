@@ -15,6 +15,8 @@ import { API_BASE } from '../config/appConfig';
 import { toISTDatetimeLocal, parseISTStringToEpochMs } from '../utils/istUtils';
 import { useRBAC } from '../context/RBACContext';
 import { PERMISSIONS } from '../permissions';
+import { SIMULATION_MODE } from '../simulation/mockAdminData';
+import SimulationSwitcher from '../components/AdminPanel/SimulationSwitcher';
 
 // build's tab also doubles as the rule-edit surface (navigateToEdit routes
 // here), so it accepts create OR update rather than requiring create alone.
@@ -55,7 +57,12 @@ export default function Dashboard() {
     (item) => (item.custom === 'canAccessAdminPanel' ? canAccessAdminPanel : hasAnyPermission(item.anyOf)),
     [canAccessAdminPanel, hasAnyPermission]
   );
-  const [activeTab, setActiveTab]         = useState('live');
+  // SIMULATION MODE: remember the last tab across the full-page reload
+  // SimulationSwitcher does when switching "viewing as" persona, so
+  // comparing personas on the Admin Panel doesn't require re-clicking the
+  // tab every time.
+  const initialTab = (SIMULATION_MODE && sessionStorage.getItem('sim_last_tab')) || 'live';
+  const [activeTab, setActiveTab]         = useState(initialTab);
   const [rules, setRules]                 = useState([]);
   // Single-select: choosing a rule replaces whatever was previously selected
   // (radio-button behavior, not a multi-select checkbox list).
@@ -76,13 +83,22 @@ export default function Dashboard() {
   };
 
   // Track which tabs have been visited so we can lazy-mount panels
-  const visitedTabsRef = useRef(new Set(['live']));
+  const visitedTabsRef = useRef(new Set(['live', initialTab]));
   const handleTabChange = (tab) => {
     visitedTabsRef.current.add(tab);
     setActiveTab(tab);
+    if (SIMULATION_MODE) sessionStorage.setItem('sim_last_tab', tab);
   };
 
   const fetchRules = useCallback(async () => {
+    if (SIMULATION_MODE) {
+      // No rule-store backend in this simulation — the Admin Panel doesn't
+      // depend on rules, so an empty list keeps the other tabs harmless
+      // rather than showing a permanent "backend unreachable" banner.
+      setRules([]);
+      setBackendStatus('up');
+      return;
+    }
     const controller = new AbortController();
     // 10-second timeout: if the backend is hanging (no response, not closed),
     // transition to 'down' state so the offline banner is shown promptly.
@@ -173,6 +189,24 @@ export default function Dashboard() {
 
   return (
     <div className="app-container">
+      {SIMULATION_MODE && <SimulationSwitcher />}
+
+      {/* Simulation mode banner */}
+      {SIMULATION_MODE && (
+        <div style={{
+          background: 'linear-gradient(90deg, rgba(251,191,36,0.15), rgba(251,191,36,0.05))',
+          border: '1px solid rgba(251,191,36,0.4)',
+          borderRadius: '8px',
+          margin: '0.5rem 1rem 0',
+          padding: '0.5rem 1rem',
+          paddingRight: '260px',
+          fontSize: '0.78rem',
+          color: 'var(--amber)',
+        }}>
+          Admin Panel simulation — mock data, no real backend or database. Use the &quot;Viewing as&quot; switcher (top right) to compare what a super admin sees vs. a team lead vs. a regular member.
+        </div>
+      )}
+
       {/* Header */}
       <header className="header">
         <div className="header-logo">

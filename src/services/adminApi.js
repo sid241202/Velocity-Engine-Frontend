@@ -12,6 +12,8 @@ import {
   ADMIN_AUDIT_LOG_ENDPOINT,
 } from '../config/appConfig';
 import { getAuthHeaders } from './apiClient';
+import { SIMULATION_MODE } from '../simulation/mockAdminData';
+import * as mockAdmin from '../simulation/mockAdminData';
 
 async function request(url, options = {}) {
   const res = await fetch(url, {
@@ -25,34 +27,42 @@ async function request(url, options = {}) {
   return body;
 }
 
-export const listUsers = () => request(ADMIN_USERS_ENDPOINT);
+export const listUsers = () => (SIMULATION_MODE ? mockAdmin.listUsers() : request(ADMIN_USERS_ENDPOINT));
 
-export const listTeams = () => request(ADMIN_TEAMS_ENDPOINT);
+export const listTeams = () => (SIMULATION_MODE ? mockAdmin.listTeams() : request(ADMIN_TEAMS_ENDPOINT));
 
-export const listRoles = () => request(ADMIN_ROLES_ENDPOINT);
+export const listRoles = () => (SIMULATION_MODE ? mockAdmin.listRoles() : request(ADMIN_ROLES_ENDPOINT));
 
-export const listAuditLog = () => request(ADMIN_AUDIT_LOG_ENDPOINT);
+export const listAuditLog = () => (SIMULATION_MODE ? mockAdmin.listAuditLog() : request(ADMIN_AUDIT_LOG_ENDPOINT));
 
 export const updateUser = (userId, patch) =>
-  request(`${ADMIN_USERS_ENDPOINT}/${userId}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(patch),
-  });
+  SIMULATION_MODE
+    ? mockAdmin.updateUser(userId, patch)
+    : request(`${ADMIN_USERS_ENDPOINT}/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
 
 export const createTeam = (payload) =>
-  request(ADMIN_TEAMS_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  SIMULATION_MODE
+    ? mockAdmin.createTeam(payload)
+    : request(ADMIN_TEAMS_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
 export const grantTeamLead = (teamId, userId) =>
-  request(`${ADMIN_TEAMS_ENDPOINT}/${teamId}/leads`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: userId }),
-  });
+  SIMULATION_MODE
+    ? mockAdmin.grantTeamLead(teamId, userId)
+    : request(`${ADMIN_TEAMS_ENDPOINT}/${teamId}/leads`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId }),
+      });
 
 export const revokeTeamLead = (teamId, userId) =>
-  request(`${ADMIN_TEAMS_ENDPOINT}/${teamId}/leads/${userId}`, { method: 'DELETE' });
+  SIMULATION_MODE
+    ? mockAdmin.revokeTeamLead(teamId, userId)
+    : request(`${ADMIN_TEAMS_ENDPOINT}/${teamId}/leads/${userId}`, { method: 'DELETE' });

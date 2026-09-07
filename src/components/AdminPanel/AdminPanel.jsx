@@ -102,7 +102,6 @@ export default function AdminPanel() {
         <UserTable
           users={data.users}
           teams={data.teams}
-          roles={data.roles}
           viewerUserId={userId}
           isSuperAdmin={isSuperAdmin}
           scopedTeamIds={scopedTeamIds}

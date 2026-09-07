@@ -1,12 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import authService from '../services/AuthService';
+import { SIMULATION_MODE } from '../simulation/mockAdminData';
 
 const ProtectedRoute = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // SIMULATION MODE (admin-panel-simulation branch only — see
+  // src/simulation/mockAdminData.js): skip real WSO2 auth entirely so the
+  // Admin Panel simulation is reachable with nothing but `npm run dev`.
+  // Hooks are still called unconditionally below (SIMULATION_MODE is a
+  // module constant, never changes between renders) — it just makes
+  // checkAuth() a no-op and starts already "authenticated".
+  const [isAuthenticated, setIsAuthenticated] = useState(SIMULATION_MODE ? true : null);
+  const [isLoading, setIsLoading] = useState(!SIMULATION_MODE);
 
   useEffect(() => {
+    if (SIMULATION_MODE) return;
     checkAuth();
   }, []);
 
