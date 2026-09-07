@@ -21,7 +21,7 @@ function roleBadge(role) {
  * MISC-team users specifically so a JIT-provisioned user with no real team
  * yet doesn't sit invisible until someone thinks to look for them.
  */
-export default function UserTable({ users, teams, roles, viewerUserId, isSuperAdmin, scopedTeamIds, miscTeamId, onChanged }) {
+export default function UserTable({ users, teams, viewerUserId, isSuperAdmin, scopedTeamIds, miscTeamId, onChanged }) {
   const [search, setSearch] = useState('');
   const [teamFilter, setTeamFilter] = useState('ALL');
   const [editingUser, setEditingUser] = useState(null);
@@ -139,7 +139,6 @@ export default function UserTable({ users, teams, roles, viewerUserId, isSuperAd
         <UserEditModal
           user={editingUser}
           teams={teams}
-          roles={roles}
           isSuperAdmin={isSuperAdmin}
           scopedTeamIds={scopedTeamIds}
           miscTeamId={miscTeamId}

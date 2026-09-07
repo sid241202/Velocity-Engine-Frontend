@@ -6,7 +6,7 @@ import * as adminApi from '../../services/adminApi';
 const ALL_ROLES = ['SUPER_ADMIN', 'RULE_MANAGER', 'RULE_EDITOR', 'READ_ONLY_ANALYST'];
 
 export default function UserEditModal({
-  user, teams, roles, isSuperAdmin, scopedTeamIds, miscTeamId,
+  user, teams, isSuperAdmin, scopedTeamIds, miscTeamId,
   isSelf, isLastActiveSuperAdmin, onClose, onSaved,
 }) {
   const [role, setRole] = useState(user.role);
