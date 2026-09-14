@@ -4,6 +4,7 @@ import { Zap, History, PlusSquare, Activity, BarChart3, Shield, AlertTriangle, R
 import RuleBuilderPage from '../components/RuleBuilderPage';
 import SavedRulesSidebar from '../components/SavedRulesSidebar';
 import RuleSummaryPanel from '../components/RuleSummaryPanel';
+import HomeView from '../components/HomeView';
 import LiveAnalysis from '../components/LiveAnalysis';
 import AggregatedAnalysis from '../components/AggregatedAnalysis';
 import HistoricalAnalysis from '../components/HistoricalAnalysis';
@@ -55,7 +56,7 @@ export default function Dashboard() {
     (item) => (item.custom === 'canAccessAdminPanel' ? canAccessAdminPanel : hasAnyPermission(item.anyOf)),
     [canAccessAdminPanel, hasAnyPermission]
   );
-  const [activeTab, setActiveTab]         = useState('live');
+  const [activeTab, setActiveTab]         = useState('home');
   const [rules, setRules]                 = useState([]);
   // Single-select: choosing a rule replaces whatever was previously selected
   // (radio-button behavior, not a multi-select checkbox list).
@@ -160,6 +161,14 @@ export default function Dashboard() {
     handleTabChange('historical');
   };
 
+  // Lighter-weight than drillToHistorical above — no breach timestamp to
+  // center on yet (used right after creating a brand-new draft rule, which
+  // has no live data), just select the rule and switch tabs.
+  const goToHistoricalForRule = (ruleId) => {
+    setSelectedRuleId(ruleId);
+    handleTabChange('historical');
+  };
+
   // Determine which rule a draft user can access per panel
   // Draft rules: ONLY historical analysis allowed
   // Prod/Paused rules: all panels allowed
@@ -171,14 +180,26 @@ export default function Dashboard() {
     ? selectedRuleId
     : null;
 
+  // Detection Rules sidebar only makes sense where a selected rule actually
+  // drives what's shown (Live/Analytics/Historical) — Create Rule, Rule
+  // Summary (now its own browsable list), and Admin Panel don't use it.
+  const showSidebar = ['live', 'agg', 'historical'].includes(activeTab);
+
   return (
     <div className="app-container">
       {/* Header */}
       <header className="header">
-        <div className="header-logo">
-          <Zap size={16} color="#fff" strokeWidth={2.5} />
-        </div>
-        <h1>Velocity Engine</h1>
+        <button
+          type="button"
+          onClick={() => handleTabChange('home')}
+          title="Home"
+          style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+        >
+          <div className="header-logo">
+            <Zap size={16} color="#fff" strokeWidth={2.5} />
+          </div>
+          <h1 style={{ margin: 0 }}>Velocity Engine</h1>
+        </button>
         <div className="header-right">
           <span style={{ fontSize: '0.68rem', color: 'var(--text-3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>UIDAI · Auth Analytics</span>
           <span
@@ -280,17 +301,19 @@ export default function Dashboard() {
       </nav>
 
       {/* Main layout */}
-      <div className="app-layout">
-        <aside>
-          <SavedRulesSidebar
-            rules={rules}
-            fetchRules={fetchRules}
-            selectedRuleId={selectedRuleId}
-            toggleRuleSelection={toggleRuleSelection}
-            activeTab={activeTab}
-            navigateToSummary={navigateToSummary}
-          />
-        </aside>
+      <div className={`app-layout${showSidebar ? '' : ' no-sidebar'}`}>
+        {showSidebar && (
+          <aside>
+            <SavedRulesSidebar
+              rules={rules}
+              fetchRules={fetchRules}
+              selectedRuleId={selectedRuleId}
+              toggleRuleSelection={toggleRuleSelection}
+              activeTab={activeTab}
+              navigateToSummary={navigateToSummary}
+            />
+          </aside>
+        )}
         <main className="content-area">
           {/*
            * All analysis panels are permanently mounted. We use display:none to
@@ -302,6 +325,14 @@ export default function Dashboard() {
            *
            * Lazy-mount: RuleBuilder, Summary, Build are only mounted once visited.
            */}
+
+          {/* Home — the landing menu, lightweight enough to not need the
+              always-mounted/lazy-mount treatment the data panels use. */}
+          {activeTab === 'home' && (
+            <div className="animate-fade-in">
+              <HomeView navItems={NAV_ITEMS} isNavAllowed={isNavAllowed} rbacLoading={rbacLoading} onNavigate={handleTabChange} />
+            </div>
+          )}
 
           {/* Live Analysis — always mounted */}
           <div style={{ display: activeTab === 'live' ? 'block' : 'none' }}
@@ -344,6 +375,8 @@ export default function Dashboard() {
                     fetchRules={fetchRules}
                     editingRule={editingRule}
                     onEditComplete={handleEditComplete}
+                    onGoToHistorical={goToHistoricalForRule}
+                    onProductionized={navigateToSummary}
                   />
                 </PermissionGuard>
               </ErrorBoundary>

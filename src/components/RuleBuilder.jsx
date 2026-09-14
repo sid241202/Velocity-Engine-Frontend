@@ -1,9 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Save, Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, Zap, Clock, Database, Filter, BarChart2, Bell, SlidersHorizontal, ArrowLeft, FileEdit } from 'lucide-react';
+import { Save, Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, Zap, Clock, Database, Filter, BarChart2, Bell, SlidersHorizontal, ArrowLeft, FileEdit, BookOpen, CheckCircle2, Send, History } from 'lucide-react';
 import VisualThresholdBuilder from './VisualThresholdBuilder';
 import SimpleThresholdEditor from './SimpleThresholdEditor';
 import VisualFilterBuilder, { processFilterTree } from './VisualFilterBuilder';
 import FieldSelect from './FieldSelect';
+import RuleReferenceModal from './RuleReferenceModal';
+import RequirePermission from './RequirePermission';
+import { PERMISSIONS } from '../permissions';
+import { Modal } from './ui/Overlay';
 import { API_BASE, DEFAULT_SOURCE_TOPIC, DEFAULT_WINDOW_SIZE_SEC, DEFAULT_SLIDE_SEC } from '../config/appConfig';
 import { isValidRuleId, isNonEmpty, isValidJexlAlias, isPositiveInt } from '../utils/validators';
 import { getAuthHeaders } from '../services/apiClient';
@@ -232,7 +236,7 @@ function describeSeconds(totalSeconds) {
 }
 
 /* ─── Main Component ─────────────────────────────────────────── */
-export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onEditComplete }) {
+export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onEditComplete, onGoToHistorical, onProductionized }) {
 
   // ── Core ───────────────────────────────────────────────────────
   const [ruleName, setRuleName]     = useState('');
@@ -317,7 +321,14 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
     setAggregations(v.aggregations);
     setJexlExpression(v.jexlExpression);
     setShowTemplatePicker(false);
+    setBuilderMode('simple');
   };
+
+  const [showReference, setShowReference] = useState(false);
+  // Shown after a brand-new rule is saved — offers the two logical next
+  // steps instead of a dead-end "OK" alert with nowhere to go.
+  const [postSaveRule, setPostSaveRule] = useState(null); // { id, name } | null
+  const [isPublishingNew, setIsPublishingNew] = useState(false);
 
   // Simple mode uses only the fields it shows — reset the advanced-only
   // ones to their sensible defaults so nothing hidden silently persists
@@ -516,13 +527,16 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
         body: JSON.stringify(payload),
       });
       if (res.ok) {
-        const msg = isEditing
-          ? 'Rule updated and saved as draft. Go to Rule Details to review and re-publish.'
-          : 'Rule saved as draft. Go to Rule Details to review and publish.';
-        alert(msg);
         fetchRules();
-        if (isEditing && onEditComplete) onEditComplete();
-        resetForm();
+        if (isEditing) {
+          alert('Rule updated and saved as draft. Go to Rule Details to review and re-publish.');
+          if (onEditComplete) onEditComplete();
+          resetForm();
+        } else {
+          // Offer the two real next steps instead of a dead-end "OK" alert
+          // with nowhere to go — see postSaveRule modal below.
+          setPostSaveRule({ id: ruleId, name: ruleName.trim() });
+        }
       } else {
         const text = await res.text().catch(() => '');
         alert(`Failed to save rule.${text ? '\n\n' + text : ''}`);
@@ -532,6 +546,38 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
       alert('Network error. Please check your connection and try again.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const dismissPostSave = () => {
+    setPostSaveRule(null);
+    resetForm();
+  };
+
+  const goToHistoricalFromModal = () => {
+    if (onGoToHistorical && postSaveRule) onGoToHistorical(postSaveRule.id);
+    dismissPostSave();
+  };
+
+  const publishNewRuleFromModal = async () => {
+    if (!postSaveRule || isPublishingNew) return;
+    setIsPublishingNew(true);
+    try {
+      const res = await fetch(`${API_BASE}/rules/${postSaveRule.id}/prod`, {
+        method: 'POST',
+        headers: await getAuthHeaders(),
+      });
+      if (res.ok) {
+        fetchRules();
+        if (onProductionized) onProductionized(postSaveRule.id);
+        dismissPostSave();
+      } else {
+        alert("Couldn't publish right now — the rule is still saved as a draft. You can publish it from Rule Summary.");
+      }
+    } catch {
+      alert("Network error — the rule is still saved as a draft. You can publish it from Rule Summary.");
+    } finally {
+      setIsPublishingNew(false);
     }
   };
 
@@ -592,9 +638,9 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
           type="button"
           className="btn btn-ghost"
           style={{ marginTop: '1rem', fontSize: '0.78rem' }}
-          onClick={() => { setShowTemplatePicker(false); setBuilderMode('advanced'); }}
+          onClick={() => { setShowTemplatePicker(false); setBuilderMode('simple'); }}
         >
-          <FileEdit size={13} /> Start from a blank rule instead (Advanced)
+          <FileEdit size={13} /> Start from a blank rule instead
         </button>
       </div>
     );
@@ -621,8 +667,18 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
             {isEditing ? 'Editing draft — changes saved as new version' : 'Saved as draft — publish when ready'}
           </p>
         </div>
-        <span className="badge badge-draft" style={{ marginLeft: 'auto' }}>{isEditing ? 'Editing' : 'Draft'}</span>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          style={{ marginLeft: 'auto', fontSize: '0.78rem', flexShrink: 0 }}
+          onClick={() => setShowReference(true)}
+        >
+          <BookOpen size={13} /> Rule Reference
+        </button>
+        <span className="badge badge-draft">{isEditing ? 'Editing' : 'Draft'}</span>
       </div>
+
+      <RuleReferenceModal open={showReference} onClose={() => setShowReference(false)} />
 
       {/* ── Mode toggle + back-to-templates ──────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '1.1rem', flexWrap: 'wrap' }}>
@@ -1290,6 +1346,52 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
           </p>
         )}
       </form>
+
+      {postSaveRule && (
+        <Modal
+          open
+          onClose={dismissPostSave}
+          icon={CheckCircle2}
+          iconColor="var(--success)"
+          title="Rule saved as a draft"
+          subtitle={postSaveRule.name}
+          width={440}
+        >
+          <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--text-2)', lineHeight: 1.6 }}>
+            What would you like to do next?
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            <button type="button" className="btn" style={{ background: 'rgba(var(--violet-rgb),0.15)', border: '1px solid rgba(var(--violet-rgb),0.35)', color: 'var(--violet-light)', justifyContent: 'flex-start', fontSize: '0.85rem', padding: '0.75rem 1rem' }} onClick={goToHistoricalFromModal}>
+              <History size={16} />
+              <span style={{ textAlign: 'left' }}>
+                <span style={{ display: 'block', fontWeight: 600 }}>Test it in Historical Replay</span>
+                <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-3)', fontWeight: 400 }}>See how this rule would have performed on real past traffic — drafts can only be replayed, not run live.</span>
+              </span>
+            </button>
+            <RequirePermission permission={PERMISSIONS.RULES_PUBLISH}>
+              {(allowed) => (
+                <button
+                  type="button"
+                  className="btn btn-accent"
+                  style={{ justifyContent: 'flex-start', fontSize: '0.85rem', padding: '0.75rem 1rem' }}
+                  onClick={publishNewRuleFromModal}
+                  disabled={isPublishingNew || !allowed}
+                  title={!allowed ? "Your role doesn't have permission to publish rules (requires rules:publish)" : undefined}
+                >
+                  <Send size={16} />
+                  <span style={{ textAlign: 'left' }}>
+                    <span style={{ display: 'block', fontWeight: 600 }}>{isPublishingNew ? 'Publishing…' : 'Publish it now'}</span>
+                    <span style={{ display: 'block', fontSize: '0.72rem', opacity: 0.85, fontWeight: 400 }}>Makes it live and takes you to its summary page.</span>
+                  </span>
+                </button>
+              )}
+            </RequirePermission>
+            <button type="button" className="btn btn-ghost" style={{ justifyContent: 'center', fontSize: '0.8rem' }} onClick={dismissPostSave}>
+              Maybe later
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

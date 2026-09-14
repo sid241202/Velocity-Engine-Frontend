@@ -909,6 +909,13 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
   flex: 1;
 }
 
+/* Panels that don't use the Detection Rules sidebar (Home, Create Rule,
+   Rule Summary, Admin Panel) get the full width instead of leaving a
+   244px gap where the sidebar would have been. */
+.app-layout.no-sidebar {
+  grid-template-columns: 1fr;
+}
+
 .content-area {
   min-height: calc(100vh - 160px);
 }
