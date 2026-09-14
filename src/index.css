@@ -1247,3 +1247,106 @@ tr { transition: background 0.1s ease; }
 }
 .chart-switcher-tab:hover { color: var(--text-1); }
 .chart-switcher-tab.active { background: var(--violet); color: #fff; }
+
+/* ================================================================
+   HOME PAGE — ambient live background
+   Three layers, all CSS-only (no canvas/JS, no new dependency):
+   a faint dot grid for texture, two slow-drifting blurred "aurora"
+   blobs in the brand's own violet/teal (not new colors — restraint
+   over throwing in a rainbow), and a radar-style pulse ring behind
+   the brand mark tying the motion back to "this is a live system"
+   rather than decoration for its own sake. Fixed behind the content
+   (z-index 0, pointer-events none) so it never interferes with
+   clicking through to the actual UI.
+================================================================ */
+.home-shell {
+  position: relative;
+  isolation: isolate; /* new stacking context so z-index:0 children never leak above real page chrome */
+}
+
+.home-bg {
+  position: absolute;
+  inset: -2rem -1.5rem;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: var(--radius-lg);
+}
+
+.home-bg-grid {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(var(--violet-rgb), 0.16) 1px, transparent 1px);
+  background-size: 26px 26px;
+  -webkit-mask-image: radial-gradient(ellipse 60% 55% at 50% 35%, black 0%, transparent 75%);
+  mask-image: radial-gradient(ellipse 60% 55% at 50% 35%, black 0%, transparent 75%);
+}
+
+.home-bg-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  animation: home-orb-drift 26s ease-in-out infinite;
+  will-change: transform;
+}
+.home-bg-orb--violet {
+  width: 480px; height: 480px;
+  top: -160px; left: -120px;
+  background: var(--violet);
+  opacity: 0.16;
+}
+.home-bg-orb--teal {
+  width: 420px; height: 420px;
+  top: -80px; right: -140px;
+  background: var(--teal);
+  opacity: 0.13;
+  animation-delay: -13s;
+  animation-direction: reverse;
+}
+@keyframes home-orb-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(50px, 60px) scale(1.12); }
+  66%      { transform: translate(-35px, 30px) scale(0.94); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-bg-orb { animation: none; }
+}
+
+/* Radar-style pulse rings behind the brand mark in the welcome header */
+.home-pulse-wrap {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  margin: 0 auto 1.1rem;
+}
+.home-pulse-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid var(--violet-light);
+  opacity: 0;
+  animation: home-pulse 3.6s ease-out infinite;
+}
+.home-pulse-ring:nth-child(2) { animation-delay: 1.2s; }
+.home-pulse-ring:nth-child(3) { animation-delay: 2.4s; }
+@keyframes home-pulse {
+  0%   { transform: scale(1);   opacity: 0.55; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-pulse-ring { animation: none; opacity: 0; }
+}
+
+/* Two-column shell: nav/action column left (wider — where the eye lands
+   first and where every actual click happens), Admin Panel + status
+   column right (narrower — restricted audience, passive information). */
+.home-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1.5rem;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .home-grid { grid-template-columns: 1fr; }
+}
