@@ -279,7 +279,11 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Nav */}
+      {/* Nav — hidden on Home. Home is the one deliberate-choice screen:
+          navigating away happens only by picking one of its own buttons.
+          The nav bar takes over for movement between panels once you're
+          inside one, via the logo (always back to Home) or another tab. */}
+      {activeTab !== 'home' && (
       <nav className="nav-bar">
         {NAV_ITEMS.map((item) => {
           const { key, label, icon: Icon, tip, anyOf } = item;
@@ -299,6 +303,7 @@ export default function Dashboard() {
           );
         })}
       </nav>
+      )}
 
       {/* Main layout */}
       <div className={`app-layout${showSidebar ? '' : ' no-sidebar'}`}>
@@ -330,7 +335,7 @@ export default function Dashboard() {
               always-mounted/lazy-mount treatment the data panels use. */}
           {activeTab === 'home' && (
             <div className="animate-fade-in">
-              <HomeView navItems={NAV_ITEMS} isNavAllowed={isNavAllowed} rbacLoading={rbacLoading} onNavigate={handleTabChange} />
+              <HomeView navItems={NAV_ITEMS} isNavAllowed={isNavAllowed} rbacLoading={rbacLoading} onNavigate={handleTabChange} rules={rules} />
             </div>
           )}
 
