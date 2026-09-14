@@ -168,16 +168,16 @@ export default function VisualThresholdBuilder({ expression, setExpression, aggr
   const renderNode = (node, path) => {
     if (node.type === 'GROUP') {
       return (
-        <div key={path.join('-')} style={{ borderLeft: '2px solid #3b82f6', marginLeft: path.length > 0 ? '1rem' : '0', paddingLeft: '1rem', marginBottom: '0.5rem', marginTop: '0.5rem' }}>
+        <div key={path.join('-')} style={{ borderLeft: '2px solid var(--violet)', marginLeft: path.length > 0 ? '1rem' : '0', paddingLeft: '1rem', marginBottom: '0.5rem', marginTop: '0.5rem' }}>
           <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
             <select value={node.logic} onChange={(e) => updateNode(path, { logic: e.target.value })} style={{ width: '80px', padding: '0.2rem', margin: 0 }}>
               <option value="&&">AND</option>
               <option value="||">OR</option>
             </select>
             <button type="button" className="btn btn-accent" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }} onClick={() => addRule(path)}><Plus size={12}/> Rule</button>
-            <button type="button" className="btn" style={{ background: '#475569', padding: '0.2rem 0.5rem', fontSize: '0.75rem' }} onClick={() => addGroup(path)}><Plus size={12}/> Group</button>
+            <button type="button" className="btn" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }} onClick={() => addGroup(path)}><Plus size={12}/> Group</button>
             {path.length > 0 && (
-              <button type="button" className="btn" style={{ background: 'var(--danger)', padding: '0.2rem 0.5rem', fontSize: '0.75rem' }} onClick={() => removeNode(path)}><Trash2 size={12}/></button>
+              <button type="button" className="btn btn-danger" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }} onClick={() => removeNode(path)}><Trash2 size={12}/></button>
             )}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -188,7 +188,7 @@ export default function VisualThresholdBuilder({ expression, setExpression, aggr
     } else {
       // RULE
       return (
-        <div key={path.join('-')} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '0.5rem', borderRadius: '4px' }}>
+        <div key={path.join('-')} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '0.5rem', borderRadius: 'var(--radius-xs)' }}>
           <select value={node.alias} onChange={e => updateNode(path, { alias: e.target.value })} style={{ margin: 0, flex: 1 }}>
             <option value="">-- Select Alias --</option>
             {aggregations.map(a => <option key={a.alias} value={a.alias}>{a.alias}</option>)}
@@ -202,7 +202,7 @@ export default function VisualThresholdBuilder({ expression, setExpression, aggr
             <option value="!=">!=</option>
           </select>
           <input type="number" value={node.value} onChange={e => updateNode(path, { value: e.target.value })} placeholder="Threshold" style={{ margin: 0, width: '100px' }} />
-          <button type="button" className="btn" style={{ background: 'var(--danger)', padding: '0.3rem 0.5rem' }} onClick={() => removeNode(path)}><Trash2 size={14}/></button>
+          <button type="button" className="btn btn-danger" style={{ padding: '0.3rem 0.5rem' }} onClick={() => removeNode(path)}><Trash2 size={14}/></button>
         </div>
       );
     }
@@ -211,7 +211,7 @@ export default function VisualThresholdBuilder({ expression, setExpression, aggr
   return (
     <div>
       {parseError && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '6px', marginBottom: '0.75rem', fontSize: '0.78rem', color: '#fbbf24' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', background: 'var(--warning-subtle)', border: '1px solid rgba(227,160,8,0.3)', borderRadius: 'var(--radius-sm)', marginBottom: '0.75rem', fontSize: '0.78rem', color: 'var(--warning)' }}>
           <AlertTriangle size={14} />
           The existing expression is complex and cannot be visualized. Editing below will replace it.
           The current expression is preserved in the preview below until you make changes.
@@ -222,13 +222,13 @@ export default function VisualThresholdBuilder({ expression, setExpression, aggr
       {(() => {
         const plain = describeNode(tree);
         return plain ? (
-          <div style={{ marginTop: '1rem', padding: '0.6rem 0.75rem', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '6px', fontSize: '0.82rem', color: 'var(--text-1)', lineHeight: 1.5 }}>
+          <div style={{ marginTop: '1rem', padding: '0.6rem 0.75rem', background: 'var(--success-subtle)', border: '1px solid rgba(63,185,80,0.2)', borderRadius: 'var(--radius-sm)', fontSize: '0.82rem', color: 'var(--text-1)', lineHeight: 1.5 }}>
             <strong>In plain terms:</strong> alert when {plain}.
           </div>
         ) : null;
       })()}
 
-      <div style={{ marginTop: '0.6rem', padding: '0.5rem', background: 'rgba(0,0,0,0.4)', borderRadius: '4px', fontFamily: 'monospace', color: '#a78bfa', fontSize: '0.85rem' }}>
+      <div style={{ marginTop: '0.6rem', padding: '0.5rem', background: 'var(--surface-3)', borderRadius: 'var(--radius-xs)', fontFamily: 'monospace', color: 'var(--violet-light)', fontSize: '0.85rem' }}>
         <strong>Compiled Expression:</strong> {expression || 'None (No Alerts)'}
       </div>
     </div>

@@ -8,37 +8,44 @@ import {
 import { getRuleColor } from '../constants';
 import { formatISTTime } from '../utils/istUtils';
 import { Modal, Drawer, RuleLink } from './ui/Overlay';
+import ScoreTriad from './ui/ScoreTriad';
+import JsonViewer from './ui/JsonViewer';
+import LinkedEntityList from './ui/LinkedEntityList';
+import ChartSwitcher from './ui/ChartSwitcher';
 
 // ─── Design System ────────────────────────────────────────────────────────────
+// Reads from the shared token system (src/index.css) instead of a duplicate,
+// local palette — Live Stream's charts/markers/tooltips stay in lockstep with
+// the rest of the app's neutral scale + violet/teal/danger/warning/success set.
 
 const TOOLTIP_STYLE = {
   contentStyle: {
-    background: 'rgba(8,12,28,0.97)',
-    border: '1px solid rgba(99,102,241,0.3)',
-    borderRadius: '10px',
-    color: '#e2e8f0',
-    fontSize: '0.8rem',
+    background: 'rgba(19,22,25,0.97)', // var(--surface-2), opaque for chart overlays
+    border: '1px solid var(--border-2)',
+    borderRadius: 'var(--radius-md)',
+    color: 'var(--text-1)',
+    fontSize: 'var(--fs-sm)',
     boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
     backdropFilter: 'blur(12px)',
   },
-  labelStyle: { color: '#a5b4fc', fontWeight: 700, marginBottom: '0.4rem', fontSize: '0.78rem' },
-  itemStyle: { color: '#cbd5e1' },
+  labelStyle: { color: 'var(--violet-light)', fontWeight: 700, marginBottom: '0.4rem', fontSize: 'var(--fs-xs)' },
+  itemStyle: { color: 'var(--text-2)' },
 };
 
-const AXIS_STROKE = '#334155';
+const AXIS_STROKE = 'var(--gray-7)';
 const GRID_PROPS = { strokeDasharray: '3 3', stroke: 'rgba(255,255,255,0.05)', vertical: false };
 const DASH_PATTERNS = ['', '5 5', '8 4', '3 6', '10 3', '4 4 2 4'];
 
-// Semantic colors
-const BREACH_RED   = '#ef4444';
-const BREACH_AMBER = '#f97316';
-const SAFE_GREEN   = '#10b981';
-const ACCENT_BLUE  = '#6366f1';
-const ACCENT_CYAN  = '#06b6d4';
+// Semantic colors — sourced from the shared danger/warning/success + violet/teal tokens
+const BREACH_RED   = 'var(--danger)';
+const BREACH_AMBER = 'var(--warning)';
+const SAFE_GREEN   = 'var(--success)';
+const ACCENT_BLUE  = 'var(--violet)';
+const ACCENT_CYAN  = 'var(--teal)';
 
 const STATUS_COLORS = {
   connected:    SAFE_GREEN,
-  reconnecting: '#f59e0b',
+  reconnecting: 'var(--warning)',
   disconnected: BREACH_RED,
 };
 
@@ -149,12 +156,12 @@ function EventVolumeTooltip({ active, payload, label }) {
     <div style={{
       ...TOOLTIP_STYLE.contentStyle,
       minWidth: 180,
-      borderColor: breached ? 'rgba(239,68,68,0.5)' : 'rgba(99,102,241,0.3)',
+      borderColor: breached ? 'rgba(248,81,73,0.5)' : 'rgba(var(--violet-rgb),0.3)',
     }}>
       <div style={{ ...TOOLTIP_STYLE.labelStyle, display: 'flex', alignItems: 'center', gap: 6 }}>
-        {breached && <span style={{ color: BREACH_RED, fontSize: '0.85rem' }}>⚡</span>}
+        {breached && <Zap size={12} color={BREACH_RED} fill={BREACH_RED} />}
         {formatTime(label)}
-        {breached && <span style={{ color: BREACH_RED, fontSize: '0.7rem', fontWeight: 700, marginLeft: 4 }}>BREACH</span>}
+        {breached && <span style={{ color: BREACH_RED, fontSize: 'var(--fs-3xs)', fontWeight: 700, marginLeft: 4 }}>BREACH</span>}
       </div>
       {payload.map((p, i) => {
         if (p.dataKey === 'breachMarker') return null;
@@ -163,13 +170,13 @@ function EventVolumeTooltip({ active, payload, label }) {
         else if (p.dataKey.startsWith('agg_')) label = 'Metric Value';
         return (
           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 2 }}>
-            <span style={{ color: '#94a3b8' }}>{label}</span>
-            <span style={{ color: p.stroke || p.fill || '#e2e8f0', fontWeight: 700 }}>{p.value}</span>
+            <span style={{ color: 'var(--text-3)' }}>{label}</span>
+            <span style={{ color: p.stroke || p.fill || 'var(--text-1)', fontWeight: 700 }}>{p.value}</span>
           </div>
         );
       })}
       {breached && (
-        <div style={{ marginTop: 6, padding: '4px 8px', background: 'rgba(239,68,68,0.12)', borderRadius: 4, fontSize: '0.72rem', color: BREACH_RED, textAlign: 'center', fontWeight: 700 }}>
+        <div style={{ marginTop: 6, padding: '4px 8px', background: 'var(--danger-subtle)', borderRadius: 'var(--radius-xs)', fontSize: 'var(--fs-xs)', color: BREACH_RED, textAlign: 'center', fontWeight: 700 }}>
           Threshold Exceeded
         </div>
       )}
@@ -210,7 +217,7 @@ const CustomXAxisTick = (props) => {
   const isBreach = breachTs && breachTs.includes(payload.value);
   return (
     <g transform={`translate(${x},${y})`}>
-      <text x={0} y={0} dy={16} textAnchor="middle" fill={isBreach ? BREACH_RED : '#64748b'} fontSize={11} fontWeight={isBreach ? 700 : 400}>
+      <text x={0} y={0} dy={16} textAnchor="middle" fill={isBreach ? BREACH_RED : 'var(--text-3)'} fontSize={11} fontWeight={isBreach ? 700 : 400}>
         {formatTime(payload.value)}
       </text>
     </g>
@@ -222,12 +229,12 @@ function LiveHeader() {
   return (
     <div className="glass-panel" style={{ paddingBottom: '1rem', marginBottom: '1.5rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
-        <div style={{ width: 30, height: 30, borderRadius: 8, background: 'linear-gradient(135deg, #6366f1, #06b6d4)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Activity size={16} color="#fff" strokeWidth={2.2} />
+        <div style={{ width: 32, height: 32, borderRadius: 'var(--radius-sm)', background: 'linear-gradient(135deg, var(--violet), var(--teal))', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Activity size={17} color="#fff" strokeWidth={2.2} />
         </div>
-        <h2 style={{ color: 'var(--text-1)', margin: 0, fontSize: '0.95rem', fontWeight: 700, letterSpacing: '-0.02em' }}>Live Stream</h2>
+        <h2 style={{ color: 'var(--text-1)', margin: 0, fontSize: 'var(--fs-lg)', fontWeight: 700, letterSpacing: '-0.02em' }}>Live Stream</h2>
       </div>
-      <p style={{ color: 'var(--text-3)', fontSize: '0.73rem', margin: 0 }}>
+      <p style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)', margin: 0 }}>
         Watch the selected rule evaluate authentication traffic as it happens — this updates automatically, no need to refresh.
       </p>
     </div>
@@ -253,6 +260,13 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
   const openWindowDetail = useCallback((windowStart) => setOverlay({ type: 'window', windowStart }), []);
   const openBreachList   = useCallback(() => setOverlay({ type: 'breachList' }), []);
   const closeOverlay     = useCallback(() => setOverlay(null), []);
+
+  // View-mode toggle (grouped list vs raw JSON) for the two drill-down
+  // overlays whose content is a list of raw rows — resets whenever a new
+  // overlay opens so the next drill-down always starts on the grouped view.
+  const [entityViewMode, setEntityViewMode] = useState('list');
+  const [windowViewMode, setWindowViewMode] = useState('list');
+  useEffect(() => { if (overlay) { setEntityViewMode('list'); setWindowViewMode('list'); } }, [overlay]);
   const handleRuleClick  = useCallback((ruleId) => { closeOverlay(); onRuleClick && onRuleClick(ruleId); }, [onRuleClick, closeOverlay]);
 
   // A rule change should reset any group filter (and any open overlay) left over from the previous rule.
@@ -502,17 +516,17 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
 
   const lastBreachInfo = useMemo(() => {
     const breachRows = chartRows.filter(r => isBreached(r));
-    if (breachRows.length === 0) return { text: 'None', color: '#94a3b8' };
+    if (breachRows.length === 0) return { text: 'None', color: 'var(--text-3)' };
     let latest = null;
     for (const row of breachRows) {
       const d = parseAsIST(row.evaluatedAt || row.windowEnd || row.windowStart);
       if (d && (!latest || d.getTime() > latest.getTime())) latest = d;
     }
-    if (!latest) return { text: 'None', color: '#94a3b8' };
+    if (!latest) return { text: 'None', color: 'var(--text-3)' };
     const diffMin = (Date.now() - latest.getTime()) / 60000;
     return {
       text: timeAgo(latest.toISOString()),
-      color: diffMin > 10 ? SAFE_GREEN : diffMin >= 2 ? '#f59e0b' : BREACH_RED,
+      color: diffMin > 10 ? SAFE_GREEN : diffMin >= 2 ? 'var(--warning)' : BREACH_RED,
     };
   }, [chartRows]);
 
@@ -529,10 +543,10 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
       if (ts >= oneHourAgo && ts <= now) lastHour++;
       else if (ts >= twoHoursAgo && ts < oneHourAgo) prevHour++;
     }
-    if (lastHour === 0 && prevHour === 0) return { text: '— Stable', color: '#94a3b8', Icon: Minus };
+    if (lastHour === 0 && prevHour === 0) return { text: '— Stable', color: 'var(--text-3)', Icon: Minus };
     if (lastHour > prevHour) return { text: 'Rising', color: BREACH_RED, Icon: TrendingUp };
     if (lastHour < prevHour) return { text: 'Declining', color: SAFE_GREEN, Icon: TrendingDown };
-    return { text: 'Stable', color: '#f59e0b', Icon: Minus };
+    return { text: 'Stable', color: 'var(--warning)', Icon: Minus };
   }, [chartRows]);
 
   // Chart 1: Event Volume — bakes in agg metric values AND breach markers
@@ -803,7 +817,7 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
           <Activity size={64} color="var(--text-muted)" style={{ opacity: 0.4 }} />
           {hasDraftOnly ? (
             <>
-              <p style={{ color: '#f59e0b', fontSize: '1rem', textAlign: 'center', maxWidth: 440, fontWeight: 600 }}>The selected rule is still in Draft</p>
+              <p style={{ color: 'var(--warning)', fontSize: '1rem', textAlign: 'center', maxWidth: 440, fontWeight: 600 }}>The selected rule is still in Draft</p>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', maxWidth: 440 }}>Draft rules aren&apos;t live yet, so there&apos;s no real-time traffic to show. Publish the rule to make it Active, or use Historical Replay to test it against past data first.</p>
             </>
           ) : (
@@ -864,11 +878,11 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
 
   const thStyle = {
     textAlign: 'left', padding: '0.6rem 0.8rem', color: 'var(--text-muted)', fontWeight: 600,
-    fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em',
+    fontSize: 'var(--fs-2xs)', textTransform: 'uppercase', letterSpacing: '0.08em',
     cursor: 'pointer', userSelect: 'none', borderBottom: '1px solid var(--glass-border)',
     whiteSpace: 'nowrap',
   };
-  const tdStyle = { padding: '0.55rem 0.8rem', fontSize: '0.82rem', borderBottom: '1px solid rgba(255,255,255,0.04)', verticalAlign: 'middle' };
+  const tdStyle = { padding: '0.55rem 0.8rem', fontSize: 'var(--fs-sm)', borderBottom: '1px solid rgba(255,255,255,0.04)', verticalAlign: 'middle' };
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
@@ -928,7 +942,7 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
         <div className="metric-card" style={{ flex: 1, minWidth: 130 }}>
           <h3 style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Shield size={13} style={{ opacity: 0.7 }} /> Breach Rate</h3>
           <div className="value" style={{
-            color: parseFloat(breachRate) > 50 ? BREACH_RED : parseFloat(breachRate) > 25 ? '#f59e0b' : SAFE_GREEN,
+            color: parseFloat(breachRate) > 50 ? BREACH_RED : parseFloat(breachRate) > 25 ? 'var(--warning)' : SAFE_GREEN,
           }}>{breachRate}%</div>
         </div>
 
@@ -966,13 +980,17 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════════
-          Chart 1: Event Volume — area + agg metric lines + precise breach markers
+          Chart 1: Event Volume — flips between the full combined view (area +
+          agg metric lines + precise breach markers) and a simpler per-window
+          volume view. Both tabs read the same chartRows-derived data.
           ═══════════════════════════════════════════════════════════════════════ */}
-      <div className="chart-container" style={{ marginBottom: '-15px', height: 'auto' }}>
-        <div className="chart-title" style={{ marginBottom: '1.25rem' }}>
-          Event Volume, Aggregation Metrics, and Breaches
-        </div>
-        {/* Fixed height gives the Brush room without overlapping siblings */}
+      <ChartSwitcher
+        title="Event Volume, Aggregation Metrics, and Breaches"
+        tabs={[
+          {
+            key: 'combined',
+            label: 'Combined',
+            render: () => (
         <div style={{ width: '100%', height: 420 }}>
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={comboData} margin={{ top: 10, right: 24, bottom: 45, left: 12 }}>
@@ -988,22 +1006,22 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
               />
               <YAxis
                 stroke={AXIS_STROKE}
-                tick={{ fontSize: 11, fill: '#64748b' }}
+                tick={{ fontSize: 11, fill: 'var(--text-3)' }}
                 allowDecimals={false}
                 width={44}
-                label={{ value: 'Events / Window', angle: -90, position: 'insideLeft', offset: 12, style: { fill: '#64748b', fontSize: 10 } }}
+                label={{ value: 'Events / Window', angle: -90, position: 'insideLeft', offset: 12, style: { fill: 'var(--text-3)', fontSize: 10 } }}
               />
 
-              <Tooltip content={<EventVolumeTooltip />} />
+              <Tooltip content={<EventVolumeTooltip getRuleName={getRuleName} />} />
 
               <Legend
                 verticalAlign="top"
-                wrapperStyle={{ paddingBottom: '0.75rem', fontSize: '0.78rem', cursor: 'pointer' }}
+                wrapperStyle={{ paddingBottom: '0.75rem', fontSize: 'var(--fs-xs)', cursor: 'pointer' }}
                 onClick={handleLegendClick}
                 formatter={(value) => {
-                  if (value.startsWith('evt_')) return `📊 Events`;
-                  if (value.startsWith('agg_')) return `〰 Metric Value`;
-                  if (value === 'breachMarker') return `🔴 Breaches`;
+                  if (value.startsWith('evt_')) return 'Events';
+                  if (value.startsWith('agg_')) return 'Metric Value';
+                  if (value === 'breachMarker') return 'Breaches';
                   return value;
                 }}
               />
@@ -1067,7 +1085,7 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
               <Brush
                 dataKey="windowStart"
                 height={22}
-                stroke="rgba(99,102,241,0.4)"
+                stroke="rgba(var(--violet-rgb),0.4)"
                 fill="rgba(8,12,28,0.9)"
                 tickFormatter={formatTime}
                 travellerWidth={6}
@@ -1075,51 +1093,51 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
             </ComposedChart>
           </ResponsiveContainer>
         </div>
-      </div>
-
-      {/* ═══════════════════════════════════════════════════════════════════════
-          Chart row: Window Intensity + Cumulative Breaches
-          -8px top margin enforces the 0.1 cm gap from the chart above.
-          ═══════════════════════════════════════════════════════════════════════ */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '1rem', marginTop: '-8px' }}>
-
-        {/* Chart 2: Window Intensity — colored bar per window */}
-        <div className="chart-container">
-          <div className="chart-title" style={{ marginBottom: '1.25rem' }}>
-            Window Intensity
-            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: 10 }}>
-              🟥 breach&nbsp;·&nbsp; 🟦 normal &nbsp;·&nbsp; click a bar for details
+            ),
+          },
+          {
+            key: 'volume',
+            label: 'Volume Only',
+            render: () => (
+        <div>
+          <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)', fontWeight: 400, display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: '0.75rem' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: BREACH_RED, display: 'inline-block' }} /> breach
             </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: ACCENT_BLUE, display: 'inline-block' }} /> normal
+            </span>
+            <span>· click a bar for details</span>
           </div>
           <div style={{ width: '100%', height: 280 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={breachBarData} margin={{ top: 10, right: 16, bottom: 36, left: 12 }} barCategoryGap="20%">
                 <defs>
-                  <linearGradient id="gradBarBreach" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="gradBarBreach2" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor={BREACH_RED} stopOpacity={0.95} />
                     <stop offset="100%" stopColor="#7f1d1d" stopOpacity={0.8} />
                   </linearGradient>
-                  <linearGradient id="gradBarNormal" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="gradBarNormal2" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor={ACCENT_BLUE} stopOpacity={0.9} />
-                    <stop offset="100%" stopColor="#1e1b4b" stopOpacity={0.7} />
+                    <stop offset="100%" stopColor="#1c2f66" stopOpacity={0.7} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid {...GRID_PROPS} />
                 <XAxis
                   dataKey="windowStart"
                   stroke={AXIS_STROKE}
-                  tick={{ fontSize: 10, fill: '#64748b' }}
+                  tick={{ fontSize: 10, fill: 'var(--text-3)' }}
                   tickFormatter={formatTime}
                   minTickGap={40}
                   dy={6}
                 />
-                <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 10, fill: '#64748b' }} width={36} allowDecimals={false} />
+                <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 10, fill: 'var(--text-3)' }} width={36} allowDecimals={false} />
                 <Tooltip
                   {...TOOLTIP_STYLE}
                   labelFormatter={formatTime}
                   formatter={(value, name, props) => {
                     const breached = props.payload?.breached;
-                    return [value, breached ? '⚡ Events (BREACH)' : '📊 Events'];
+                    return [value, breached ? 'Events (BREACH)' : 'Events'];
                   }}
                 />
                 <Bar
@@ -1133,7 +1151,7 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
                   {breachBarData.map((entry, index) => (
                     <Cell
                       key={`cell_${index}`}
-                      fill={entry.breached ? 'url(#gradBarBreach)' : 'url(#gradBarNormal)'}
+                      fill={entry.breached ? 'url(#gradBarBreach2)' : 'url(#gradBarNormal2)'}
                       opacity={entry.breached ? 1 : 0.7}
                     />
                   ))}
@@ -1142,6 +1160,17 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
             </ResponsiveContainer>
           </div>
         </div>
+            ),
+          },
+        ]}
+      />
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          Cumulative Breaches — related but distinct data (cumulative count per
+          rule, not raw per-window volume), so it stays a standalone chart
+          rather than folding into the switcher above.
+          ═══════════════════════════════════════════════════════════════════════ */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
 
         {/* Chart 3: Cumulative Breaches — area gradient */}
         <div className="chart-container">
@@ -1159,12 +1188,12 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
                 <XAxis
                   dataKey="windowStart"
                   stroke={AXIS_STROKE}
-                  tick={{ fontSize: 10, fill: '#64748b' }}
+                  tick={{ fontSize: 10, fill: 'var(--text-3)' }}
                   tickFormatter={formatTime}
                   minTickGap={40}
                   dy={6}
                 />
-                <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 10, fill: '#64748b' }} width={36} allowDecimals={false} />
+                <YAxis stroke={AXIS_STROKE} tick={{ fontSize: 10, fill: 'var(--text-3)' }} width={36} allowDecimals={false} />
                 <Tooltip
                   {...TOOLTIP_STYLE}
                   labelFormatter={formatTime}
@@ -1195,7 +1224,7 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
                         if (!cumulativeData.breachIncrementTs.has(payload.windowStart)) return null;
                         return (
                           <g key={`dot_${payload.windowStart}`}>
-                            <circle cx={cx} cy={cy} r={10} fill="rgba(239,68,68,0.15)" />
+                            <circle cx={cx} cy={cy} r={10} fill="rgba(248,81,73,0.15)" />
                             <circle cx={cx} cy={cy} r={5} fill={BREACH_RED} stroke="#fff" strokeWidth={1.5} />
                           </g>
                         );
@@ -1223,7 +1252,7 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
         </div>
         <div ref={tableRef} style={{ overflowX: 'auto', maxHeight: 520, overflowY: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead style={{ position: 'sticky', top: 0, background: 'rgba(8,12,28,0.95)', zIndex: 1 }}>
+            <thead style={{ position: 'sticky', top: 0, background: 'rgba(19,22,25,0.95)', zIndex: 1 }}>
               <tr>
                 {[
                   ['#', null],
@@ -1254,12 +1283,12 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
                     className={isCurrentlyBreaching ? 'breach-glow' : ''}
                     onClick={() => openEntityDetail(g.groupKey)}
                     style={isCurrentlyBreaching
-                      ? { borderLeft: `3px solid ${BREACH_RED}`, background: 'rgba(239,68,68,0.07)', cursor: 'pointer' }
+                      ? { borderLeft: `3px solid ${BREACH_RED}`, background: 'rgba(248,81,73,0.07)', cursor: 'pointer' }
                       : { borderLeft: `3px solid ${color}`, cursor: 'pointer' }
                     }
                   >
                     <td style={{ ...tdStyle, color: 'var(--text-muted)', width: 32 }}>{i + 1}</td>
-                    <td style={{ ...tdStyle, fontFamily: 'monospace', color: '#93c5fd' }}>
+                    <td style={{ ...tdStyle, fontFamily: 'monospace', color: 'var(--violet-light)' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
                         {(isCurrentlyBreaching || g.liveNow) && (
                           <span
@@ -1281,26 +1310,12 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
                     <td style={{ ...tdStyle, color: 'var(--text-2)' }}>
                       <RuleLink ruleName={getRuleName(g.ruleId)} ruleId={g.ruleId} onRuleClick={handleRuleClick} />
                     </td>
-                    <td style={{ ...tdStyle, fontWeight: 600 }}>{g.totalEvents.toLocaleString()}</td>
-                    <td style={{ ...tdStyle, color: g.breaches > 0 ? BREACH_RED : 'var(--text-muted)', fontWeight: g.breaches > 0 ? 700 : 400 }}>
-                      {g.breaches > 0 ? `⚡ ${g.breaches}` : g.breaches}
-                    </td>
-                    <td style={{ ...tdStyle }}>
-                      {/* Inline progress bar for breach rate */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ flex: 1, height: 5, background: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden', minWidth: 60 }}>
-                          <div style={{
-                            height: '100%',
-                            width: `${Math.min(100, br)}%`,
-                            background: br > 50 ? `linear-gradient(90deg, ${BREACH_RED}, ${BREACH_AMBER})` : br > 20 ? '#f59e0b' : SAFE_GREEN,
-                            borderRadius: 3,
-                            transition: 'width 0.4s ease',
-                          }} />
-                        </div>
-                        <span style={{ color: br > 50 ? BREACH_RED : br > 20 ? '#f59e0b' : SAFE_GREEN, fontWeight: 600, fontSize: '0.8rem', minWidth: 42, textAlign: 'right' }}>
-                          {g.breachRate}%
-                        </span>
-                      </div>
+                    <td style={{ ...tdStyle, padding: '0.4rem 0.8rem' }} colSpan={3}>
+                      <ScoreTriad items={[
+                        { label: 'Events', value: g.totalEvents.toLocaleString(), tone: 'muted' },
+                        { label: 'Breaches', value: g.breaches, tone: g.breaches > 0 ? 'danger' : 'muted' },
+                        { label: 'Rate', value: `${g.breachRate}%`, tone: br > 50 ? 'danger' : br > 20 ? 'warning' : 'success' },
+                      ]} />
                     </td>
                     <td style={{ ...tdStyle, fontSize: '0.75rem', color: 'var(--text-muted)' }}>{formatTimeShort(g.lastWindow)}</td>
                   </tr>
@@ -1368,7 +1383,7 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
               </div>
               <div className="metric-card">
                 <h3>Breach Rate</h3>
-                <div className="value" style={{ color: parseFloat(entityDetail.breachRate) > 50 ? BREACH_RED : parseFloat(entityDetail.breachRate) > 25 ? '#f59e0b' : SAFE_GREEN }}>
+                <div className="value" style={{ color: parseFloat(entityDetail.breachRate) > 50 ? BREACH_RED : parseFloat(entityDetail.breachRate) > 25 ? 'var(--warning)' : SAFE_GREEN }}>
                   {entityDetail.breachRate}%
                 </div>
               </div>
@@ -1392,27 +1407,35 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
             </div>
 
             <div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
-                Recent Windows <span style={{ textTransform: 'none', fontWeight: 400 }}>· click one for details</span>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <span>Recent Windows <span style={{ textTransform: 'none', fontWeight: 400 }}>· click one for details</span></span>
+                <div className="chart-switcher-tabs">
+                  <button type="button" className={`chart-switcher-tab ${entityViewMode === 'list' ? 'active' : ''}`} onClick={() => setEntityViewMode('list')}>Grouped</button>
+                  <button type="button" className={`chart-switcher-tab ${entityViewMode === 'json' ? 'active' : ''}`} onClick={() => setEntityViewMode('json')}>Raw JSON</button>
+                </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                {entityDetail.history.map((r, i) => (
-                  <div
-                    key={i}
-                    onClick={() => openWindowDetail(r.windowStart)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.45rem 0.6rem',
-                      background: 'rgba(255,255,255,0.03)', borderRadius: 6, fontSize: '0.78rem', cursor: 'pointer',
-                      borderLeft: `3px solid ${isBreached(r) ? BREACH_RED : 'transparent'}`,
-                    }}
-                  >
-                    <span style={{ color: 'var(--text-3)', flexShrink: 0 }}>{formatTimeShort(r.windowStart)}</span>
-                    <span style={{ marginLeft: 'auto', fontWeight: 600 }}>{getEventCount(r)} events</span>
-                    {isBreached(r) && <Zap size={11} color={BREACH_RED} />}
-                    {r.isFinal === false && <span style={{ fontSize: '0.63rem', color: ACCENT_CYAN, fontWeight: 600 }}>LIVE</span>}
-                  </div>
-                ))}
-              </div>
+              {entityViewMode === 'json' ? (
+                <JsonViewer data={entityDetail.history} />
+              ) : (
+                <LinkedEntityList
+                  groups={[
+                    { key: 'breaching', label: 'Breaching Windows', items: entityDetail.history.filter(isBreached) },
+                    { key: 'normal', label: 'Normal Windows', items: entityDetail.history.filter(r => !isBreached(r)) },
+                  ].filter(g => g.items.length > 0)}
+                  keyExtractor={(r) => r.windowStart}
+                  renderItem={(r, { hidden }) => (
+                    <div
+                      onClick={() => !hidden && openWindowDetail(r.windowStart)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, minWidth: 0, fontSize: '0.78rem', cursor: hidden ? 'default' : 'pointer' }}
+                    >
+                      <span style={{ color: 'var(--text-3)', flexShrink: 0 }}>{formatTimeShort(r.windowStart)}</span>
+                      <span style={{ marginLeft: 'auto', fontWeight: 600 }}>{getEventCount(r)} events</span>
+                      {isBreached(r) && <Zap size={11} color={BREACH_RED} />}
+                      {r.isFinal === false && <span style={{ fontSize: '0.63rem', color: ACCENT_CYAN, fontWeight: 600 }}>LIVE</span>}
+                    </div>
+                  )}
+                />
+              )}
             </div>
           </div>
         )}
@@ -1442,30 +1465,38 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
                 <div className="value" style={{ color: windowDetail.breachedCount > 0 ? BREACH_RED : undefined }}>{windowDetail.breachedCount}</div>
               </div>
             </div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Per-Entity Breakdown <span style={{ textTransform: 'none', fontWeight: 400 }}>· click one for its full history</span>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+              <span>Per-Entity Breakdown <span style={{ textTransform: 'none', fontWeight: 400 }}>· click one for its full history</span></span>
+              <div className="chart-switcher-tabs">
+                <button type="button" className={`chart-switcher-tab ${windowViewMode === 'list' ? 'active' : ''}`} onClick={() => setWindowViewMode('list')}>Grouped</button>
+                <button type="button" className={`chart-switcher-tab ${windowViewMode === 'json' ? 'active' : ''}`} onClick={() => setWindowViewMode('json')}>Raw JSON</button>
+              </div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-              {windowDetail.rows.map((r, i) => {
-                const breached = isBreached(r);
-                const count = getEventCount(r);
-                return (
-                  <div
-                    key={i}
-                    onClick={() => openEntityDetail(r.groupKey)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '0.7rem', padding: '0.55rem 0.75rem',
-                      background: breached ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.03)', borderRadius: 8, cursor: 'pointer',
-                      borderLeft: `3px solid ${breached ? BREACH_RED : ACCENT_BLUE}`,
-                    }}
-                  >
-                    <span style={{ fontFamily: 'monospace', color: '#93c5fd', fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.groupKey}</span>
-                    <span style={{ fontWeight: 700 }}>{count} events</span>
-                    {breached && <Zap size={13} color={BREACH_RED} />}
-                  </div>
-                );
-              })}
-            </div>
+            {windowViewMode === 'json' ? (
+              <JsonViewer data={windowDetail.rows} />
+            ) : (
+              <LinkedEntityList
+                groups={[
+                  { key: 'breaching', label: 'Breaching Entities', items: windowDetail.rows.filter(isBreached) },
+                  { key: 'normal', label: 'Not Breaching', items: windowDetail.rows.filter(r => !isBreached(r)) },
+                ].filter(g => g.items.length > 0)}
+                keyExtractor={(r) => r.groupKey}
+                renderItem={(r, { hidden }) => {
+                  const breached = isBreached(r);
+                  const count = getEventCount(r);
+                  return (
+                    <div
+                      onClick={() => !hidden && openEntityDetail(r.groupKey)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', flex: 1, minWidth: 0, cursor: hidden ? 'default' : 'pointer' }}
+                    >
+                      <span style={{ fontFamily: 'monospace', color: 'var(--violet-light)', fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.groupKey}</span>
+                      <span style={{ fontWeight: 700 }}>{count} events</span>
+                      {breached && <Zap size={13} color={BREACH_RED} />}
+                    </div>
+                  );
+                }}
+              />
+            )}
           </div>
         )}
       </Modal>
@@ -1489,11 +1520,11 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
               onClick={() => openEntityDetail(r.groupKey)}
               style={{
                 display: 'flex', alignItems: 'center', gap: '0.7rem', padding: '0.55rem 0.75rem',
-                background: 'rgba(239,68,68,0.07)', borderRadius: 8, cursor: 'pointer', borderLeft: `3px solid ${BREACH_RED}`,
+                background: 'rgba(248,81,73,0.07)', borderRadius: 8, cursor: 'pointer', borderLeft: `3px solid ${BREACH_RED}`,
               }}
             >
               <span style={{ color: 'var(--text-3)', fontSize: '0.75rem', flexShrink: 0, minWidth: 56 }}>{formatTimeShort(r.windowStart)}</span>
-              <span style={{ fontFamily: 'monospace', color: '#93c5fd', fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.groupKey}</span>
+              <span style={{ fontFamily: 'monospace', color: 'var(--violet-light)', fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.groupKey}</span>
               <span style={{ fontWeight: 700 }}>{getEventCount(r)} events</span>
               <Zap size={13} color={BREACH_RED} />
             </div>

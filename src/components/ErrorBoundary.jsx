@@ -48,16 +48,16 @@ export default class ErrorBoundary extends React.Component {
           minHeight: '320px',
           gap: '1.25rem',
           padding: '2rem',
-          border: '1px solid rgba(239, 68, 68, 0.25)',
-          borderRadius: '12px',
-          background: 'rgba(239, 68, 68, 0.04)',
+          border: '1px solid rgba(248, 81, 73, 0.25)',
+          borderRadius: 'var(--radius-lg)',
+          background: 'rgba(248, 81, 73, 0.04)',
         }}
       >
-        <AlertTriangle size={40} color="#ef4444" style={{ opacity: 0.8 }} />
+        <AlertTriangle size={40} color="var(--danger)" style={{ opacity: 0.8 }} />
         <div style={{ textAlign: 'center' }}>
           <p
             style={{
-              color: '#f1f5f9',
+              color: 'var(--text-1)',
               fontSize: '1rem',
               fontWeight: 600,
               margin: '0 0 0.5rem',
@@ -67,7 +67,7 @@ export default class ErrorBoundary extends React.Component {
           </p>
           <p
             style={{
-              color: 'var(--text-muted, #94a3b8)',
+              color: 'var(--text-muted)',
               fontSize: '0.8rem',
               maxWidth: '400px',
               lineHeight: 1.6,
@@ -83,10 +83,10 @@ export default class ErrorBoundary extends React.Component {
           <pre
             style={{
               fontSize: '0.72rem',
-              color: '#ef4444',
-              background: 'rgba(15,23,42,0.8)',
-              border: '1px solid rgba(239,68,68,0.2)',
-              borderRadius: '8px',
+              color: 'var(--danger)',
+              background: 'rgba(19,22,25,0.9)',
+              border: '1px solid rgba(248,81,73,0.2)',
+              borderRadius: 'var(--radius-sm)',
               padding: '0.75rem 1rem',
               maxWidth: '100%',
               overflowX: 'auto',
@@ -105,17 +105,17 @@ export default class ErrorBoundary extends React.Component {
             alignItems: 'center',
             gap: '0.4rem',
             padding: '0.5rem 1rem',
-            background: 'rgba(239, 68, 68, 0.12)',
-            border: '1px solid rgba(239, 68, 68, 0.3)',
-            borderRadius: '8px',
-            color: '#ef4444',
+            background: 'rgba(248, 81, 73, 0.12)',
+            border: '1px solid rgba(248, 81, 73, 0.3)',
+            borderRadius: 'var(--radius-sm)',
+            color: 'var(--danger)',
             fontSize: '0.8rem',
             fontWeight: 500,
             cursor: 'pointer',
             transition: 'background 0.15s',
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)')}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(248, 81, 73, 0.2)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(248, 81, 73, 0.12)')}
         >
           <RefreshCw size={13} />
           Try again

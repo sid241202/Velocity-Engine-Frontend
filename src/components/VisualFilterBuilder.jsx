@@ -180,7 +180,7 @@ export default function VisualFilterBuilder({ filterTree, setFilterTree }) {
               <Plus size={12} /> Group
             </button>
             {path.length > 0 && (
-              <button type="button" className="btn" style={{ background: 'var(--danger)', padding: '0.3rem 0.6rem' }}
+              <button type="button" className="btn btn-danger" style={{ padding: '0.3rem 0.6rem' }}
                 onClick={() => removeNode(path)}>
                 <Trash2 size={12} />
               </button>
@@ -218,9 +218,9 @@ export default function VisualFilterBuilder({ filterTree, setFilterTree }) {
           gap: '0.25rem',
           background: 'rgba(255,255,255,0.05)',
           padding: '0.5rem',
-          borderRadius: '4px',
+          borderRadius: 'var(--radius-xs)',
           marginBottom: '0.25rem',
-          border: dateError ? '1px solid rgba(239,68,68,0.5)' : '1px solid transparent',
+          border: dateError ? '1px solid rgba(248,81,73,0.5)' : '1px solid transparent',
         }}
       >
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -261,7 +261,7 @@ export default function VisualFilterBuilder({ filterTree, setFilterTree }) {
             <select
               value={fmt}
               onChange={e => updateNode(path, { format: e.target.value, value: '' })}
-              style={{ flex: '0 0 130px', margin: 0, fontSize: '0.8rem', color: '#60a5fa' }}
+              style={{ flex: '0 0 130px', margin: 0, fontSize: '0.8rem', color: 'var(--violet-light)' }}
               title="Choose the timestamp format. All dates interpreted as IST (UTC+05:30)."
             >
               <option value="EPOCH_MILLIS">EPOCH_MILLIS</option>
@@ -278,7 +278,7 @@ export default function VisualFilterBuilder({ filterTree, setFilterTree }) {
               onChange={e => updateNode(path, { value: e.target.value })}
               style={{
                 flex: 1, minWidth: '100px', margin: 0,
-                border: dateError ? '1px solid rgba(239,68,68,0.6)' : undefined,
+                border: dateError ? '1px solid rgba(248,81,73,0.6)' : undefined,
               }}
             />
           )}
@@ -286,8 +286,8 @@ export default function VisualFilterBuilder({ filterTree, setFilterTree }) {
           {/* Delete */}
           <button
             type="button"
-            className="btn"
-            style={{ background: 'var(--danger)', padding: '0.3rem' }}
+            className="btn btn-danger"
+            style={{ padding: '0.3rem' }}
             onClick={() => removeNode(path)}
           >
             <Trash2 size={14} />
