@@ -21,23 +21,26 @@ export const SIM_ENTITIES = [
 // Per-entity baseline "abuse intensity" — deterministic, not random, so the
 // same entity is consistently the worst offender across every panel instead
 // of the ranking reshuffling on every reload.
+// Baselines scaled for a 30-second window (this branch uses a short window
+// deliberately, so Live Stream visibly ticks during a design discussion —
+// see windowing below) — roughly 1/6 of the 5-minute-window baselines.
 export const SIM_ENTITY_PROFILE = {
-  'SA-0231': { baseline: 34, volatility: 1.4 }, // worst offender — repeat breacher
-  'SA-0459': { baseline: 28, volatility: 1.2 },
-  'SA-0512': { baseline: 9,  volatility: 0.6 },
-  'SA-0687': { baseline: 22, volatility: 1.1 },
-  'SA-0734': { baseline: 6,  volatility: 0.5 },
-  'SA-0812': { baseline: 15, volatility: 0.9 },
-  'SA-0958': { baseline: 4,  volatility: 0.4 }, // stays clean almost always
-  'SA-1023': { baseline: 19, volatility: 1.0 },
+  'SA-0231': { baseline: 6, volatility: 1.4 }, // worst offender — repeat breacher
+  'SA-0459': { baseline: 5, volatility: 1.2 },
+  'SA-0512': { baseline: 2, volatility: 0.6 },
+  'SA-0687': { baseline: 4, volatility: 1.1 },
+  'SA-0734': { baseline: 1, volatility: 0.5 },
+  'SA-0812': { baseline: 3, volatility: 0.9 },
+  'SA-0958': { baseline: 1, volatility: 0.4 }, // stays clean almost always
+  'SA-1023': { baseline: 3, volatility: 1.0 },
 };
 
 // Thresholds mirrored in having_thresholds.expression below — kept as plain
 // numbers here too so the data generators can compute the same breach
 // decision in JS without needing a real JEXL evaluator.
-export const FAIL_COUNT_THRESHOLD = 25;
-export const UNIQUE_RESIDENTS_THRESHOLD = 10;
-export const UNIQUE_DEVICES_THRESHOLD = 15;
+export const FAIL_COUNT_THRESHOLD = 5;
+export const UNIQUE_RESIDENTS_THRESHOLD = 2;
+export const UNIQUE_DEVICES_THRESHOLD = 3;
 
 /** Mirrors the JEXL expression below: (fail_count > 25 && unique_residents > 10) || unique_devices > 15 */
 export function evaluateBreach({ fail_count, unique_residents, unique_devices }) {
@@ -73,8 +76,8 @@ export function makeSimRule() {
       timestamp_field: '_event_timestamp',
       timestamp_format: 'ISO_STRING',
       use_kafka_timestamp: false,
-      size_ms: 5 * 60 * 1000,
-      slide_ms: 60 * 1000,
+      size_ms: 30 * 1000,
+      slide_ms: 5 * 1000,
       allowed_lateness_ms: 5000,
       alignment_offset_ms: 0,
     },

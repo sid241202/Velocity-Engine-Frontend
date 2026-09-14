@@ -1,66 +1,9 @@
 import React from 'react';
 import { Plus, Trash2, AlertTriangle } from 'lucide-react';
+import { tryParseExpression, describeNode } from '../utils/thresholdExpression';
 
 // A visual builder that outputs a JEXL string.
 // Example: (total_count > 10) && (distinct_users < 5)
-
-/**
- * Attempts to parse a simple JEXL expression back into a tree.
- * Supports the format produced by compileNode: (alias op value) [&& | ||] (alias op value)
- * Returns null if the expression is too complex to parse.
- */
-function tryParseExpression(expr) {
-  if (!expr) return null;
-  try {
-    // Strip outer parens if the whole expression is one group
-    const stripped = expr.trim().replace(/^\((.+)\)$/, (_, inner) => {
-      // Only strip outer parens if they match the full expression
-      let depth = 0;
-      for (let i = 0; i < expr.trim().length; i++) {
-        if (expr.trim()[i] === '(') depth++;
-        if (expr.trim()[i] === ')') depth--;
-        if (depth === 0 && i < expr.trim().length - 1) return expr.trim(); // not outer parens
-      }
-      return inner;
-    });
-
-    // Match individual conditions: (alias op value)
-    const conditionRe = /\(([a-zA-Z_][a-zA-Z0-9_]*)\s*(>=|<=|==|!=|>|<)\s*([\d.]+)\)/g;
-    // Detect top-level logic operator
-    const isAnd = stripped.includes('&&');
-    const isOr = stripped.includes('||');
-    const logic = isAnd ? '&&' : (isOr ? '||' : '&&');
-
-    const children = [];
-    let match;
-    while ((match = conditionRe.exec(stripped)) !== null) {
-      children.push({ type: 'RULE', alias: match[1], operator: match[2], value: match[3] });
-    }
-
-    if (children.length === 0) return null;
-    return { type: 'GROUP', logic, children };
-  } catch {
-    return null;
-  }
-}
-
-const OP_WORDS = { '>': 'is greater than', '<': 'is less than', '>=': 'is at least', '<=': 'is at most', '==': 'equals', '!=': 'is not equal to' };
-
-/** Turn the same tree used to compile JEXL into a plain-English sentence fragment. */
-function describeNode(node) {
-  if (!node) return null;
-  if (node.type === 'RULE') {
-    if (!node.alias || node.value === '' || node.value == null || isNaN(parseFloat(node.value))) return null;
-    return `${node.alias} ${OP_WORDS[node.operator] || node.operator} ${node.value}`;
-  }
-  if (node.type === 'GROUP') {
-    const parts = (node.children || []).map(describeNode).filter(Boolean);
-    if (parts.length === 0) return null;
-    if (parts.length === 1) return parts[0];
-    return parts.join(node.logic === '&&' ? ' and ' : ' or ');
-  }
-  return null;
-}
 
 export default function VisualThresholdBuilder({ expression, setExpression, aggregations }) {
   const [parseError, setParseError] = React.useState(false);

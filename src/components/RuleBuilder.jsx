@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Save, Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, Zap, Clock, Database, Filter, BarChart2, Bell } from 'lucide-react';
+import { Save, Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, Zap, Clock, Database, Filter, BarChart2, Bell, SlidersHorizontal, ArrowLeft, FileEdit } from 'lucide-react';
 import VisualThresholdBuilder from './VisualThresholdBuilder';
+import SimpleThresholdEditor from './SimpleThresholdEditor';
 import VisualFilterBuilder, { processFilterTree } from './VisualFilterBuilder';
 import FieldSelect from './FieldSelect';
 import { API_BASE, DEFAULT_SOURCE_TOPIC, DEFAULT_WINDOW_SIZE_SEC, DEFAULT_SLIDE_SEC } from '../config/appConfig';
 import { isValidRuleId, isNonEmpty, isValidJexlAlias, isPositiveInt } from '../utils/validators';
 import { getAuthHeaders } from '../services/apiClient';
 import { ENVELOPE_FIELD_OPTIONS, DATA_FIELD_OPTIONS } from '../constants/eventFields';
+import { RULE_TEMPLATES } from '../constants/ruleTemplates';
 
 /* ─── Smart Tooltip with viewport-aware positioning ─────────────── */
 function Tip({ text }) {
@@ -296,6 +298,50 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
 
   const [isSaving, setIsSaving] = useState(false);
 
+  // ── Simple / Advanced mode + template picker ──────────────────
+  // Simple is the default: it hides the fields most first-time users don't
+  // need to touch (timestamp source, window type, cardinality hints, per-
+  // window advanced timing) and uses sensible defaults for them instead.
+  // Advanced reveals everything, unchanged from before this mode existed.
+  const [builderMode, setBuilderMode] = useState('simple');
+  const [showTemplatePicker, setShowTemplatePicker] = useState(true);
+
+  const applyTemplate = (tpl) => {
+    const v = tpl.values;
+    setRuleName(v.ruleName);
+    setSeverity(v.severity);
+    setIsGlobal(v.isGlobal);
+    setKeys(v.keys);
+    setEntityName(v.entityName);
+    setFilterTree(v.filterTree);
+    setAggregations(v.aggregations);
+    setJexlExpression(v.jexlExpression);
+    setShowTemplatePicker(false);
+  };
+
+  // Simple mode uses only the fields it shows — reset the advanced-only
+  // ones to their sensible defaults so nothing hidden silently persists
+  // from a prior visit to Advanced.
+  useEffect(() => {
+    if (builderMode !== 'simple') return;
+    setTimeType('EVENT_TIME');
+    setEventTimeSource('KAFKA_TIMESTAMP');
+    setWindowType('SLIDING');
+    setLateness(0);
+    setAlignHour(0); setAlignMinute(0); setAlignSecond(0);
+    setUseAnomalyEntityField(false);
+  }, [builderMode]);
+
+  // Simple mode has no "Slide By" field — keep it a sensible fraction of
+  // the window size automatically instead of asking the user to reason
+  // about slide/window independently.
+  useEffect(() => {
+    if (builderMode !== 'simple') return;
+    const size = Number(windowSize);
+    if (!isPositiveInt(size)) return;
+    setWindowSlide(Math.max(5, Math.round(size / 5)));
+  }, [builderMode, windowSize]);
+
   // ── Validation ────────────────────────────────────────────────
   const errors = useMemo(() => {
     const e = {};
@@ -335,6 +381,8 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
   // ── Load existing rule for editing ────────────────────────────
   useEffect(() => {
     if (!editingRule) return;
+    setShowTemplatePicker(false);
+    setBuilderMode('advanced');
     const meta    = editingRule.rule_metadata || {};
     const grouping = editingRule.grouping || {};
     const w        = editingRule.windowing || {};
@@ -399,6 +447,8 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
     setAggregations([{ alias: 'total_count', field: '_data.authCode', function: 'COUNT', cardinality_hint: 'LOW' }]);
     setJexlExpression('');
     setAggSinkEnabled(true); setAnomalySinkEnabled(true); setAnomalyStoreSinkEnabled(true);
+    setShowTemplatePicker(true);
+    setBuilderMode('simple');
   };
 
   const isEditing = !!editingRule;
@@ -487,11 +537,74 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
 
   const sinkCount = [aggSinkEnabled, anomalySinkEnabled, anomalyStoreSinkEnabled].filter(Boolean).length;
 
+  // ── Template picker — the guided flow's starting screen ──────────────
+  if (showTemplatePicker && !isEditing) {
+    return (
+      <div className="glass-panel" style={{ maxHeight: 'calc(100vh - 108px)', overflowY: 'auto', paddingBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.4rem' }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: 'var(--radius-sm)',
+            background: 'linear-gradient(135deg, var(--violet), var(--teal))',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            boxShadow: '0 0 0 1px rgba(var(--violet-rgb),0.3), 0 2px 8px rgba(0,0,0,0.3)',
+          }}>
+            <Zap size={17} color="#fff" strokeWidth={2.5} />
+          </div>
+          <div>
+            <h2 style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, letterSpacing: '-0.025em', color: 'var(--text-1)', margin: 0 }}>
+              What do you want to detect?
+            </h2>
+            <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-3)', margin: 0 }}>
+              Pick the pattern closest to what you&apos;re looking for — you&apos;ll review and adjust every value next.
+            </p>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.75rem', marginTop: '1.1rem' }}>
+          {RULE_TEMPLATES.map(tpl => (
+            <button
+              key={tpl.id}
+              type="button"
+              onClick={() => applyTemplate(tpl)}
+              className="card"
+              style={{
+                textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '0.5rem',
+                border: '1px solid var(--border)', transition: 'border-color 0.15s ease, transform 0.1s ease',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = tpl.iconColor; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+            >
+              <div style={{
+                width: 30, height: 30, borderRadius: 8,
+                background: `color-mix(in srgb, ${tpl.iconColor} 12%, transparent)`,
+                border: `1px solid color-mix(in srgb, ${tpl.iconColor} 25%, transparent)`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                <tpl.icon size={15} color={tpl.iconColor} strokeWidth={2.2} />
+              </div>
+              <div style={{ fontWeight: 700, fontSize: '0.86rem', color: 'var(--text-1)' }}>{tpl.title}</div>
+              <div style={{ fontSize: '0.76rem', color: 'var(--text-3)', lineHeight: 1.5 }}>{tpl.description}</div>
+            </button>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          className="btn btn-ghost"
+          style={{ marginTop: '1rem', fontSize: '0.78rem' }}
+          onClick={() => { setShowTemplatePicker(false); setBuilderMode('advanced'); }}
+        >
+          <FileEdit size={13} /> Start from a blank rule instead (Advanced)
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="glass-panel" style={{ maxHeight: 'calc(100vh - 108px)', overflowY: 'auto', paddingBottom: '1.5rem' }}>
 
       {/* ── Header ────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
         <div style={{
           width: 32, height: 32, borderRadius: 'var(--radius-sm)',
           background: 'linear-gradient(135deg, var(--violet), var(--teal))',
@@ -509,6 +622,37 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
           </p>
         </div>
         <span className="badge badge-draft" style={{ marginLeft: 'auto' }}>{isEditing ? 'Editing' : 'Draft'}</span>
+      </div>
+
+      {/* ── Mode toggle + back-to-templates ──────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '1.1rem', flexWrap: 'wrap' }}>
+        {!isEditing ? (
+          <button type="button" className="btn btn-ghost" style={{ fontSize: '0.75rem' }} onClick={() => setShowTemplatePicker(true)}>
+            <ArrowLeft size={12} /> Choose a different starting point
+          </button>
+        ) : <span />}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'var(--surface-3)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0.2rem' }}>
+          <SlidersHorizontal size={12} color="var(--text-3)" style={{ marginLeft: '0.4rem' }} />
+          {[
+            { val: 'simple', label: 'Simple' },
+            { val: 'advanced', label: 'Advanced' },
+          ].map(({ val, label }) => (
+            <button
+              key={val}
+              type="button"
+              onClick={() => setBuilderMode(val)}
+              style={{
+                border: 'none', cursor: 'pointer', fontSize: '0.74rem', fontWeight: 600,
+                padding: '0.32rem 0.7rem', borderRadius: 'var(--radius-xs)',
+                background: builderMode === val ? 'var(--violet)' : 'transparent',
+                color: builderMode === val ? '#fff' : 'var(--text-3)',
+                transition: 'background 0.15s ease, color 0.15s ease',
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <form onSubmit={handleSave}>
@@ -622,7 +766,7 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
             />
           </div>
 
-          {(anomalySinkEnabled || anomalyStoreSinkEnabled) && (
+          {builderMode === 'advanced' && (anomalySinkEnabled || anomalyStoreSinkEnabled) && (
             <div style={{ marginTop: '0.875rem', padding: '0.7rem 0.875rem', background: 'var(--violet-subtle)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(var(--violet-rgb),0.15)' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', cursor: 'pointer', fontSize: '0.78rem', color: 'var(--violet-light)', fontWeight: 500, marginBottom: useAnomalyEntityField ? '0.5rem' : 0 }}>
                 <input type="checkbox" checked={useAnomalyEntityField} onChange={e => setUseAnomalyEntityField(e.target.checked)} onFocus={() => onFieldFocus && onFieldFocus('anomaly_entity_field')} style={{ width: 'auto', accentColor: 'var(--violet)' }} />
@@ -709,7 +853,10 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
             </div>
           ) : (
             <>
-              {/* Timing Mode */}
+              {/* Timing Mode — advanced only; Simple mode always uses actual
+                  event time via message-arrival timestamp, the recommended
+                  default. */}
+              {builderMode === 'advanced' && (
               <div style={{ display: 'flex', gap: '1.25rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
                 {[
                   { val: 'EVENT_TIME',      label: 'Actual Event Time',    tip: 'Uses the timestamp recorded inside each event. Most accurate.' },
@@ -721,9 +868,10 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
                   </label>
                 ))}
               </div>
+              )}
 
               {/* Event Time Source */}
-              {timeType === 'EVENT_TIME' && (
+              {builderMode === 'advanced' && timeType === 'EVENT_TIME' && (
                 <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'var(--surface-3)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
                   <p className="form-label" style={{ marginBottom: '0.5rem' }}>Timestamp Source</p>
                   <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap' }}>
@@ -765,7 +913,8 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
               )}
 
               {/* Window Config */}
-              <div style={{ display: 'grid', gridTemplateColumns: windowType === 'SLIDING' ? '1fr 1fr 1fr' : '1fr 1fr', gap: '0.75rem', alignItems: 'start' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: builderMode === 'advanced' && windowType === 'SLIDING' ? '1fr 1fr 1fr' : '1fr 1fr', gap: '0.75rem', alignItems: 'start' }}>
+                {builderMode === 'advanced' && (
                 <div>
                   <FieldLabel label="Window Type" tip="Rolling: overlaps with the previous window. Fixed: discrete non-overlapping intervals." required />
                   <select value={windowType} onChange={e => setWindowType(e.target.value)} onFocus={() => onFieldFocus && onFieldFocus(`window_type_${windowType}`)}>
@@ -774,6 +923,7 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
                   </select>
                   <p className="helper">{windowType === 'SLIDING' ? 'e.g. last 5 min, slide every 1 min' : 'e.g. each 5-min block'}</p>
                 </div>
+                )}
                 <div>
                   <FieldLabel label="Window Size (sec)" required />
                   <input
@@ -787,7 +937,7 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
                   <p className="helper">e.g. 300 = 5 min</p>
                   <FieldError msg={errors.windowSize} />
                 </div>
-                {windowType === 'SLIDING' && (
+                {builderMode === 'advanced' && windowType === 'SLIDING' && (
                   <div>
                     <FieldLabel label="Slide By (sec)" tip="How frequently a new result is emitted. Must be ≤ window size." required />
                     <input
@@ -816,7 +966,7 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
                 </p>
               )}
 
-              <div style={{ marginTop: '0.75rem' }}>
+              <div style={{ marginTop: '0.75rem', display: builderMode === 'advanced' ? undefined : 'none' }}>
                 <Accordion title="Advanced Timing">
                   <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                     <div style={{ flex: '0 1 180px' }}>
@@ -945,7 +1095,7 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
                     )}
                   </div>
                 </div>
-                {a.function === 'COUNT_DISTINCT' && (
+                {a.function === 'COUNT_DISTINCT' && builderMode === 'advanced' && (
                   <div style={{
                     padding: '0.35rem 0.625rem',
                     background: 'var(--surface-3)',
@@ -1050,11 +1200,19 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
             </>
           ) : (
             <div onFocus={() => onFieldFocus && onFieldFocus('having_thresholds')}>
-              <VisualThresholdBuilder
-                expression={jexlExpression}
-                setExpression={setJexlExpression}
-                aggregations={aggregations}
-              />
+              {builderMode === 'simple' ? (
+                <SimpleThresholdEditor
+                  expression={jexlExpression}
+                  setExpression={setJexlExpression}
+                  aggregations={aggregations}
+                />
+              ) : (
+                <VisualThresholdBuilder
+                  expression={jexlExpression}
+                  setExpression={setJexlExpression}
+                  aggregations={aggregations}
+                />
+              )}
             </div>
           )}
         </Section>

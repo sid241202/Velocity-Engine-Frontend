@@ -8,8 +8,8 @@
 import { generateWindows } from './dataGenerators';
 import { SIM_ENTITIES } from './rule';
 
-const DELTA_INTERVAL_MS = 3500;
-const BOOTSTRAP_LOOKBACK_MS = 20 * 60 * 1000; // last 20 minutes, at real 1-min slide resolution
+const DELTA_INTERVAL_MS = 1500;
+const BOOTSTRAP_LOOKBACK_MS = 5 * 60 * 1000; // last 5 minutes, at the rule's real 5s slide resolution
 
 export class SimulatedLiveSocket {
   constructor(url) {
@@ -34,18 +34,19 @@ export class SimulatedLiveSocket {
     if (msg.type !== 'subscribe') return;
     this._ruleIds = msg.rule_ids || [];
 
-    const now = Date.now();
+    const bootstrapNow = Date.now();
     const bootstrapData = {};
     for (const ruleId of this._ruleIds) {
-      bootstrapData[ruleId] = generateWindows(ruleId, now - BOOTSTRAP_LOOKBACK_MS, now, { stepMs: 60000 });
+      bootstrapData[ruleId] = generateWindows(ruleId, bootstrapNow - BOOTSTRAP_LOOKBACK_MS, bootstrapNow, { stepMs: 5000 });
     }
     this._emit({ type: 'bootstrap', data: bootstrapData });
 
     if (this._timer) clearInterval(this._timer);
     this._timer = setInterval(() => {
+      const now = Date.now();
       for (const ruleId of this._ruleIds) {
         const entity = SIM_ENTITIES[Math.floor(Math.random() * SIM_ENTITIES.length)];
-        const [row] = generateWindows(ruleId, now, now, { stepMs: 60000, entities: [entity] });
+        const [row] = generateWindows(ruleId, now, now, { stepMs: 5000, entities: [entity] });
         this._emit({ type: 'delta', rule_id: ruleId, row });
       }
     }, DELTA_INTERVAL_MS);

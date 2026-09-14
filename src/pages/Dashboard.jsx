@@ -358,8 +358,12 @@ export default function Dashboard() {
                 <PermissionGuard permission={PERMISSIONS.RULES_READ} label="Rule Summary">
                   <RuleSummaryPanel
                     rule={rules.find(r => r.rule_metadata?.rule_id === summaryRuleId)}
+                    rules={rules}
                     fetchRules={fetchRules}
                     navigateToEdit={navigateToEdit}
+                    onSelectRule={navigateToSummary}
+                    onBack={() => setSummaryRuleId(null)}
+                    onCreateRule={() => handleTabChange('build')}
                   />
                 </PermissionGuard>
               </ErrorBoundary>

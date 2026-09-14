@@ -1,18 +1,21 @@
 import React from 'react';
-import { Send, PlayCircle, PauseCircle, Trash2, Shield, Clock, Filter, Layers, BarChart3, AlertTriangle, Zap, Pencil } from 'lucide-react';
+import { Send, PlayCircle, PauseCircle, Trash2, Shield, Clock, Filter, Layers, BarChart3, AlertTriangle, Zap, Pencil, ArrowLeft, ChevronDown, ChevronRight, Settings2 } from 'lucide-react';
 import { API_BASE } from '../config/appConfig';
 import { getAuthHeaders } from '../services/apiClient';
 import RequirePermission from './RequirePermission';
 import { PERMISSIONS } from '../permissions';
 import { pathToLabel } from '../constants/eventFields';
+import { generateSummary, formatMs, formatTtl } from '../utils/ruleSummary';
+import RulesBrowser from './RulesBrowser';
 
 // Friendly label for a raw event-field dot-path, falling back to the raw
 // path itself for anything outside the known schema (e.g. rules saved
 // before this field list existed).
 const fieldLabel = (path) => pathToLabel.get(path) || path;
 
-export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
+export default function RuleSummaryPanel({ rule, rules, fetchRules, navigateToEdit, onSelectRule, onBack, onCreateRule }) {
   const [isActioning, setIsActioning] = React.useState(false);
+  const [showTechnical, setShowTechnical] = React.useState(false);
 
   // rules:publish and rules:delete are enforced server-side (see
   // internal/middleware/auth.go RequirePermission on POST /rules/:id/prod,
@@ -66,6 +69,9 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
   };
 
   if (!rule) {
+    if (rules && onSelectRule) {
+      return <RulesBrowser rules={rules} onSelectRule={onSelectRule} onCreateRule={onCreateRule} />;
+    }
     return (
       <div className="glass-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '400px', color: 'var(--text-muted)', fontSize: '1.1rem' }}>
         <div style={{ textAlign: 'center' }}>
@@ -85,35 +91,6 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
   const filters = rule.filters;
 
   const statusColor = meta.status === 'ACTIVE' ? 'var(--success)' : meta.status === 'PAUSED' ? 'var(--warning)' : 'var(--gray-8)';
-
-  const formatMs = (ms) => {
-    if (!ms && ms !== 0) return 'N/A';
-    if (ms < 1000) return `${ms} ms`;
-    const totalSeconds = ms / 1000;
-    if (totalSeconds < 60) {
-      return Number.isInteger(totalSeconds) ? `${totalSeconds} seconds` : `${totalSeconds.toFixed(1)} seconds`;
-    }
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = Math.round(totalSeconds % 60);
-    if (minutes < 60) return seconds > 0 ? `${minutes} min ${seconds} sec` : `${minutes} minutes`;
-    const hours = Math.floor(minutes / 60);
-    const remainMinutes = minutes % 60;
-    return `${hours}h ${remainMinutes}m`;
-  };
-
-  const formatTtl = (seconds) => {
-    if (!seconds) return 'N/A';
-    if (seconds < 60)   return `${seconds}s`;
-    if (seconds < 3600) return `${Math.round(seconds / 60)} minutes`;
-    if (seconds < 86400) {
-      const h = Math.floor(seconds / 3600);
-      const m = Math.round((seconds % 3600) / 60);
-      return m > 0 ? `${h}h ${m}m` : `${h} hour${h > 1 ? 's' : ''}`;
-    }
-    const d = Math.floor(seconds / 86400);
-    const h = Math.round((seconds % 86400) / 3600);
-    return h > 0 ? `${d}d ${h}h` : `${d} day${d > 1 ? 's' : ''}`;
-  };
 
   const formatAlignment = (ms) => {
     if (!ms && ms !== 0) return '00:00:00';
@@ -204,59 +181,13 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
     );
   };
 
-  const generateSummary = (rule) => {
-    const meta = rule.rule_metadata;
-    const grouping = rule.grouping || {};
-    const windowing = rule.windowing || {};
-    const aggs = rule.aggregations || [];
-    const having = rule.having_thresholds;
-    const filters = rule.filters;
-
-    // Guard: grouping.keys may be undefined on older rules
-    const keys = grouping.keys || [];
-    const isGlobal = keys.length === 1 && keys[0] === '__GLOBAL__';
-    const groupDesc = isGlobal ? 'all events globally (no grouping)' : `events grouped by ${keys.map(k => k).join(' + ')}`;
-
-    let windowDesc;
-    const isNoWindow = !windowing.type || windowing.type === 'NONE';
-    if (isNoWindow) {
-      windowDesc = 'real-time stateless event evaluation (no aggregation window)';
-    } else if (windowing.size_ms >= 315360000000) {
-      windowDesc = 'a continuous (never-resetting) counter';
-    } else {
-      const slide = windowing.type === 'SLIDING' && windowing.slide_ms
-        ? `, sliding by ${formatMs(windowing.slide_ms)}`
-        : '';
-      windowDesc = `a ${windowing.type === 'SLIDING' ? 'rolling' : 'fixed'} window of ${formatMs(windowing.size_ms)}${slide}`;
-    }
-
-    const timeDesc = windowing.time_type === 'EVENT_TIME'
-      ? (windowing.use_kafka_timestamp ? 'message arrival timestamps' : `event timestamps from ${windowing.timestamp_field}`)
-      : 'system time';
-
-    const aggDescs = aggs.map(a => {
-      const funcName = a.function === 'COUNT_DISTINCT' ? `distinct count (${a.cardinality_hint} cardinality)` : a.function.toLowerCase();
-      return `${funcName} of ${a.field} as "${a.alias}"`;
-    });
-
-    let filterDesc = '';
-    if (filters && filters.conditions && filters.conditions.length > 0) {
-      filterDesc = ' Only events passing the defined filters are included.';
-    }
-
-    const thresholdDesc = having?.expression
-      ? `An alert fires when: ${having.expression.replace(/&&/g, 'AND').replace(/\|\|/g, 'OR')}.`
-      : 'No alert threshold is defined (data-only rule).';
-
-    const aggPart = aggDescs.length > 0
-      ? `, it computes: ${aggDescs.join('; ')}.`
-      : '.';
-
-    return `This rule monitors ${groupDesc}. Using ${windowDesc} based on ${timeDesc}${aggPart}${filterDesc} ${thresholdDesc} Severity: ${meta.severity_level}. After a breach, the same entity won't trigger another alert for ${formatTtl(meta.penalty_ttl_seconds)} (its cooldown period).`;
-  };
-
   return (
     <div className="glass-panel" style={{ maxHeight: 'calc(100vh - 100px)', overflowY: 'auto' }}>
+      {onBack && (
+        <button type="button" className="btn btn-ghost" style={{ fontSize: '0.76rem', marginBottom: '0.75rem' }} onClick={onBack}>
+          <ArrowLeft size={12} /> All Rules
+        </button>
+      )}
       {/* Top Section — Header */}
       <div style={{ ...sectionStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
@@ -312,6 +243,25 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
         </div>
       </div>
 
+      {/* Technical Details — the raw configuration (grouping keys, window
+          internals, filter tree, aggregation table, JEXL expression).
+          Collapsed by default: the plain-language summary above already
+          answers "what does this rule do" for the vast majority of
+          readers, so the raw config is here for the minority who need to
+          verify it exactly rather than being the first thing everyone
+          scrolls through. */}
+      <button
+        type="button"
+        onClick={() => setShowTechnical(v => !v)}
+        className="btn btn-ghost"
+        style={{ fontSize: '0.78rem', marginBottom: showTechnical ? '0.75rem' : '1.25rem', width: '100%', justifyContent: 'space-between' }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Settings2 size={13} /> Technical Details</span>
+        {showTechnical ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+      </button>
+
+      {showTechnical && (
+      <>
       {/* Routing */}
       <div style={sectionStyle}>
         <div style={sectionHeaderStyle}>
@@ -443,6 +393,8 @@ export default function RuleSummaryPanel({ rule, fetchRules, navigateToEdit }) {
           {thresholds.expression || 'No threshold expression'}
         </div>
       </div>
+      </>
+      )}
 
       {/* Section 3 — Actions */}
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', paddingTop: '0.5rem' }}>

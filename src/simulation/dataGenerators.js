@@ -71,7 +71,7 @@ function pickStepMs(rangeMs) {
 }
 
 /** Live-analysis / agg-analysis shaped rows over [fromMs, toMs]. */
-export function generateWindows(ruleId, fromMs, toMs, { stepMs, entities = SIM_ENTITIES, windowSizeMs = 5 * 60 * 1000 } = {}) {
+export function generateWindows(ruleId, fromMs, toMs, { stepMs, entities = SIM_ENTITIES, windowSizeMs = 30 * 1000 } = {}) {
   const step = stepMs || pickStepMs(Math.max(1, toMs - fromMs));
   const rows = [];
   const start = Math.floor(fromMs / step) * step;
@@ -121,7 +121,7 @@ export function generateHistoricalRows(ruleId, fromMs, toMs) {
         rule_id: ruleId,
         groupKey: entity,
         window_start: toISTBackendString(t),
-        window_end: toISTBackendString(t + 5 * 60 * 1000),
+        window_end: toISTBackendString(t + 30 * 1000),
         threshold_met: stats.breached,
         fail_count: stats.fail_count,
         unique_residents: stats.unique_residents,

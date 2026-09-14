@@ -71,7 +71,7 @@ async function route(path, method, query, init) {
     const hours = Number(query.get('hours')) || 24;
     const now = Date.now();
     const results = {};
-    for (const ruleId of ruleIds) results[ruleId] = generateWindows(ruleId, now - hours * 3600 * 1000, now, { stepMs: 60000 });
+    for (const ruleId of ruleIds) results[ruleId] = generateWindows(ruleId, now - hours * 3600 * 1000, now, { stepMs: 5000 });
     return jsonResponse({ results });
   }
 
