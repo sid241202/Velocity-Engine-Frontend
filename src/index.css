@@ -1249,15 +1249,18 @@ tr { transition: background 0.1s ease; }
 .chart-switcher-tab.active { background: var(--violet); color: #fff; }
 
 /* ================================================================
-   HOME PAGE — ambient live background
-   Three layers, all CSS-only (no canvas/JS, no new dependency):
-   a faint dot grid for texture, two slow-drifting blurred "aurora"
-   blobs in the brand's own violet/teal (not new colors — restraint
-   over throwing in a rainbow), and a radar-style pulse ring behind
-   the brand mark tying the motion back to "this is a live system"
-   rather than decoration for its own sake. Fixed behind the content
-   (z-index 0, pointer-events none) so it never interferes with
-   clicking through to the actual UI.
+   HOME PAGE — "velocity streaks" ambient background
+   Every layer CSS/SVG-only (no canvas, no GIF asset, no new
+   dependency), built from the brand's own violet/teal — the
+   reference mood boards were multi-color plasma/light-streak GIFs;
+   the style (glowing trails radiating outward, flowing wisps, dark
+   stage) carries over, the palette stays disciplined to two colors
+   on purpose — this is an enterprise fraud console, not a wallpaper.
+   The motif is literal: "Velocity" gets speed-streaks racing outward
+   from the brand mark, not generic decoration. Spans the full home
+   shell (z-index 0, pointer-events none) so it reads as one
+   continuous live scene behind all three columns, not a header
+   effect that stops partway down the page.
 ================================================================ */
 .home-shell {
   position: relative;
@@ -1266,59 +1269,93 @@ tr { transition: background 0.1s ease; }
 
 .home-bg {
   position: absolute;
-  inset: -2rem -1.5rem;
+  inset: -1.5rem;
   z-index: 0;
   overflow: hidden;
   pointer-events: none;
   border-radius: var(--radius-lg);
+  background: radial-gradient(ellipse 70% 60% at 50% 45%, rgba(8,10,14,0.4), var(--bg) 85%);
 }
 
 .home-bg-grid {
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(circle, rgba(var(--violet-rgb), 0.16) 1px, transparent 1px);
+  background-image: radial-gradient(circle, rgba(var(--violet-rgb), 0.14) 1px, transparent 1px);
   background-size: 26px 26px;
-  -webkit-mask-image: radial-gradient(ellipse 60% 55% at 50% 35%, black 0%, transparent 75%);
-  mask-image: radial-gradient(ellipse 60% 55% at 50% 35%, black 0%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 75% 70% at 50% 45%, black 0%, transparent 78%);
+  mask-image: radial-gradient(ellipse 75% 70% at 50% 45%, black 0%, transparent 78%);
 }
 
-.home-bg-orb {
+/* Large soft flowing ribbons — the "plasma wisp" half of the mood board.
+   Elongated, blurred, slowly drifting + rotating around the page center. */
+.home-bg-ribbon {
   position: absolute;
+  top: 50%; left: 50%;
   border-radius: 50%;
-  filter: blur(90px);
-  animation: home-orb-drift 26s ease-in-out infinite;
+  filter: blur(70px);
+  mix-blend-mode: screen;
   will-change: transform;
 }
-.home-bg-orb--violet {
-  width: 480px; height: 480px;
-  top: -160px; left: -120px;
-  background: var(--violet);
-  opacity: 0.16;
+.home-bg-ribbon--a {
+  width: 640px; height: 220px;
+  margin: -110px 0 0 -320px;
+  background: linear-gradient(90deg, transparent, var(--violet), transparent);
+  opacity: 0.22;
+  animation: home-ribbon-a 22s ease-in-out infinite;
 }
-.home-bg-orb--teal {
-  width: 420px; height: 420px;
-  top: -80px; right: -140px;
-  background: var(--teal);
-  opacity: 0.13;
-  animation-delay: -13s;
-  animation-direction: reverse;
+.home-bg-ribbon--b {
+  width: 560px; height: 190px;
+  margin: -95px 0 0 -280px;
+  background: linear-gradient(90deg, transparent, var(--teal), transparent);
+  opacity: 0.18;
+  animation: home-ribbon-b 28s ease-in-out infinite;
 }
-@keyframes home-orb-drift {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33%      { transform: translate(50px, 60px) scale(1.12); }
-  66%      { transform: translate(-35px, 30px) scale(0.94); }
+@keyframes home-ribbon-a {
+  0%, 100% { transform: rotate(8deg)   translate(0, 0)      scale(1); }
+  50%      { transform: rotate(-14deg) translate(40px, 30px) scale(1.15); }
+}
+@keyframes home-ribbon-b {
+  0%, 100% { transform: rotate(-20deg) translate(0, 0)       scale(1); }
+  50%      { transform: rotate(6deg)   translate(-50px, -20px) scale(1.1); }
+}
+
+/* Speed-streak starburst — thin glowing lines radiating from the brand
+   mark, each with a traveling light-pulse (stroke-dashoffset trick)
+   racing outward on a loop. This is the literal "velocity" motif. */
+.home-streaks {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.home-streak {
+  fill: none;
+  stroke: url(#homeStreakGradient);
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 3px rgba(var(--violet-rgb), 0.7));
+  stroke-dasharray: 7 58; /* short bright dash, long dark gap — a single
+    traveling spark per ray, not an on/off blink (needs dash << ray length
+    and pattern length > longest ray so only one segment shows at a time) */
+  animation: home-streak-travel linear infinite;
+}
+@keyframes home-streak-travel {
+  from { stroke-dashoffset: 65; } /* = dash + gap, one full pattern length, for a seamless loop */
+  to   { stroke-dashoffset: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .home-bg-orb { animation: none; }
+  .home-bg-ribbon, .home-streak { animation: none; }
+  .home-streak { opacity: 0.35; }
 }
 
-/* Radar-style pulse rings behind the brand mark in the welcome header */
+/* Radar-style pulse rings behind the brand mark — kept from the previous
+   pass, it read well and reinforces "this is a live system." */
 .home-pulse-wrap {
   position: relative;
-  width: 60px;
-  height: 60px;
+  width: 64px;
+  height: 64px;
   margin: 0 auto 1.1rem;
+  z-index: 1;
 }
 .home-pulse-ring {
   position: absolute;
@@ -1332,21 +1369,43 @@ tr { transition: background 0.1s ease; }
 .home-pulse-ring:nth-child(3) { animation-delay: 2.4s; }
 @keyframes home-pulse {
   0%   { transform: scale(1);   opacity: 0.55; }
-  100% { transform: scale(2.4); opacity: 0; }
+  100% { transform: scale(2.6); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .home-pulse-ring { animation: none; opacity: 0; }
 }
 
-/* Two-column shell: nav/action column left (wider — where the eye lands
-   first and where every actual click happens), Admin Panel + status
-   column right (narrower — restricted audience, passive information). */
+/* Three-column shell: action rail (left) — welcome hero (center, the
+   visual stage the background lives behind) — admin + status rail
+   (right). Side columns fixed width so the center stays the focal
+   point at any viewport size; stacks to one column on narrow screens. */
 .home-grid {
+  position: relative; /* + z-index below: without this, a static in-flow
+    element paints BEFORE a positioned z-index:0 sibling in stacking order
+    (CSS stacking step 3 vs step 6) — .home-bg would silently cover the
+    real content instead of sitting behind it. */
+  z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 1.5rem;
-  align-items: start;
+  grid-template-columns: 280px minmax(0, 1fr) 280px;
+  gap: 1.75rem;
+  align-items: stretch;
 }
-@media (max-width: 900px) {
+.home-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.home-col-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1.5rem 1rem;
+  position: relative;
+  z-index: 1;
+}
+@media (max-width: 980px) {
   .home-grid { grid-template-columns: 1fr; }
+  .home-col-center { order: -1; }
 }
