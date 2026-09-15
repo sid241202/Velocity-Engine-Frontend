@@ -54,17 +54,23 @@ a plain ConfigMap value.
 ## UI/UX design system
 
 This app's visual language and reusable component set evolved across
-several dedicated design passes. **Current state as of 2026-09-15**:
-Castle-inspired tokens + the component library below are live on `test`
-(ported from the now-deleted `test-castle` on 2026-09-14, commit `8fc96b2`)
-and carried forward onto `revamp` (cut from `test`, current active UI/UX
-redesign branch — see Branches below). **`release` does not have this
-design system yet** — it still runs the original approximated dark palette
-(`--violet: #5865f2`, `--teal: #2dd4bf`). Always confirm which branch
-you're actually on before writing new CSS; don't assume Castle's tokens are
-in effect just because this section describes them. Read this section, the
-Branches section below, and `.claude/STATE.md` before starting UI/UX work
-so it builds on what already exists instead of reinventing it.
+several dedicated design passes. **Current state as of 2026-09-15 (later
+same day)**: Castle-inspired tokens + the component library below are live
+on `test` (ported from the now-deleted `test-castle` on 2026-09-14, commit
+`8fc96b2`), on `revamp` (cut from `test`, this branch), and now **also on
+`release`** — the user asked for `revamp`'s UI/UX work (round 9, commit
+`78529cb`) to be ported straight to `release` directly, bypassing the
+normal `test`→`test-simulation`→`release` cycle for this one promotion,
+with `src/simulation/` stripped out first since `release` runs against the
+real backend. `release` is therefore currently UI-**ahead** of `test`/
+`test-simulation`, an inversion of the usual assumption — don't assume
+branch "distance from release" implies how much UI work it has. Any further
+`revamp` rounds past `78529cb` still need a separate future port if the
+user wants `release` kept in sync. Always confirm which branch you're
+actually on before writing new CSS; don't assume this section is current
+without checking `git log`. Read this section, the Branches section below,
+and `.claude/STATE.md` before starting UI/UX work so it builds on what
+already exists instead of reinventing it.
 
 **Design tokens (Castle-inspired v3, `src/index.css`)** — the full, exact
 palette (extracted directly from https://castle.io's computed styles, not
@@ -81,8 +87,8 @@ approximated):
   layered on top of this scale — see `src/index.css` directly for the
   full derived-variant list rather than assuming only the above exist.
 
-**Reusable component library (`src/components/ui/`)**, live on `test`/
-`revamp`:
+**Reusable component library (`src/components/ui/`)**, live on `release`/
+`test`/`revamp`:
 - `Overlay.jsx` — the shared Modal/Drawer/RuleLink primitive. Every panel's
   click-to-drill-down interaction (entity detail, window/hour detail,
   breach list, rule-name links) is built on this — extend it rather than
@@ -96,15 +102,16 @@ approximated):
 - `ChartSwitcher.jsx` — tabbed control for flipping one chart between
   multiple views of the same underlying data.
 
-**`revamp`-specific additions on top of the above** (the ongoing
-customer-friendliness redesign — see `.claude/STATE.md` for full
-round-by-round detail, this is just the durable summary): `HomeView.jsx`
-(new tab-based landing screen replacing the old default tab),
-`RulesBrowser.jsx` (card-list landing state for Rule Summary),
-`SimpleThresholdEditor.jsx` (plain-language alternative to the raw AND/OR
-JEXL tree, behind a Simple/Advanced toggle in Rule Builder), and a
-template-picker flow (4 starter patterns + "start from a blank rule") as
-Rule Builder's new default landing state.
+**Customer-friendliness redesign, now also on `release`** (originated on
+`revamp` — see `.claude/STATE.md` for full round-by-round detail, this is
+just the durable summary): `HomeView.jsx` (new tab-based landing screen
+replacing the old default tab), `RulesBrowser.jsx` (card-list landing
+state for Rule Summary), `SimpleThresholdEditor.jsx` (plain-language
+alternative to the raw AND/OR JEXL tree, behind a Simple/Advanced toggle
+in Rule Builder), and a template-picker flow (4 starter patterns +
+"start from a blank rule") as Rule Builder's new default landing state.
+`test`/`test-simulation` do not have this yet (see UI/UX design system
+state note above).
 
 **UX principles established and validated across this project's iterations
 — hold new work to the same bar:**
@@ -196,16 +203,20 @@ branch set changes often (four branches were deleted in one batch on
 As of 2026-09-15:
 
 - `release` — stable/production branch. Has the full RBAC surface (merged
-  2026-07-16, `70b2005`) and the real WSO2/OIDC login flow (merged
-  2026-07-20, `e1e7674`). Does **not** yet have the Castle-inspired design
-  system (see UI/UX design system above) or any of the `revamp` UI/UX
-  redesign work — nothing merges into `release` without the user explicitly
-  saying so.
+  2026-07-16, `70b2005`), the real WSO2/OIDC login flow (merged 2026-07-20,
+  `e1e7674`), and **now also** the Castle-inspired design system plus the
+  `revamp` UI/UX redesign through round 9 (ported directly from `revamp`
+  `78529cb` on 2026-09-15, simulation code stripped — see UI/UX design
+  system above). Nothing merges into `release` without the user explicitly
+  saying so; this one promotion was.
 - `test` — the design/feature-integration branch, cut from `release`. Has
   the Castle-inspired design system ported in (2026-09-14, `8fc96b2`,
   reconciled against everything `release` gained since the old `test-castle`
-  diverged — WSO2/RBAC, Admin Panel). This is the intended landing spot for
-  UI/UX work once it's approved on `revamp` (see below).
+  diverged — WSO2/RBAC, Admin Panel), but not yet the `revamp` UI/UX
+  redesign work that `release` gained on 2026-09-15 (above). This is the
+  intended landing spot for that work once it's approved on `revamp` (see
+  below) — still pending as of this writing, since the `release` port
+  bypassed this branch.
 - `test-simulation` — verification branch for seeing UI/UX work run against
   simulated live data on localhost before it goes to `release`. Standing
   dev cycle: **`test` → `test-simulation` → `release`** — build/refine on
@@ -218,13 +229,19 @@ As of 2026-09-15:
   UI/UX redesign is being built and iterated on directly here, with the
   `test-simulation` module cherry-picked in and retuned for fast live
   discussion, so the user can react to real running changes round-by-round
-  without a separate port step each time. **Do not push `revamp` to
-  `github`** — local commits only, per the user's explicit instruction;
-  this is a deliberate, standing exception to the auto-sync rule for this
-  branch specifically (see root `CLAUDE.md`'s autonomy section). Once the
-  user is satisfied with where `revamp` lands, the plan is to port the
-  agreed changes into `test`, verify via `test-simulation` as usual, then
-  merge `test` → `release`. Full round-by-round history of what's been
+  without a separate port step each time. **Update 2026-09-15 (later same
+  day)**: `revamp`'s round-9 state (`78529cb`) was ported straight to
+  `release` at the user's explicit request (see `release`'s bullet above),
+  and the user then explicitly asked for `revamp` itself to be pushed to
+  `github` too — it now tracks `github/revamp` and is no longer
+  local-commits-only. (The earlier rule — commit here freely but never
+  push — was a deliberate standing exception per an explicit 2026-09-15
+  instruction; the user's later-same-day instruction to push overrides it.
+  Don't assume either direction without checking `git log
+  revamp..github/revamp` / `github/revamp..revamp` first, since this could
+  change again.) If work continues here, remember `release` already has
+  round 9 — a future port to `release` only needs to carry whatever lands
+  on `revamp` *after* `78529cb`. Full round-by-round history of what's been
   built on `revamp` lives in `.claude/STATE.md` — read it before continuing
   this work in a new session rather than re-deriving it from diffs.
 
