@@ -1,4 +1,4 @@
-FROM harbor-registry-non-prod.uidai.gov.in/base/node:24-alpine AS build
+FROM hbdc-harbor-registry-non-prod.uidai.net.in/base/node:24-alpine AS build
 WORKDIR /app
 
 RUN npm config set registry http://10.10.206.59:8080/repository/npm-proxy/
