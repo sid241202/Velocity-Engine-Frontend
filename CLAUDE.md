@@ -54,18 +54,21 @@ a plain ConfigMap value.
 ## UI/UX design system
 
 This app's visual language and reusable component set evolved across
-several dedicated design passes, all on sandbox branches (never directly on
-`release` — see Branches below for exactly which branch has what). Read
-this before starting UI/UX work so it builds on what already exists instead
-of reinventing it.
+several dedicated design passes. **Current state as of 2026-09-15**:
+Castle-inspired tokens + the component library below are live on `test`
+(ported from the now-deleted `test-castle` on 2026-09-14, commit `8fc96b2`)
+and carried forward onto `revamp` (cut from `test`, current active UI/UX
+redesign branch — see Branches below). **`release` does not have this
+design system yet** — it still runs the original approximated dark palette
+(`--violet: #5865f2`, `--teal: #2dd4bf`). Always confirm which branch
+you're actually on before writing new CSS; don't assume Castle's tokens are
+in effect just because this section describes them. Read this section, the
+Branches section below, and `.claude/STATE.md` before starting UI/UX work
+so it builds on what already exists instead of reinventing it.
 
-**Design tokens (Castle-inspired v3, `src/index.css`)** — currently live on
-`test-castle` only, **not yet ported to `release`** (release still runs the
-original approximated dark palette: `--violet: #5865f2`, `--teal:
-#2dd4bf`). Confirm which of these you're targeting before writing new CSS —
-don't assume Castle's tokens are already in effect unless you've checked
-the actual branch. The full, exact palette (extracted directly from
-https://castle.io's computed styles, not approximated):
+**Design tokens (Castle-inspired v3, `src/index.css`)** — the full, exact
+palette (extracted directly from https://castle.io's computed styles, not
+approximated):
 - Neutral scale: `--slate-1: #111113` (page bg) → `--slate-12: #edeef0`
   (primary text), with `2 #18191b, 3 #212225, 4 #272a2d, 5 #2e3135,
   6 #363a3f, 7 #43484e, 8 #5a6169, 9 #696e77, 10 #777b84, 11 #b0b4ba`
@@ -78,9 +81,8 @@ https://castle.io's computed styles, not approximated):
   layered on top of this scale — see `src/index.css` directly for the
   full derived-variant list rather than assuming only the above exist.
 
-**Reusable component library (`src/components/ui/`)** — built across the
-interactivity and Castle-fidelity passes, all still `test-castle`-only
-except where noted:
+**Reusable component library (`src/components/ui/`)**, live on `test`/
+`revamp`:
 - `Overlay.jsx` — the shared Modal/Drawer/RuleLink primitive. Every panel's
   click-to-drill-down interaction (entity detail, window/hour detail,
   breach list, rule-name links) is built on this — extend it rather than
@@ -93,6 +95,16 @@ except where noted:
   for entity relationship views.
 - `ChartSwitcher.jsx` — tabbed control for flipping one chart between
   multiple views of the same underlying data.
+
+**`revamp`-specific additions on top of the above** (the ongoing
+customer-friendliness redesign — see `.claude/STATE.md` for full
+round-by-round detail, this is just the durable summary): `HomeView.jsx`
+(new tab-based landing screen replacing the old default tab),
+`RulesBrowser.jsx` (card-list landing state for Rule Summary),
+`SimpleThresholdEditor.jsx` (plain-language alternative to the raw AND/OR
+JEXL tree, behind a Simple/Advanced toggle in Rule Builder), and a
+template-picker flow (4 starter patterns + "start from a blank rule") as
+Rule Builder's new default landing state.
 
 **UX principles established and validated across this project's iterations
 — hold new work to the same bar:**
@@ -169,33 +181,52 @@ by actually running the app, not by code review alone.
   independently re-verifies every permission-gated action.
 - `src/components/PermissionGuard.jsx` — page/tab-panel-level gate,
   defaults fallback to `AccessDenied` (403 panel) instead of nothing.
-- No debug-identity switcher exists on this branch — `X-Debug-User-Id` was a
-  pre-WSO2 `demo`-branch-only concept; `demo` and `release` are deliberately
-  diverged on identity (`demo` still uses the header shim), see `../CLAUDE.md`.
+- No debug-identity switcher exists in this repo's own auth flow —
+  `X-Debug-User-Id` was a pre-WSO2 concept. The frontend has no `demo`
+  branch any more (deleted 2026-09-14, see Branches below) — don't assume
+  a currently-diverged frontend `demo` exists; that's now backend-only
+  (backend's `demo` branch still uses the header-shim flow against its own
+  diverged schema, see `../CLAUDE.md`).
 
 ## Branches
 
-- `release` — stable/demo branch. Has the full RBAC surface merged in
-  (2026-07-16, `--no-ff` merge commit `70b2005` — real backend calls only,
-  no `SIMULATION_MODE`/mock-data fallback), *and* the real WSO2/OIDC PKCE
-  login flow merged in (2026-07-20, `wso2 integrated in version 3.0.0`,
-  commit `e1e7674`). Only `release`, `demo`, and `test-simulation-refactored`
-  exist as branches in this repo now; the original `rbac` and
-  `test-simulation` branches have been merged and deleted.
-- `demo` — a separate, deliberately-diverged branch, **not** merged into
-  `release`. Still uses the pre-WSO2 `X-Debug-User-Id` debug-identity flow
-  against the backend's `demo` branch (whose RBAC/rule-store storage layer
-  differs from `release`'s — verify demo's own `CLAUDE.md` and code
-  directly rather than assuming parity with this file) and may still have
-  single-rule selection / a per-group chart filter not present on `release`.
-- `test-simulation-refactored` — dedicated simulation branch (refactored
-  plain-language UI pass + `SIMULATION_MODE`/mock data generators); the only
-  simulation branch left. Deliberately never merged into `release` — still
-  requires explicit permission to merge.
-- The original `test-simulation` branch (pre-refactor) was superseded by
-  `test-simulation-refactored` and deleted 2026-07-16, both locally and on
-  `github`, at the user's explicit request — its full history is preserved
-  via `test-simulation-refactored`'s ancestry, nothing was lost.
+**Verify with `git branch -a` before trusting this section** — this repo's
+branch set changes often (four branches were deleted in one batch on
+2026-09-14, and two new ones plus a fifth-then-deleted have appeared since).
+As of 2026-09-15:
+
+- `release` — stable/production branch. Has the full RBAC surface (merged
+  2026-07-16, `70b2005`) and the real WSO2/OIDC login flow (merged
+  2026-07-20, `e1e7674`). Does **not** yet have the Castle-inspired design
+  system (see UI/UX design system above) or any of the `revamp` UI/UX
+  redesign work — nothing merges into `release` without the user explicitly
+  saying so.
+- `test` — the design/feature-integration branch, cut from `release`. Has
+  the Castle-inspired design system ported in (2026-09-14, `8fc96b2`,
+  reconciled against everything `release` gained since the old `test-castle`
+  diverged — WSO2/RBAC, Admin Panel). This is the intended landing spot for
+  UI/UX work once it's approved on `revamp` (see below).
+- `test-simulation` — verification branch for seeing UI/UX work run against
+  simulated live data on localhost before it goes to `release`. Standing
+  dev cycle: **`test` → `test-simulation` → `release`** — build/refine on
+  `test`, port to `test-simulation` to eyeball it against the simulation,
+  then merge `test` into `release` once approved. See
+  [[project_velocity_engine_test_simulation_branch]] (memory) for the
+  simulation architecture itself.
+- `revamp` — cut from `test` (`8fc96b2`), the **current, temporary
+  exception** to the standard cycle: an end-to-end customer-friendliness
+  UI/UX redesign is being built and iterated on directly here, with the
+  `test-simulation` module cherry-picked in and retuned for fast live
+  discussion, so the user can react to real running changes round-by-round
+  without a separate port step each time. **Do not push `revamp` to
+  `github`** — local commits only, per the user's explicit instruction;
+  this is a deliberate, standing exception to the auto-sync rule for this
+  branch specifically (see root `CLAUDE.md`'s autonomy section). Once the
+  user is satisfied with where `revamp` lands, the plan is to port the
+  agreed changes into `test`, verify via `test-simulation` as usual, then
+  merge `test` → `release`. Full round-by-round history of what's been
+  built on `revamp` lives in `.claude/STATE.md` — read it before continuing
+  this work in a new session rather than re-deriving it from diffs.
 
 ## Dev server
 
@@ -204,3 +235,13 @@ by actually running the app, not by code review alone.
 `process.env.PORT ? Number(process.env.PORT) : 3000` specifically so a
 preview tool can run on an alternate port without a stray process on 3000
 blocking it). Proxies `/api/*` to `http://localhost:8000` (the backend).
+
+**The user typically runs their own `npm run dev` directly at
+`localhost:3000`**, separate from whatever port a session's own preview
+tooling uses (e.g. `3022` per `E:\Projects\.claude\launch.json`). Vite HMR
+picks up file edits live on whichever process is actually running — a
+session's own preview instance and the user's real tab both reflect the
+same code, but they are not the same browser tab. When there's a "why
+don't I see this change" moment, check `localhost:3000` (the user's real
+tab) directly rather than assuming your own preview port is what they're
+looking at.
