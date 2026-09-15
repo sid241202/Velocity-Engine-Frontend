@@ -1248,32 +1248,91 @@ tr { transition: background 0.1s ease; }
 .chart-switcher-tab:hover { color: var(--text-1); }
 .chart-switcher-tab.active { background: var(--violet); color: #fff; }
 
-/* Rule Builder template picker — "start from a blank rule" as a real,
-   prominent button on the left (first in reading order), templates in a
-   fixed 2-column grid on the right. The grid is pinned to 2 columns
-   (not auto-fit) so it keeps real height even on very wide screens —
-   auto-fit was cramming all 4 templates into one row at wide viewports,
-   which squashed the grid down to a single card's height and made the
-   "blank rule" button end up nearly the same size as every template
-   card instead of reading as its own distinct, taller action. The blank
-   button has a fixed width (not flex-grow) so it stays a deliberate
-   sidebar-sized column instead of stretching to fill leftover space. */
+/* Rule Builder template picker — "start from a blank rule" and the
+   templates are two genuinely separate bounded panels (own border +
+   header strip, matching the same visual language as the form's own
+   <Section> boxes below), not just differently-styled items sitting in
+   one shared row — otherwise they read as one continuous list instead
+   of two distinct alternatives. `align-items: stretch` on the row plus
+   each panel being its own flex column (header fixed, body flex:1)
+   means both panels always match height, whichever is naturally taller;
+   the blank panel's body centers its button in that height. The
+   templates grid is pinned to a fixed 2 columns (not auto-fit) so it
+   keeps real 2-row height even on very wide screens instead of cramming
+   all 4 templates into one short row. */
 .template-picker-row {
   display: flex;
   flex-wrap: wrap;
   align-items: stretch;
   gap: 1.5rem;
 }
-.template-picker-blank {
-  flex: 0 0 300px;
+.template-picker-panel {
   display: flex;
   flex-direction: column;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.template-picker-panel-blank { flex: 0 0 300px; }
+.template-picker-panel-templates { flex: 1 1 480px; }
+.template-picker-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1rem;
+  background: var(--surface-3);
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+.template-picker-panel-header span {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-1);
+  letter-spacing: 0.005em;
+}
+.template-picker-panel-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
   justify-content: center;
-  min-height: 260px;
-  padding: 1.5rem;
+  flex-shrink: 0;
+}
+.template-picker-panel-body {
+  flex: 1;
+  display: flex;
+  padding: 1rem;
+}
+.template-picker-panel-blank .template-picker-panel-body {
+  align-items: center;
+}
+.template-picker-blank-btn {
+  width: 100%;
+  background: none;
+  border: 1px dashed var(--border-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.template-picker-blank-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: rgba(var(--violet-rgb),0.12);
+  border: 1px solid rgba(var(--violet-rgb),0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 .template-picker-grid {
-  flex: 1 1 480px;
+  flex: 1;
   display: grid;
   grid-template-columns: repeat(2, minmax(220px, 1fr));
   gap: 0.75rem;

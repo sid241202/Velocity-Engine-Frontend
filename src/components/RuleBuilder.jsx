@@ -591,58 +591,80 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
         </div>
 
         <div className="template-picker-row" style={{ marginTop: '1.1rem' }}>
-          <button
-            type="button"
-            onClick={() => { setShowTemplatePicker(false); setBuilderMode('simple'); }}
-            className="card template-picker-blank"
-            style={{
-              textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column',
-              justifyContent: 'center', gap: '0.75rem', border: '1px dashed var(--border-2)',
-              transition: 'border-color 0.15s ease, background 0.15s ease',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--violet-light)'; e.currentTarget.style.background = 'rgba(var(--violet-rgb),0.06)'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-2)'; e.currentTarget.style.background = ''; }}
-          >
-            <div style={{
-              width: 46, height: 46, borderRadius: 12,
-              background: 'rgba(var(--violet-rgb),0.12)',
-              border: '1px solid rgba(var(--violet-rgb),0.3)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            }}>
-              <FileEdit size={22} color="var(--violet-light)" strokeWidth={2.2} />
+          {/* Left panel — a separate bounded box, not just another card in
+              the templates row, so it reads as a distinct alternative
+              ("either start blank, or pick one below") rather than one
+              more option blended into the grid. */}
+          <div className="template-picker-panel template-picker-panel-blank">
+            <div className="template-picker-panel-header">
+              <div className="template-picker-panel-icon" style={{
+                background: 'color-mix(in srgb, var(--violet-light) 8%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--violet-light) 15%, transparent)',
+              }}>
+                <FileEdit size={13} color="var(--violet-light)" strokeWidth={2.2} />
+              </div>
+              <span>Start From Scratch</span>
             </div>
-            <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-1)' }}>Start from a blank rule</div>
-            <div style={{ fontSize: '0.82rem', color: 'var(--text-3)', lineHeight: 1.55 }}>
-              Build every condition yourself — best when none of these templates quite fit.
-            </div>
-          </button>
-
-          <div className="template-picker-grid">
-            {RULE_TEMPLATES.map(tpl => (
+            <div className="template-picker-panel-body">
               <button
-                key={tpl.id}
                 type="button"
-                onClick={() => applyTemplate(tpl)}
-                className="card"
-                style={{
-                  textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '0.5rem',
-                  border: '1px solid var(--border)', transition: 'border-color 0.15s ease, transform 0.1s ease',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = tpl.iconColor; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+                onClick={() => { setShowTemplatePicker(false); setBuilderMode('simple'); }}
+                className="template-picker-blank-btn"
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--violet-light)'; e.currentTarget.style.background = 'rgba(var(--violet-rgb),0.06)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-2)'; e.currentTarget.style.background = ''; }}
               >
-                <div style={{
-                  width: 30, height: 30, borderRadius: 8,
-                  background: `color-mix(in srgb, ${tpl.iconColor} 12%, transparent)`,
-                  border: `1px solid color-mix(in srgb, ${tpl.iconColor} 25%, transparent)`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                }}>
-                  <tpl.icon size={15} color={tpl.iconColor} strokeWidth={2.2} />
+                <div className="template-picker-blank-icon">
+                  <FileEdit size={22} color="var(--violet-light)" strokeWidth={2.2} />
                 </div>
-                <div style={{ fontWeight: 700, fontSize: '0.86rem', color: 'var(--text-1)' }}>{tpl.title}</div>
-                <div style={{ fontSize: '0.76rem', color: 'var(--text-3)', lineHeight: 1.5 }}>{tpl.description}</div>
+                <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-1)' }}>Start from a blank rule</div>
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-3)', lineHeight: 1.55 }}>
+                  Build every condition yourself — best when none of these templates quite fit.
+                </div>
               </button>
-            ))}
+            </div>
+          </div>
+
+          {/* Right panel — the templates, grouped in their own box so the
+              two choices don't visually run together. */}
+          <div className="template-picker-panel template-picker-panel-templates">
+            <div className="template-picker-panel-header">
+              <div className="template-picker-panel-icon" style={{
+                background: 'color-mix(in srgb, var(--teal) 8%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--teal) 15%, transparent)',
+              }}>
+                <BookOpen size={13} color="var(--teal)" strokeWidth={2.2} />
+              </div>
+              <span>Or Choose a Template</span>
+            </div>
+            <div className="template-picker-panel-body">
+              <div className="template-picker-grid">
+                {RULE_TEMPLATES.map(tpl => (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    onClick={() => applyTemplate(tpl)}
+                    className="card"
+                    style={{
+                      textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '0.5rem',
+                      border: '1px solid var(--border)', transition: 'border-color 0.15s ease, transform 0.1s ease',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = tpl.iconColor; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+                  >
+                    <div style={{
+                      width: 30, height: 30, borderRadius: 8,
+                      background: `color-mix(in srgb, ${tpl.iconColor} 12%, transparent)`,
+                      border: `1px solid color-mix(in srgb, ${tpl.iconColor} 25%, transparent)`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                    }}>
+                      <tpl.icon size={15} color={tpl.iconColor} strokeWidth={2.2} />
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: '0.86rem', color: 'var(--text-1)' }}>{tpl.title}</div>
+                    <div style={{ fontSize: '0.76rem', color: 'var(--text-3)', lineHeight: 1.5 }}>{tpl.description}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>
