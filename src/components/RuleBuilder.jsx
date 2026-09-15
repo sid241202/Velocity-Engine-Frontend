@@ -604,15 +604,15 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
             onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-2)'; e.currentTarget.style.background = ''; }}
           >
             <div style={{
-              width: 38, height: 38, borderRadius: 10,
+              width: 46, height: 46, borderRadius: 12,
               background: 'rgba(var(--violet-rgb),0.12)',
               border: '1px solid rgba(var(--violet-rgb),0.3)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
             }}>
-              <FileEdit size={18} color="var(--violet-light)" strokeWidth={2.2} />
+              <FileEdit size={22} color="var(--violet-light)" strokeWidth={2.2} />
             </div>
-            <div style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--text-1)' }}>Start from a blank rule</div>
-            <div style={{ fontSize: '0.78rem', color: 'var(--text-3)', lineHeight: 1.5 }}>
+            <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-1)' }}>Start from a blank rule</div>
+            <div style={{ fontSize: '0.82rem', color: 'var(--text-3)', lineHeight: 1.55 }}>
               Build every condition yourself — best when none of these templates quite fit.
             </div>
           </button>

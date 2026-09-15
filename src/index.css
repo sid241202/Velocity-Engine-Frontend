@@ -1248,27 +1248,39 @@ tr { transition: background 0.1s ease; }
 .chart-switcher-tab:hover { color: var(--text-1); }
 .chart-switcher-tab.active { background: var(--violet); color: #fff; }
 
-/* Rule Builder template picker — "start from a blank rule" as a real
-   button on the left (first in reading order), templates in a grid on
-   the right. Wraps to a stacked single column on narrow viewports,
-   blank-rule button still first. */
+/* Rule Builder template picker — "start from a blank rule" as a real,
+   prominent button on the left (first in reading order), templates in a
+   fixed 2-column grid on the right. The grid is pinned to 2 columns
+   (not auto-fit) so it keeps real height even on very wide screens —
+   auto-fit was cramming all 4 templates into one row at wide viewports,
+   which squashed the grid down to a single card's height and made the
+   "blank rule" button end up nearly the same size as every template
+   card instead of reading as its own distinct, taller action. The blank
+   button has a fixed width (not flex-grow) so it stays a deliberate
+   sidebar-sized column instead of stretching to fill leftover space. */
 .template-picker-row {
   display: flex;
   flex-wrap: wrap;
   align-items: stretch;
-  gap: 1.25rem;
+  gap: 1.5rem;
 }
 .template-picker-blank {
-  flex: 1 1 240px;
-  max-width: 300px;
-  padding: 1.25rem;
+  flex: 0 0 300px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 260px;
+  padding: 1.5rem;
 }
 .template-picker-grid {
-  flex: 3 1 480px;
+  flex: 1 1 480px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
   gap: 0.75rem;
   align-content: start;
+}
+@media (max-width: 700px) {
+  .template-picker-grid { grid-template-columns: 1fr; }
 }
 
 /* ================================================================
