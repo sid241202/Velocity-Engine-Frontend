@@ -12,7 +12,7 @@ import RuleBuilder from './RuleBuilder';
  * sample rule reference) is still available, just opt-in — see the
  * "Rule Reference" button inside RuleBuilder itself.
  */
-export default function RuleBuilderPage({ rules, fetchRules, editingRule, onEditComplete, onGoToHistorical, onProductionized }) {
+export default function RuleBuilderPage({ rules, fetchRules, editingRule, onEditComplete, onGoToHistorical, onGoToSummary }) {
   return (
     <RuleBuilder
       rules={rules}
@@ -20,7 +20,7 @@ export default function RuleBuilderPage({ rules, fetchRules, editingRule, onEdit
       editingRule={editingRule}
       onEditComplete={onEditComplete}
       onGoToHistorical={onGoToHistorical}
-      onProductionized={onProductionized}
+      onGoToSummary={onGoToSummary}
     />
   );
 }

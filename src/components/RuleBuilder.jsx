@@ -5,8 +5,6 @@ import SimpleThresholdEditor from './SimpleThresholdEditor';
 import VisualFilterBuilder, { processFilterTree } from './VisualFilterBuilder';
 import FieldSelect from './FieldSelect';
 import RuleReferenceModal from './RuleReferenceModal';
-import RequirePermission from './RequirePermission';
-import { PERMISSIONS } from '../permissions';
 import { Modal } from './ui/Overlay';
 import { API_BASE, DEFAULT_SOURCE_TOPIC, DEFAULT_WINDOW_SIZE_SEC, DEFAULT_SLIDE_SEC } from '../config/appConfig';
 import { isValidRuleId, isNonEmpty, isValidJexlAlias, isPositiveInt } from '../utils/validators';
@@ -236,7 +234,7 @@ function describeSeconds(totalSeconds) {
 }
 
 /* ─── Main Component ─────────────────────────────────────────── */
-export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onEditComplete, onGoToHistorical, onProductionized }) {
+export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onEditComplete, onGoToHistorical, onGoToSummary }) {
 
   // ── Core ───────────────────────────────────────────────────────
   const [ruleName, setRuleName]     = useState('');
@@ -328,7 +326,6 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
   // Shown after a brand-new rule is saved — offers the two logical next
   // steps instead of a dead-end "OK" alert with nowhere to go.
   const [postSaveRule, setPostSaveRule] = useState(null); // { id, name } | null
-  const [isPublishingNew, setIsPublishingNew] = useState(false);
 
   // Simple mode uses only the fields it shows — reset the advanced-only
   // ones to their sensible defaults so nothing hidden silently persists
@@ -559,26 +556,13 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
     dismissPostSave();
   };
 
-  const publishNewRuleFromModal = async () => {
-    if (!postSaveRule || isPublishingNew) return;
-    setIsPublishingNew(true);
-    try {
-      const res = await fetch(`${API_BASE}/rules/${postSaveRule.id}/prod`, {
-        method: 'POST',
-        headers: await getAuthHeaders(),
-      });
-      if (res.ok) {
-        fetchRules();
-        if (onProductionized) onProductionized(postSaveRule.id);
-        dismissPostSave();
-      } else {
-        alert("Couldn't publish right now — the rule is still saved as a draft. You can publish it from Rule Summary.");
-      }
-    } catch {
-      alert("Network error — the rule is still saved as a draft. You can publish it from Rule Summary.");
-    } finally {
-      setIsPublishingNew(false);
-    }
+  // Deliberately does NOT call the /prod publish endpoint — the rule stays
+  // a draft. This just takes the user to its Summary page to review (and,
+  // if they choose, publish from there) rather than going live sight-unseen.
+  const reviewNewRuleFromModal = () => {
+    if (!postSaveRule) return;
+    if (onGoToSummary) onGoToSummary(postSaveRule.id);
+    dismissPostSave();
   };
 
   const sinkCount = [aggSinkEnabled, anomalySinkEnabled, anomalyStoreSinkEnabled].filter(Boolean).length;
@@ -606,42 +590,61 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.75rem', marginTop: '1.1rem' }}>
-          {RULE_TEMPLATES.map(tpl => (
-            <button
-              key={tpl.id}
-              type="button"
-              onClick={() => applyTemplate(tpl)}
-              className="card"
-              style={{
-                textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '0.5rem',
-                border: '1px solid var(--border)', transition: 'border-color 0.15s ease, transform 0.1s ease',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = tpl.iconColor; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; }}
-            >
-              <div style={{
-                width: 30, height: 30, borderRadius: 8,
-                background: `color-mix(in srgb, ${tpl.iconColor} 12%, transparent)`,
-                border: `1px solid color-mix(in srgb, ${tpl.iconColor} 25%, transparent)`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-              }}>
-                <tpl.icon size={15} color={tpl.iconColor} strokeWidth={2.2} />
-              </div>
-              <div style={{ fontWeight: 700, fontSize: '0.86rem', color: 'var(--text-1)' }}>{tpl.title}</div>
-              <div style={{ fontSize: '0.76rem', color: 'var(--text-3)', lineHeight: 1.5 }}>{tpl.description}</div>
-            </button>
-          ))}
-        </div>
+        <div className="template-picker-row" style={{ marginTop: '1.1rem' }}>
+          <button
+            type="button"
+            onClick={() => { setShowTemplatePicker(false); setBuilderMode('simple'); }}
+            className="card template-picker-blank"
+            style={{
+              textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column',
+              justifyContent: 'center', gap: '0.75rem', border: '1px dashed var(--border-2)',
+              transition: 'border-color 0.15s ease, background 0.15s ease',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--violet-light)'; e.currentTarget.style.background = 'rgba(var(--violet-rgb),0.06)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-2)'; e.currentTarget.style.background = ''; }}
+          >
+            <div style={{
+              width: 38, height: 38, borderRadius: 10,
+              background: 'rgba(var(--violet-rgb),0.12)',
+              border: '1px solid rgba(var(--violet-rgb),0.3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}>
+              <FileEdit size={18} color="var(--violet-light)" strokeWidth={2.2} />
+            </div>
+            <div style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--text-1)' }}>Start from a blank rule</div>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-3)', lineHeight: 1.5 }}>
+              Build every condition yourself — best when none of these templates quite fit.
+            </div>
+          </button>
 
-        <button
-          type="button"
-          className="btn btn-ghost"
-          style={{ marginTop: '1rem', fontSize: '0.78rem' }}
-          onClick={() => { setShowTemplatePicker(false); setBuilderMode('simple'); }}
-        >
-          <FileEdit size={13} /> Start from a blank rule instead
-        </button>
+          <div className="template-picker-grid">
+            {RULE_TEMPLATES.map(tpl => (
+              <button
+                key={tpl.id}
+                type="button"
+                onClick={() => applyTemplate(tpl)}
+                className="card"
+                style={{
+                  textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '0.5rem',
+                  border: '1px solid var(--border)', transition: 'border-color 0.15s ease, transform 0.1s ease',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = tpl.iconColor; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+              >
+                <div style={{
+                  width: 30, height: 30, borderRadius: 8,
+                  background: `color-mix(in srgb, ${tpl.iconColor} 12%, transparent)`,
+                  border: `1px solid color-mix(in srgb, ${tpl.iconColor} 25%, transparent)`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                }}>
+                  <tpl.icon size={15} color={tpl.iconColor} strokeWidth={2.2} />
+                </div>
+                <div style={{ fontWeight: 700, fontSize: '0.86rem', color: 'var(--text-1)' }}>{tpl.title}</div>
+                <div style={{ fontSize: '0.76rem', color: 'var(--text-3)', lineHeight: 1.5 }}>{tpl.description}</div>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -1361,31 +1364,25 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
             What would you like to do next?
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-            <button type="button" className="btn" style={{ background: 'rgba(var(--violet-rgb),0.15)', border: '1px solid rgba(var(--violet-rgb),0.35)', color: 'var(--violet-light)', justifyContent: 'flex-start', fontSize: '0.85rem', padding: '0.75rem 1rem' }} onClick={goToHistoricalFromModal}>
-              <History size={16} />
-              <span style={{ textAlign: 'left' }}>
-                <span style={{ display: 'block', fontWeight: 600 }}>Test it in Historical Replay</span>
-                <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-3)', fontWeight: 400 }}>See how this rule would have performed on real past traffic — drafts can only be replayed, not run live.</span>
+            <button type="button" className="btn" style={{ background: 'rgba(var(--violet-rgb),0.15)', border: '1px solid rgba(var(--violet-rgb),0.35)', color: 'var(--violet-light)', justifyContent: 'flex-start', alignItems: 'flex-start', fontSize: '0.85rem', padding: '0.75rem 1rem' }} onClick={goToHistoricalFromModal}>
+              <History size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+              <span style={{ textAlign: 'left', whiteSpace: 'normal', flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontWeight: 600, lineHeight: 1.3 }}>Test it in Historical Replay</span>
+                <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-3)', fontWeight: 400, lineHeight: 1.45, marginTop: 2 }}>See how this rule would have performed on real past traffic — drafts can only be replayed, not run live.</span>
               </span>
             </button>
-            <RequirePermission permission={PERMISSIONS.RULES_PUBLISH}>
-              {(allowed) => (
-                <button
-                  type="button"
-                  className="btn btn-accent"
-                  style={{ justifyContent: 'flex-start', fontSize: '0.85rem', padding: '0.75rem 1rem' }}
-                  onClick={publishNewRuleFromModal}
-                  disabled={isPublishingNew || !allowed}
-                  title={!allowed ? "Your role doesn't have permission to publish rules (requires rules:publish)" : undefined}
-                >
-                  <Send size={16} />
-                  <span style={{ textAlign: 'left' }}>
-                    <span style={{ display: 'block', fontWeight: 600 }}>{isPublishingNew ? 'Publishing…' : 'Publish it now'}</span>
-                    <span style={{ display: 'block', fontSize: '0.72rem', opacity: 0.85, fontWeight: 400 }}>Makes it live and takes you to its summary page.</span>
-                  </span>
-                </button>
-              )}
-            </RequirePermission>
+            <button
+              type="button"
+              className="btn btn-accent"
+              style={{ justifyContent: 'flex-start', alignItems: 'flex-start', fontSize: '0.85rem', padding: '0.75rem 1rem' }}
+              onClick={reviewNewRuleFromModal}
+            >
+              <Send size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+              <span style={{ textAlign: 'left', whiteSpace: 'normal', flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontWeight: 600, lineHeight: 1.3 }}>Review before publishing</span>
+                <span style={{ display: 'block', fontSize: '0.72rem', opacity: 0.85, fontWeight: 400, lineHeight: 1.45, marginTop: 2 }}>Takes you to its summary page — it stays a draft until you publish it from there.</span>
+              </span>
+            </button>
             <button type="button" className="btn btn-ghost" style={{ justifyContent: 'center', fontSize: '0.8rem' }} onClick={dismissPostSave}>
               Maybe later
             </button>

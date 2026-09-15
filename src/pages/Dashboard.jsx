@@ -328,7 +328,7 @@ export default function Dashboard() {
                     editingRule={editingRule}
                     onEditComplete={handleEditComplete}
                     onGoToHistorical={goToHistoricalForRule}
-                    onProductionized={navigateToSummary}
+                    onGoToSummary={navigateToSummary}
                   />
                 </PermissionGuard>
               </ErrorBoundary>
