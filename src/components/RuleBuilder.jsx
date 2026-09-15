@@ -590,18 +590,17 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
           </div>
         </div>
 
-        <div className="template-picker-row" style={{ marginTop: '1.1rem' }}>
-          {/* Left panel — a separate bounded box, not just another card in
-              the templates row, so it reads as a distinct alternative
-              ("either start blank, or pick one below") rather than one
-              more option blended into the grid. */}
+        <div className="template-picker-stack" style={{ marginTop: '1.1rem' }}>
+          {/* Top panel — the primary action, first in reading order and
+              full-width so it reads as the headline choice rather than
+              competing for space against the templates grid. */}
           <div className="template-picker-panel template-picker-panel-blank">
             <div className="template-picker-panel-header">
               <div className="template-picker-panel-icon" style={{
                 background: 'color-mix(in srgb, var(--violet-light) 8%, transparent)',
                 border: '1px solid color-mix(in srgb, var(--violet-light) 15%, transparent)',
               }}>
-                <FileEdit size={13} color="var(--violet-light)" strokeWidth={2.2} />
+                <FileEdit size={16} color="var(--violet-light)" strokeWidth={2.2} />
               </div>
               <span>Start From Scratch</span>
             </div>
@@ -614,25 +613,29 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
                 onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-2)'; e.currentTarget.style.background = ''; }}
               >
                 <div className="template-picker-blank-icon">
-                  <FileEdit size={22} color="var(--violet-light)" strokeWidth={2.2} />
+                  <FileEdit size={28} color="var(--violet-light)" strokeWidth={2.2} />
                 </div>
-                <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-1)' }}>Start from a blank rule</div>
-                <div style={{ fontSize: '0.82rem', color: 'var(--text-3)', lineHeight: 1.55 }}>
-                  Build every condition yourself — best when none of these templates quite fit.
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 800, fontSize: '1.3rem', color: 'var(--text-1)', letterSpacing: '-0.01em' }}>Start from a blank rule</div>
+                  <div style={{ fontSize: '0.9rem', color: 'var(--text-3)', lineHeight: 1.5, marginTop: '0.3rem' }}>
+                    Build every condition yourself — best when none of these templates quite fit.
+                  </div>
                 </div>
+                <ChevronRight size={22} color="var(--text-3)" style={{ flexShrink: 0 }} />
               </button>
             </div>
           </div>
 
-          {/* Right panel — the templates, grouped in their own box so the
-              two choices don't visually run together. */}
+          {/* Bottom panel — the templates, secondary to the blank-rule
+              action above and grouped in their own box so the two choices
+              don't visually run together. */}
           <div className="template-picker-panel template-picker-panel-templates">
             <div className="template-picker-panel-header">
               <div className="template-picker-panel-icon" style={{
                 background: 'color-mix(in srgb, var(--teal) 8%, transparent)',
                 border: '1px solid color-mix(in srgb, var(--teal) 15%, transparent)',
               }}>
-                <BookOpen size={13} color="var(--teal)" strokeWidth={2.2} />
+                <BookOpen size={16} color="var(--teal)" strokeWidth={2.2} />
               </div>
               <span>Or Choose a Template</span>
             </div>
@@ -652,15 +655,15 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
                     onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; }}
                   >
                     <div style={{
-                      width: 30, height: 30, borderRadius: 8,
+                      width: 34, height: 34, borderRadius: 9,
                       background: `color-mix(in srgb, ${tpl.iconColor} 12%, transparent)`,
                       border: `1px solid color-mix(in srgb, ${tpl.iconColor} 25%, transparent)`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                     }}>
-                      <tpl.icon size={15} color={tpl.iconColor} strokeWidth={2.2} />
+                      <tpl.icon size={17} color={tpl.iconColor} strokeWidth={2.2} />
                     </div>
-                    <div style={{ fontWeight: 700, fontSize: '0.86rem', color: 'var(--text-1)' }}>{tpl.title}</div>
-                    <div style={{ fontSize: '0.76rem', color: 'var(--text-3)', lineHeight: 1.5 }}>{tpl.description}</div>
+                    <div style={{ fontWeight: 700, fontSize: '0.94rem', color: 'var(--text-1)' }}>{tpl.title}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-3)', lineHeight: 1.5 }}>{tpl.description}</div>
                   </button>
                 ))}
               </div>
