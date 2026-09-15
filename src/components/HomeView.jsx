@@ -1,5 +1,5 @@
 import React from 'react';
-import { Zap, ArrowRight, Sparkles, CircleDot, FileEdit, PauseCircle } from 'lucide-react';
+import { Zap, ArrowRight } from 'lucide-react';
 
 // Streak rays radiating from the page's visual center — deterministic
 // (no Math.random), so the pattern is stable across re-renders instead of
@@ -32,8 +32,7 @@ const CTA_BASE = { gap: 1, padY: 1.1, padX: 1.25, iconBox: 40, iconRadius: 11, i
  * Three-column layout, all sitting in front of the ambient animated
  * background: the four "go look at something" panels vertically centered
  * on the left, the welcome moment plus the primary Create Rule call-to-
- * action centered as the page's visual stage, and Admin Panel (top) /
- * System Status (bottom) anchored to the right rail's edges.
+ * action centered as the page's visual stage, and Admin Panel on the right.
  */
 export default function HomeView({ navItems, isNavAllowed, rbacLoading, onNavigate, rules }) {
   const byKey = (key) => navItems.find(n => n.key === key);
@@ -44,11 +43,7 @@ export default function HomeView({ navItems, isNavAllowed, rbacLoading, onNaviga
 
   const allowed = (item) => rbacLoading || isNavAllowed(item);
 
-  const total = rules.length;
-  const active = rules.filter(r => r.rule_metadata?.status === 'ACTIVE').length;
-  const draft = rules.filter(r => r.rule_metadata?.status === 'DRAFT').length;
-  const paused = rules.filter(r => r.rule_metadata?.status === 'PAUSED').length;
-  const isFirstRun = total === 0;
+  const isFirstRun = rules.length === 0;
 
   const PanelCard = ({ item, variant = 'panel', scale = 1 }) => {
     if (!item) return null;
@@ -92,13 +87,6 @@ export default function HomeView({ navItems, isNavAllowed, rbacLoading, onNaviga
       </button>
     );
   };
-
-  const StatRow = ({ icon: Icon, iconColor, label, value, valueClass }) => (
-    <div className="metric-card" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: '0.65rem 0.9rem' }}>
-      <h3 style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Icon size={11} color={iconColor} /> {label}</h3>
-      <div className={`value ${valueClass || ''}`} style={{ fontSize: 'var(--fs-lg)' }}>{value}</div>
-    </div>
-  );
 
   return (
     <div className="home-shell">
@@ -164,23 +152,10 @@ export default function HomeView({ navItems, isNavAllowed, rbacLoading, onNaviga
           </div>
         </div>
 
-        {/* Right — Admin Panel anchored to the top, System Status anchored
-            to the bottom (restricted-audience and passive info, secondary
-            to the left rail's actions) */}
-        <div className="home-col home-col-right">
+        {/* Right — Admin Panel, restricted-audience and secondary to the
+            left rail's actions */}
+        <div className="home-col">
           <PanelCard item={admin} variant="panel" scale={1.5} />
-
-          <div>
-            <div style={{ fontSize: '0.68rem', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-3)', margin: '0 0 0.6rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              <Sparkles size={11} /> System Status
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-              <StatRow icon={CircleDot} iconColor="var(--text-3)" label="Total Rules" value={total} />
-              <StatRow icon={CircleDot} iconColor="var(--success)" label="Active" value={active} valueClass="value-success" />
-              <StatRow icon={FileEdit} iconColor="var(--text-3)" label="Draft" value={draft} />
-              <StatRow icon={PauseCircle} iconColor="var(--warning)" label="Paused" value={paused} valueClass="value-warning" />
-            </div>
-          </div>
         </div>
       </div>
     </div>

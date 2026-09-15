@@ -1410,13 +1410,6 @@ tr { transition: background 0.1s ease; }
 .home-col-left {
   justify-content: center;
 }
-/* Right rail — Admin Panel pinned to the top, System Status pinned to
-   the bottom; the gap between them is real flexible space (a spacer),
-   not vertical centering, so the two stay anchored to their edges at
-   any viewport height. */
-.home-col-right {
-  justify-content: space-between;
-}
 .home-col-center {
   display: flex;
   flex-direction: column;
@@ -1430,5 +1423,5 @@ tr { transition: background 0.1s ease; }
 @media (max-width: 980px) {
   .home-grid { grid-template-columns: 1fr; }
   .home-col-center { order: -1; }
-  .home-col-left, .home-col-right { justify-content: flex-start; }
+  .home-col-left { justify-content: flex-start; }
 }
