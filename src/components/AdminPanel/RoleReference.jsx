@@ -21,7 +21,7 @@ const PERMISSION_LABELS = {
   'aggregated_analysis:read': 'View Analytics',
   'historical_analysis:read': 'View Historical Replay',
   'historical_analysis:execute': 'Run historical replay queries',
-  'iam:manage': 'Manage users, roles, and teams (Admin Panel)',
+  'iam:manage': 'Manage users and roles (Admin Panel)',
 };
 
 /**

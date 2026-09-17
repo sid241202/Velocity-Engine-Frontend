@@ -29,7 +29,6 @@ export function RBACProvider({ children }) {
     userId: null,
     roles: [],
     permissions: new Set(),
-    ledTeamIds: [],
     loading: true,
     error: '',
   });
@@ -49,7 +48,6 @@ export function RBACProvider({ children }) {
         userId: data.user_id,
         roles: data.roles || [],
         permissions: new Set(data.permissions || []),
-        ledTeamIds: data.led_team_ids || [],
         loading: false,
         error: '',
       });
@@ -59,7 +57,6 @@ export function RBACProvider({ children }) {
         userId: null,
         roles: [],
         permissions: new Set(),
-        ledTeamIds: [],
         loading: false,
         error: e.message || 'Unable to verify permissions',
       });
@@ -72,7 +69,7 @@ export function RBACProvider({ children }) {
     } else if (authStatus === 'unauthenticated') {
       // No session to check permissions for — resolve immediately to an
       // empty, non-error set rather than firing a /me call that can only 401.
-      setState({ userId: null, roles: [], permissions: new Set(), ledTeamIds: [], loading: false, error: '' });
+      setState({ userId: null, roles: [], permissions: new Set(), loading: false, error: '' });
     }
     // authStatus === 'checking': leave loading: true, nothing to fetch yet.
   }, [authStatus, fetchMe]);
@@ -87,25 +84,15 @@ export function RBACProvider({ children }) {
     [state.permissions]
   );
 
-  // canAccessAdminPanel: full iam:manage (SUPER_ADMIN today) OR leads at
-  // least one team. Not a resource:action permission string on purpose —
-  // "which team(s) you lead" is scoped data, not a flat boolean, so it
-  // can't be expressed through hasPermission the way every other gate in
-  // this app is. See src/components/AdminPanel/AdminPanel.jsx.
-  const canAccessAdminPanel = state.permissions.has('iam:manage') || state.ledTeamIds.length > 0;
-  const isSuperAdmin = state.permissions.has('iam:manage');
-
   const value = useMemo(
     () => ({
       ...state,
       hasPermission,
       hasAnyPermission,
       hasAllPermissions,
-      canAccessAdminPanel,
-      isSuperAdmin,
       refetch: fetchMe,
     }),
-    [state, hasPermission, hasAnyPermission, hasAllPermissions, canAccessAdminPanel, isSuperAdmin, fetchMe]
+    [state, hasPermission, hasAnyPermission, hasAllPermissions, fetchMe]
   );
 
   return <RBACContext.Provider value={value}>{children}</RBACContext.Provider>;

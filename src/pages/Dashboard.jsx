@@ -11,7 +11,6 @@ import HistoricalAnalysis from '../components/HistoricalAnalysis';
 import AdminPanel from '../components/AdminPanel/AdminPanel';
 import ErrorBoundary from '../components/ErrorBoundary';
 import PermissionGuard from '../components/PermissionGuard';
-import AccessDenied from '../components/AccessDenied';
 import { API_BASE, FEATURE_HISTORICAL_REPLAY } from '../config/appConfig';
 import { toISTDatetimeLocal, parseISTStringToEpochMs } from '../utils/istUtils';
 import { useRBAC } from '../context/RBACContext';
@@ -19,11 +18,6 @@ import { PERMISSIONS } from '../permissions';
 
 // build's tab also doubles as the rule-edit surface (navigateToEdit routes
 // here), so it accepts create OR update rather than requiring create alone.
-//
-// 'admin' has no `anyOf` — access isn't a flat PERMISSIONS.* key (a team
-// lead's scope is data — which team — not a boolean), so it's gated by
-// `custom: 'canAccessAdminPanel'` instead and checked separately everywhere
-// `anyOf` would normally be read below.
 const NAV_ITEMS = [
   { key: 'live',       label: 'Live Stream',       icon: Activity,   tip: 'Real-time event stream & breach detection', anyOf: [PERMISSIONS.LIVE_ANALYSIS_READ] },
   { key: 'agg',        label: 'Analytics',         icon: BarChart3,  tip: 'Aggregated rule analysis over a custom date range', anyOf: [PERMISSIONS.AGGREGATED_ANALYSIS_READ] },
@@ -32,7 +26,7 @@ const NAV_ITEMS = [
   FEATURE_HISTORICAL_REPLAY && { key: 'historical', label: 'Historical Replay', icon: History, tip: 'Replay and test rules on historical data', anyOf: [PERMISSIONS.HISTORICAL_ANALYSIS_READ] },
   { key: 'build',      label: 'Create Rule',       icon: PlusSquare, tip: 'Build a new anomaly detection rule', anyOf: [PERMISSIONS.RULES_CREATE, PERMISSIONS.RULES_UPDATE] },
   { key: 'summary',    label: 'Rule Summary',      icon: Shield,     tip: 'View and manage a specific rule', anyOf: [PERMISSIONS.RULES_READ] },
-  { key: 'admin',      label: 'Admin Panel',       icon: Settings,   tip: 'Manage users, teams, and roles', custom: 'canAccessAdminPanel' },
+  { key: 'admin',      label: 'Admin Panel',       icon: Settings,   tip: 'Manage users and roles', anyOf: [PERMISSIONS.IAM_MANAGE] },
 ].filter(Boolean);
 
 /**
@@ -51,13 +45,8 @@ const NAV_ITEMS = [
  * because the JS runtime is destroyed — no extra logic needed.
  */
 export default function Dashboard() {
-  const { hasAnyPermission, canAccessAdminPanel, loading: rbacLoading } = useRBAC();
-  // isNavAllowed: NAV_ITEMS' one non-permission-based entry ('admin') can't
-  // go through hasAnyPermission — see the NAV_ITEMS comment above.
-  const isNavAllowed = useCallback(
-    (item) => (item.custom === 'canAccessAdminPanel' ? canAccessAdminPanel : hasAnyPermission(item.anyOf)),
-    [canAccessAdminPanel, hasAnyPermission]
-  );
+  const { hasAnyPermission, loading: rbacLoading } = useRBAC();
+  const isNavAllowed = useCallback((item) => hasAnyPermission(item.anyOf), [hasAnyPermission]);
   const [activeTab, setActiveTab]         = useState('home');
   const [rules, setRules]                 = useState([]);
   // Single-select: choosing a rule replaces whatever was previously selected
@@ -368,7 +357,9 @@ export default function Dashboard() {
             <div style={{ display: activeTab === 'admin' ? 'block' : 'none' }}
                  className={activeTab === 'admin' ? 'animate-fade-in' : ''}>
               <ErrorBoundary label="Admin Panel">
-                {canAccessAdminPanel ? <AdminPanel /> : <AccessDenied label="Admin Panel" />}
+                <PermissionGuard permission={PERMISSIONS.IAM_MANAGE} label="Admin Panel">
+                  <AdminPanel />
+                </PermissionGuard>
               </ErrorBoundary>
             </div>
           )}
