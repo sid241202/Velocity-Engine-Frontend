@@ -276,6 +276,15 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
   const [jexlExpression, setJexlExpression] = useState('');
   const [fieldInsertValue, setFieldInsertValue] = useState('');
   const jexlTextareaRef = useRef(null);
+  // Windowed rules only: both SimpleThresholdEditor and VisualThresholdBuilder
+  // can only express "alias OP numeric_literal" clauses joined by AND/OR —
+  // neither can compile a ratio/formula across two aliases (e.g. a percentage
+  // threshold like "(failed / total * 100) >= 90"), which the underlying
+  // engine (a free-text JEXL having_thresholds.expression) has always
+  // supported. 'raw' exposes that same capability the no-windowing path
+  // already has, via the identical textarea, instead of leaving formula
+  // thresholds on windowed rules unreachable from the UI.
+  const [windowedThresholdMode, setWindowedThresholdMode] = useState('visual');
 
   const insertFieldAtCursor = (fieldPath) => {
     const el = jexlTextareaRef.current;
@@ -1291,7 +1300,41 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
             </>
           ) : (
             <div onFocus={() => onFieldFocus && onFieldFocus('having_thresholds')}>
-              {builderMode === 'simple' ? (
+              <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.75rem' }}>
+                <button
+                  type="button"
+                  className={`btn ${windowedThresholdMode === 'visual' ? 'btn-accent' : 'btn-ghost'}`}
+                  style={{ fontSize: '0.74rem', padding: '0.35rem 0.7rem' }}
+                  onClick={() => setWindowedThresholdMode('visual')}
+                >
+                  Visual Builder
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${windowedThresholdMode === 'raw' ? 'btn-accent' : 'btn-ghost'}`}
+                  style={{ fontSize: '0.74rem', padding: '0.35rem 0.7rem' }}
+                  onClick={() => setWindowedThresholdMode('raw')}
+                  title="Write a JEXL expression directly — needed for formulas across two metrics (e.g. a percentage/ratio), which the visual builder can't express"
+                >
+                  Raw JEXL
+                </button>
+              </div>
+              {windowedThresholdMode === 'raw' ? (
+                <>
+                  <textarea
+                    ref={jexlTextareaRef}
+                    value={jexlExpression}
+                    onChange={e => setJexlExpression(e.target.value)}
+                    onFocus={() => onFieldFocus && onFieldFocus('having_thresholds')}
+                    placeholder="e.g. (failed_count / total_count * 100) >= 90"
+                    rows={4}
+                    style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.8rem', resize: 'vertical', lineHeight: 1.5 }}
+                  />
+                  <p className="helper" style={{ marginTop: '0.3rem' }}>
+                    Reference your aggregation aliases ({aggregations.map(a => a.alias).filter(Boolean).join(', ') || 'none defined yet'}) directly. Compiled Expression: <code style={{ color: 'var(--violet-light)' }}>{jexlExpression || 'None (No Alerts)'}</code>
+                  </p>
+                </>
+              ) : builderMode === 'simple' ? (
                 <SimpleThresholdEditor
                   expression={jexlExpression}
                   setExpression={setJexlExpression}
