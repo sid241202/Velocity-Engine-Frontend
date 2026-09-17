@@ -64,6 +64,19 @@ function getDateValueError(value, format) {
   return null;
 }
 
+// A string only round-trips through Number() without changing meaning when
+// it has no formatting Number() would discard — leading zeros ("0000050000",
+// a zero-padded AUA/device code) or a leading "+" chief among them. Coercing
+// those to a number and back loses the padding permanently (Number("0000050000")
+// -> 50000 -> "50000"), which would silently break every string-shaped code
+// field an analyst filters on. isNaN() alone can't tell "50000" (safe to
+// coerce) from "0000050000" (not) — both are non-NaN — so require the
+// round-trip to be lossless instead.
+function isCleanNumericLiteral(str) {
+  if (str === '' || isNaN(str)) return false;
+  return String(Number(str)) === str;
+}
+
 // ─── processFilterTree (exported — called by RuleBuilder before submit) ───────
 // eslint-disable-next-line react-refresh/only-export-components -- intentional: helper co-located with the component that owns its data shape
 export function processFilterTree(node) {
@@ -88,13 +101,12 @@ export function processFilterTree(node) {
       if (typeof n.value === 'string') {
         n.value = n.value.split(',').map(v => {
           const trimmed = v.trim();
-          if (trimmed !== '' && !isNaN(trimmed)) return Number(trimmed);
-          return trimmed;
+          return isCleanNumericLiteral(trimmed) ? Number(trimmed) : trimmed;
         });
       }
       return n;
     }
-    if (n.operator !== 'REGEX' && typeof n.value === 'string' && n.value !== '' && !isNaN(n.value)) {
+    if (n.operator !== 'REGEX' && typeof n.value === 'string' && isCleanNumericLiteral(n.value)) {
       n.value = Number(n.value);
     }
     return n;
