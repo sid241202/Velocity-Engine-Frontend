@@ -833,11 +833,18 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
               <FieldError msg={errors[`key_${i}`]} />
             </div>
           ))}
-          {!isGlobal && keys.length < 3 && (
+          {!isGlobal && keys.length < 8 && (
             <button type="button" className="btn btn-ghost" style={{ fontSize: '0.76rem', marginTop: '0.2rem' }}
               onClick={() => setKeys([...keys, ''])}>
               <Plus size={12} /> Add field
             </button>
+          )}
+          {!isGlobal && keys.length > 3 && (
+            <p className="helper" style={{ color: 'var(--amber)' }}>
+              Combining {keys.length} fields multiplies cardinality fast — a rule like this can easily track hundreds of
+              thousands of distinct entities at peak traffic. Use the Entity Breach Ranking search/pagination in
+              Rule Summary to monitor it rather than expecting to browse every entity.
+            </p>
           )}
           {isGlobal && <p className="helper">All events counted in a single global bucket — no per-entity breakdown.</p>}
 
