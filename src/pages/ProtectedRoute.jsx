@@ -1,52 +1,37 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
-import authService from '../services/AuthService';
+import { useAuth } from '../context/AuthContext';
+import { useRBAC } from '../context/RBACContext';
+import SessionLoading from '../components/SessionLoading';
 
+/**
+ * ProtectedRoute — the single gate for /dashboard. Waits on BOTH the auth
+ * session (AuthContext) and the RBAC permission fetch that depends on it
+ * (RBACContext) before rendering anything real, showing one branded loading
+ * transition the whole time instead of letting Dashboard/PermissionGuard
+ * mount early and render a wrong-looking intermediate state (e.g. Access
+ * Denied while permissions are still in flight).
+ */
 const ProtectedRoute = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { status, bootStart } = useAuth();
+  const { loading: rbacLoading } = useRBAC();
+  const loggedReadyRef = useRef(false);
+
+  const ready = status === 'authenticated' && !rbacLoading;
 
   useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
-    try {
-      const authenticated = await authService.isAuthenticated();
-      setIsAuthenticated(authenticated);
-    } catch (error) {
-      console.error('Error checking authentication:', error);
-      setIsAuthenticated(false);
-    } finally {
-      setIsLoading(false);
+    if (ready && !loggedReadyRef.current) {
+      loggedReadyRef.current = true;
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      console.info(`[auth-bootstrap] session + permissions ready in ${Math.round(now - bootStart)}ms`);
     }
-  };
+  }, [ready, bootStart]);
 
-  if (isLoading) {
-    return (
-      <div className="landing-root">
-        <div className="dot-grid"></div>
-        <div className="glow glow-left"></div>
-        <div className="glow glow-right"></div>
-        <div className="login-card" style={{ margin: '0 auto', padding: '2.5rem', maxWidth: '380px' }}>
-          <div className="card-top-bar"></div>
-          <div className="fp-wrapper">
-            <div className="ring ring-1"></div>
-            <div className="ring ring-2"></div>
-            <svg className="spin-svg" style={{ width: '36px', height: '36px', color: 'var(--accent-cyan)' }}
-              xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" style={{ opacity: 0.25 }}></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" style={{ opacity: 0.75 }}></path>
-            </svg>
-          </div>
-          <h2 className="card-heading" style={{ fontSize: '1.4rem' }}>Authenticating</h2>
-          <div className="secure-note">Verifying secure access</div>
-        </div>
-      </div>
-    );
+  if (status === 'checking' || (status === 'authenticated' && rbacLoading)) {
+    return <SessionLoading message="Verifying secure access..." />;
   }
 
-  if (!isAuthenticated) {
+  if (status !== 'authenticated') {
     return <Navigate to="/" replace />;
   }
 

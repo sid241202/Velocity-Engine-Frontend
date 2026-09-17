@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Fingerprint, CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react';
+import { CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react';
 import authService from '../services/AuthService';
+import { useAuth } from '../context/AuthContext';
+import SessionLoading from '../components/SessionLoading';
 import './Callback.css';
 
 const Callback = () => {
   const navigate = useNavigate();
+  const auth = useAuth();
   const [status, setStatus] = useState('processing');
   const [message, setMessage] = useState('Processing authentication...');
   const [userInfo, setUserInfo] = useState(null);
@@ -29,6 +32,12 @@ const Callback = () => {
         console.log('Result:', result);
 
         if (result && result.user) {
+          // Flip the shared session state right away — this kicks off the
+          // RBAC /me fetch in parallel with the "Access Granted" pause below
+          // instead of waiting for a route change (or, previously, a hard
+          // reload) to notice the new session.
+          auth.markAuthenticated();
+
           setStatus('success');
           setMessage('Authentication successful! Redirecting...');
           setUserInfo({
@@ -38,6 +47,10 @@ const Callback = () => {
           });
 
           setTimeout(() => {
+            // returnUrl is whitelist-validated in AuthService and can never
+            // resolve to '/' (Landing) — always a real post-login
+            // destination, so this can't bounce back through the login
+            // screen the way it used to.
             navigate(result.returnUrl, { replace: true });
           }, 1000);
         } else {
@@ -45,6 +58,7 @@ const Callback = () => {
         }
       } catch (error) {
         console.error('=== AUTHENTICATION CALLBACK ERROR ===', error);
+        auth.markUnauthenticated();
         setStatus('error');
         setMessage(error.message || 'Authentication failed. Please try again.');
         setTimeout(() => {
@@ -54,7 +68,12 @@ const Callback = () => {
     };
 
     handleAuthCallback();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per mount; auth's functions are stable (useCallback)
   }, [navigate]);
+
+  if (status === 'processing') {
+    return <SessionLoading message={message} />;
+  }
 
   return (
     <div className="cb-root">
@@ -67,25 +86,14 @@ const Callback = () => {
 
         {/* Icon area */}
         <div className="cb-icon-area">
-          {status === 'processing' && (
-            <div className="cb-fp-wrap">
-              <Fingerprint className="cb-fp-icon" />
-              <span className="cb-ring cb-ring-1"></span>
-              <span className="cb-ring cb-ring-2"></span>
-              <svg className="cb-spin-ring" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="50" cy="50" r="46" stroke="#00d2a0" strokeWidth="2" strokeDasharray="60 230" strokeLinecap="round" />
-              </svg>
-            </div>
-          )}
           {status === 'success' && <CheckCircle className="cb-icon-success" />}
           {status === 'error'   && <AlertCircle className="cb-icon-error" />}
         </div>
 
         {/* Title */}
         <h2 className={`cb-title ${status === 'error' ? 'cb-title-error' : ''} ${status === 'success' ? 'cb-title-success' : ''}`}>
-          {status === 'processing' && 'Authenticating'}
-          {status === 'success'    && 'Access Granted'}
-          {status === 'error'      && 'Access Denied'}
+          {status === 'success' && 'Access Granted'}
+          {status === 'error'   && 'Access Denied'}
         </h2>
 
         <p className="cb-message">{message}</p>
@@ -96,15 +104,6 @@ const Callback = () => {
             <span className="cb-user-label">Signed in as</span>
             <span className="cb-user-name">{userInfo.name}</span>
             {userInfo.email && <span className="cb-user-email">{userInfo.email}</span>}
-          </div>
-        )}
-
-        {/* Loading dots */}
-        {status === 'processing' && (
-          <div className="cb-dots">
-            <span className="cb-dot cb-dot-1"></span>
-            <span className="cb-dot cb-dot-2"></span>
-            <span className="cb-dot cb-dot-3"></span>
           </div>
         )}
 
