@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { BarChart3, ArrowUpDown, Loader2, TrendingUp, AlertTriangle, Target, Activity, RefreshCw, Repeat, Timer, Fingerprint, Layers, ArrowRight, Zap } from 'lucide-react';
+import { BarChart3, Loader2, TrendingUp, AlertTriangle, Target, Activity, RefreshCw, Repeat, Timer, Fingerprint, Layers, ArrowRight, Zap } from 'lucide-react';
 
 import {
   AreaChart, Area, BarChart, Bar, Line, ComposedChart,
@@ -222,8 +222,6 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
   const [anomalyData, setAnomalyData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [sortCol, setSortCol] = useState('breachRate');
-  const [sortDir, setSortDir] = useState('desc');
   const [showAnomalyFeed, setShowAnomalyFeed] = useState(true);
   const [hiddenSeries, setHiddenSeries] = useState({});
   const [selectedGroup, setSelectedGroup] = useState('__ALL__');
@@ -237,8 +235,89 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
   const closeOverlay     = useCallback(() => setOverlay(null), []);
   const handleRuleClick  = useCallback((ruleId) => { closeOverlay(); onRuleClick && onRuleClick(ruleId); }, [onRuleClick, closeOverlay]);
 
+  // ── Server-ranked entity table — scalable alternative to grouping allRows
+  // client-side. allRows is capped at 5000 raw rows by the backend (ordered
+  // by recency, not by breach significance), so for a high-cardinality rule
+  // (some finger-auth fraud rules track 100k-600k+ concurrent entities at
+  // peak) client-side grouping silently sees only a recency-biased slice of
+  // entities, never the true worst offenders. /rules/:rule_id/top-groups
+  // ranks entities by breach count in ClickHouse itself, so the cap applies
+  // to ranked entities, not raw rows. ──────────────────────────────────────
+  const TOP_GROUPS_PAGE_SIZE = 25;
+  const [topGroups, setTopGroups] = useState([]);
+  const [topGroupsLoading, setTopGroupsLoading] = useState(false);
+  const [topGroupsError, setTopGroupsError] = useState('');
+  const [groupPage, setGroupPage] = useState(0);
+  const [groupSearchInput, setGroupSearchInput] = useState('');
+  const [groupSearchStatus, setGroupSearchStatus] = useState(''); // '' | 'searching' | 'not-found'
+
+  const fetchTopGroups = useCallback(async (ruleId, sFormatted, eFormatted, page) => {
+    setTopGroupsLoading(true);
+    setTopGroupsError('');
+    try {
+      const res = await fetch(
+        `/api/rules/${encodeURIComponent(ruleId)}/top-groups?start_ts=${encodeURIComponent(sFormatted)}&end_ts=${encodeURIComponent(eFormatted)}&limit=${TOP_GROUPS_PAGE_SIZE}&offset=${page * TOP_GROUPS_PAGE_SIZE}`
+      );
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        setTopGroupsError(errJson.detail || 'Failed to load ranked entities.');
+        setTopGroups([]);
+        return;
+      }
+      const json = await res.json();
+      setTopGroups(json.groups || []);
+    } catch (e) {
+      setTopGroupsError('Network error while loading ranked entities.');
+      setTopGroups([]);
+    } finally {
+      setTopGroupsLoading(false);
+    }
+  }, []);
+
+  const changeGroupPage = useCallback((delta) => {
+    setGroupPage(prev => {
+      const next = Math.max(0, prev + delta);
+      if (selectedRuleId) {
+        fetchTopGroups(selectedRuleId, istDatetimeLocalToBackendStr(startTs), istDatetimeLocalToBackendStr(endTs), next);
+      }
+      return next;
+    });
+  }, [selectedRuleId, startTs, endTs, fetchTopGroups]);
+
+  // Exact-match lookup for one entity the analyst already knows (e.g. a
+  // specific enrolmentReferenceId) — the drill-in path that never requires
+  // paging through the ranked list to find it.
+  const runGroupSearch = useCallback(async () => {
+    const key = groupSearchInput.trim();
+    if (!key || !selectedRuleId) return;
+    setGroupSearchStatus('searching');
+    try {
+      const sFormatted = istDatetimeLocalToBackendStr(startTs);
+      const eFormatted = istDatetimeLocalToBackendStr(endTs);
+      const res = await fetch(
+        `/api/rules/${encodeURIComponent(selectedRuleId)}/group-detail?key=${encodeURIComponent(key)}&start_ts=${encodeURIComponent(sFormatted)}&end_ts=${encodeURIComponent(eFormatted)}`
+      );
+      const json = res.ok ? await res.json() : { results: [] };
+      if ((json.results || []).length === 0) {
+        setGroupSearchStatus('not-found');
+        return;
+      }
+      setGroupSearchStatus('');
+      openEntityDetail(key);
+    } catch (e) {
+      setGroupSearchStatus('not-found');
+    }
+  }, [groupSearchInput, selectedRuleId, startTs, endTs, openEntityDetail]);
+
   // A rule change should reset any group filter (and any open overlay) left over from the previous rule.
-  useEffect(() => { setSelectedGroup('__ALL__'); setOverlay(null); }, [selectedRuleId]);
+  useEffect(() => {
+    setSelectedGroup('__ALL__');
+    setOverlay(null);
+    setTopGroups([]);
+    setGroupPage(0);
+    setGroupSearchInput('');
+    setGroupSearchStatus('');
+  }, [selectedRuleId]);
 
   const handleLegendClick = useCallback((e) => {
     const key = e.dataKey;
@@ -284,6 +363,10 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
     // Send naive IST strings to ClickHouse via backend
     const sFormatted = istDatetimeLocalToBackendStr(startTs);
     const eFormatted = istDatetimeLocalToBackendStr(endTs);
+    setGroupPage(0);
+    setGroupSearchInput('');
+    setGroupSearchStatus('');
+    fetchTopGroups(selectedRuleId, sFormatted, eFormatted, 0);
     try {
       // Fetch aggregated data and anomaly feed in parallel for richer insights
       const [aggRes, anomalyRes] = await Promise.allSettled([
@@ -310,7 +393,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
     } finally {
       setLoading(false);
     }
-  }, [selectedRuleId, startTs, endTs]);
+  }, [selectedRuleId, startTs, endTs, fetchTopGroups]);
 
   const getRuleName = useCallback((ruleId) => {
     const match = rules.find(rule => rule.rule_metadata.rule_id === ruleId);
@@ -677,53 +760,46 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
     return { text: `${Math.floor(mins / 60)}h ${mins % 60}m left`, active: true };
   }
 
-  /* ───── Top group keys table ───── */
-  const groupTableData = useMemo(() => {
-    const groupMap = {};
-    for (const row of allRows) {
-      const gk = row.groupKey || 'N/A';
-      if (!groupMap[gk]) {
-        groupMap[gk] = { groupKey: gk, ruleId: row.ruleId, totalEvents: 0, breaches: 0, totalWindows: 0, lastSeen: row.windowEnd };
-      }
-      groupMap[gk].totalEvents += getRowEventCount(row);
-      groupMap[gk].totalWindows += 1;
-      if (isBreached(row)) groupMap[gk].breaches += 1;
-      if (row.windowEnd > groupMap[gk].lastSeen) groupMap[gk].lastSeen = row.windowEnd;
-    }
-    const arr = Object.values(groupMap).map(g => ({
-      ...g,
-      breachRate: g.totalWindows > 0 ? (g.breaches / g.totalWindows * 100) : 0,
-    }));
-    arr.sort((a, b) => {
-      const aVal = a[sortCol];
-      const bVal = b[sortCol];
-      if (typeof aVal === 'number' && typeof bVal === 'number') {
-        return sortDir === 'desc' ? bVal - aVal : aVal - bVal;
-      }
-      return sortDir === 'desc'
-        ? String(bVal).localeCompare(String(aVal))
-        : String(aVal).localeCompare(String(bVal));
-    });
-    return arr.slice(0, 20);
-  }, [allRows, sortCol, sortDir]);
 
   // ─── Entity Detail drawer data — full per-window history for one entity,
-  // independent of the group filter above. ──────────────────────────────────
+  // fetched on demand from /rules/:rule_id/group-detail rather than filtered
+  // out of allRows. allRows is capped at 5000 raw rows system-wide (ordered
+  // by recency), so for a high-cardinality rule it can easily be missing
+  // most — or all — of one specific entity's own rows; a direct exact-match
+  // query against ClickHouse always gets that entity's real history. ───────
+  const [entityDetailRaw, setEntityDetailRaw] = useState(null); // { groupKey, rows } | null
+  const [entityDetailLoading, setEntityDetailLoading] = useState(false);
+
+  useEffect(() => {
+    if (!overlay || overlay.type !== 'entity' || !selectedRuleId) return;
+    let cancelled = false;
+    setEntityDetailLoading(true);
+    setEntityDetailRaw(null);
+    const sFormatted = istDatetimeLocalToBackendStr(startTs);
+    const eFormatted = istDatetimeLocalToBackendStr(endTs);
+    fetch(`/api/rules/${encodeURIComponent(selectedRuleId)}/group-detail?key=${encodeURIComponent(overlay.groupKey)}&start_ts=${encodeURIComponent(sFormatted)}&end_ts=${encodeURIComponent(eFormatted)}`)
+      .then(res => (res.ok ? res.json() : { results: [] }))
+      .then(json => { if (!cancelled) setEntityDetailRaw({ groupKey: overlay.groupKey, rows: json.results || [] }); })
+      .catch(() => { if (!cancelled) setEntityDetailRaw({ groupKey: overlay.groupKey, rows: [] }); })
+      .finally(() => { if (!cancelled) setEntityDetailLoading(false); });
+    return () => { cancelled = true; };
+  }, [overlay, selectedRuleId, startTs, endTs]);
+
   const entityDetail = useMemo(() => {
-    if (!overlay || overlay.type !== 'entity') return null;
-    const raw = allRows.filter(r => r.groupKey === overlay.groupKey);
+    if (!entityDetailRaw) return null;
+    const raw = entityDetailRaw.rows;
     const sortedDesc = [...raw].sort((a, b) => new Date(b.windowStart) - new Date(a.windowStart));
     const totalEvents = raw.reduce((s, r) => s + getRowEventCount(r), 0);
     const breaches = raw.filter(isBreached).length;
     const totalWindows = raw.length;
     const breachRate = totalWindows > 0 ? (breaches / totalWindows * 100) : 0;
     return {
-      groupKey: overlay.groupKey,
+      groupKey: entityDetailRaw.groupKey,
       totalEvents, breaches, totalWindows, breachRate,
       timeline: [...sortedDesc].reverse().map(r => ({ windowStart: r.windowStart, count: getRowEventCount(r), breached: isBreached(r) })),
       history: sortedDesc.slice(0, 15),
     };
-  }, [overlay, allRows]);
+  }, [entityDetailRaw]);
 
   // ─── Window Detail modal data — every entity's row within the clicked
   // bucket (bucket-resolution-aware, since Window Intensity here can be
@@ -750,15 +826,6 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
   // reduce an arbitrary expression to one number, so the window overlay
   // below shows the condition text rather than fabricating a margin.
   const currentThresholdExpr = currentRule?.having_thresholds?.expression;
-
-  const handleSort = (col) => {
-    if (sortCol === col) {
-      setSortDir(d => d === 'desc' ? 'asc' : 'desc');
-    } else {
-      setSortCol(col);
-      setSortDir('desc');
-    }
-  };
 
   const hasData = allRows.length > 0;
 
@@ -1456,51 +1523,85 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
             </div>
           </div>
 
-          {/* Entity Breach Ranking Table */}
+          {/* Entity Breach Ranking Table — ranked server-side in ClickHouse
+              (GROUP BY groupKey, ORDER BY breach count), not derived from the
+              5000-row-capped allRows. This is what stays correct for a
+              high-cardinality rule (some finger-auth fraud rules track
+              100k-600k+ concurrent entities at peak): the ranking always
+              reflects every entity that ever appeared in the queried range,
+              not just whichever raw rows happened to survive the recency cap. */}
           <div className="chart-container">
             <div className="chart-title">Entity Breach Ranking</div>
-            <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>Top 20 tracked entities ranked by breach rate. Click column headers to sort, or a row for that entity&apos;s full history.</div>
+            <div style={{ fontSize: '0.71rem', color: 'var(--text-3)', marginBottom: '0.75rem' }}>
+              Entities ranked by breach count for the selected rule and time range. Click a row for that entity&apos;s full history.
+            </div>
+
+            {/* Exact-match lookup — for a specific entity the analyst already
+                knows (e.g. one enrolmentReferenceId), rather than paging
+                through the ranked list to find it. */}
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.875rem', flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                value={groupSearchInput}
+                onChange={e => { setGroupSearchInput(e.target.value); setGroupSearchStatus(''); }}
+                onKeyDown={e => { if (e.key === 'Enter') runGroupSearch(); }}
+                placeholder="Look up one entity by exact ID…"
+                style={{ flex: 1, minWidth: 200 }}
+              />
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={runGroupSearch}
+                disabled={!groupSearchInput.trim() || groupSearchStatus === 'searching'}
+              >
+                {groupSearchStatus === 'searching' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : 'Look up'}
+              </button>
+            </div>
+            {groupSearchStatus === 'not-found' && (
+              <p style={{ color: 'var(--text-3)', fontSize: '0.75rem', margin: '-0.5rem 0 0.75rem' }}>
+                No data found for that entity in the selected time range.
+              </p>
+            )}
+
+            {topGroupsError && (
+              <p style={{ color: '#fca5a5', fontSize: '0.78rem', marginBottom: '0.75rem' }}>{topGroupsError}</p>
+            )}
+
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
                     <th style={thStyle}>#</th>
-                    <th style={thStyle} onClick={() => handleSort('groupKey')}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Entity ID <ArrowUpDown size={12} /></span>
-                    </th>
-                    <th style={thStyle} onClick={() => handleSort('ruleId')}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Rule <ArrowUpDown size={12} /></span>
-                    </th>
-                    <th style={thStyle} onClick={() => handleSort('totalEvents')}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Total Events <ArrowUpDown size={12} /></span>
-                    </th>
-                    <th style={thStyle} onClick={() => handleSort('breaches')}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Breaches <ArrowUpDown size={12} /></span>
-                    </th>
-                    <th style={thStyle} onClick={() => handleSort('breachRate')}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Breach Rate <ArrowUpDown size={12} /></span>
-                    </th>
-                    <th style={thStyle} onClick={() => handleSort('lastSeen')}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Last Active <ArrowUpDown size={12} /></span>
-                    </th>
+                    <th style={thStyle}>Entity ID</th>
+                    <th style={thStyle}>Windows Tracked</th>
+                    <th style={thStyle}>Breaches</th>
+                    <th style={thStyle}>Breach Rate</th>
+                    <th style={thStyle}>Last Active</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {groupTableData.map((g, i) => {
-                    const color = getRuleColor(rules, g.ruleId);
+                  {topGroupsLoading && (
+                    <tr>
+                      <td colSpan={6} style={{ ...tdStyle, textAlign: 'center', color: 'var(--text-3)', padding: '2rem' }}>
+                        <Loader2 size={16} style={{ animation: 'spin 1s linear infinite', marginRight: 6 }} />
+                        Loading ranked entities…
+                      </td>
+                    </tr>
+                  )}
+                  {!topGroupsLoading && topGroups.map((g, i) => {
+                    const color = getRuleColor(rules, selectedRuleId);
                     return (
                       <tr
-                        key={g.groupKey + g.ruleId}
+                        key={g.groupKey}
                         onClick={() => openEntityDetail(g.groupKey)}
-                        style={{ borderLeft: `3px solid ${g.breaches > 0 ? color : 'transparent'}`, cursor: 'pointer' }}
+                        style={{ borderLeft: `3px solid ${g.breachedWindows > 0 ? color : 'transparent'}`, cursor: 'pointer' }}
                       >
-                        <td style={tdStyle}>{i + 1}</td>
+                        <td style={tdStyle}>{groupPage * TOP_GROUPS_PAGE_SIZE + i + 1}</td>
                         <td style={{ ...tdStyle, fontFamily: 'monospace', color: 'var(--teal)', fontWeight: 600 }}>{g.groupKey}</td>
-                        <td style={tdStyle}><RuleLink ruleName={getRuleName(g.ruleId)} ruleId={g.ruleId} onRuleClick={handleRuleClick} /></td>
                         <td style={{ ...tdStyle, padding: '0.4rem 0.8rem' }} colSpan={3}>
                           <ScoreTriad items={[
-                            { label: 'Events', value: g.totalEvents.toLocaleString(), tone: 'muted' },
-                            { label: 'Breaches', value: g.breaches, tone: g.breaches > 0 ? 'danger' : 'muted' },
+                            { label: 'Windows', value: g.totalWindows.toLocaleString(), tone: 'muted' },
+                            { label: 'Breaches', value: g.breachedWindows, tone: g.breachedWindows > 0 ? 'danger' : 'muted' },
                             { label: 'Rate', value: `${g.breachRate.toFixed(1)}%`, tone: g.breachRate > 50 ? 'danger' : g.breachRate > 20 ? 'warning' : 'success' },
                           ]} />
                         </td>
@@ -1508,15 +1609,21 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
                       </tr>
                     );
                   })}
-                  {groupTableData.length === 0 && (
+                  {!topGroupsLoading && topGroups.length === 0 && !topGroupsError && (
                     <tr>
-                      <td colSpan={7} style={{ ...tdStyle, textAlign: 'center', color: 'var(--text-3)', padding: '2.5rem' }}>
+                      <td colSpan={6} style={{ ...tdStyle, textAlign: 'center', color: 'var(--text-3)', padding: '2.5rem' }}>
                         No entity data available for the selected rule and time range.
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.6rem', marginTop: '0.75rem' }}>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-3)' }}>Page {groupPage + 1}</span>
+              <button type="button" className="btn btn-ghost" disabled={groupPage === 0 || topGroupsLoading} onClick={() => changeGroupPage(-1)}>Prev</button>
+              <button type="button" className="btn btn-ghost" disabled={topGroups.length < TOP_GROUPS_PAGE_SIZE || topGroupsLoading} onClick={() => changeGroupPage(1)}>Next</button>
             </div>
           </div>
 
@@ -1543,6 +1650,11 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
               </button>
             )}
           >
+            {entityDetailLoading && !entityDetail && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2.5rem', color: 'var(--text-3)', gap: '0.5rem' }}>
+                <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Loading entity history…
+              </div>
+            )}
             {entityDetail && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
