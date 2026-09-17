@@ -52,6 +52,16 @@ const STATUS_COLORS = {
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
+// How much rolling history this panel keeps client-side. Narrower than the
+// backend's LiveStore retention alone would give you snappier charts/tables
+// (smaller arrays behind every useMemo below) — but the real win only lands
+// once the backend's LIVE_STORE_HOURS is *also* turned down to match (see
+// internal/services/livestore.go's pruneStale and resources/configmap-
+// release.txt in the backend repo): otherwise every WS bootstrap/reconnect
+// and every HTTP fallback poll still ships however many hours the backend
+// is configured to retain, and this constant only trims it after the fact.
+const LIVE_WINDOW_HOURS = 1;
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function parseAsIST(ts) {
@@ -327,12 +337,12 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
   // "instant" for a monitoring dashboard, and collapses what could be
   // hundreds of deltas/sec into ~4 re-renders/sec.
   const DELTA_FLUSH_MS = 250;
-  // Safety valve independent of the 24h time filter below: a
-  // high-cardinality rule can accumulate far more rows in 24h than any
-  // chart/table here actually uses, and the old per-message findIndex/filter
-  // scan over that whole array was itself an O(n) cost paid on every delta.
-  // Rows are sorted by windowStart before capping, so this always drops the
-  // oldest first.
+  // Safety valve independent of the LIVE_WINDOW_HOURS time filter below: a
+  // high-cardinality rule can still accumulate more rows within that window
+  // than any chart/table here actually uses, and the old per-message
+  // findIndex/filter scan over that whole array was itself an O(n) cost paid
+  // on every delta. Rows are sorted by windowStart before capping, so this
+  // always drops the oldest first.
   const MAX_ROWS_PER_RULE = 5000;
   const pendingDeltasRef = useRef(new Map()); // ruleId -> Map<"groupKey|windowStart", row>
 
@@ -359,7 +369,7 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
 
       setData(prev => {
         const next = { ...prev };
-        const cutoffEpoch = Date.now() - 24 * 60 * 60 * 1000;
+        const cutoffEpoch = Date.now() - LIVE_WINDOW_HOURS * 60 * 60 * 1000;
         const istWall = new Date(cutoffEpoch + IST_OFFSET_MS);
         const pad = (n) => String(n).padStart(2, '0');
         const cutoff = `${istWall.getUTCFullYear()}-${pad(istWall.getUTCMonth()+1)}-${pad(istWall.getUTCDate())} ${pad(istWall.getUTCHours())}:${pad(istWall.getUTCMinutes())}:${pad(istWall.getUTCSeconds())}`;
@@ -387,7 +397,7 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
   const fetchDataHttp = useCallback(async () => {
     if (!selectedRuleId) return;
     try {
-      const res = await fetch(`/api/rules/live-analysis?rule_ids=${selectedRuleId}&hours=24`);
+      const res = await fetch(`/api/rules/live-analysis?rule_ids=${selectedRuleId}&hours=${LIVE_WINDOW_HOURS}`);
       if (res.ok) {
         const json = await res.json();
         setData(json.results || {});
@@ -889,7 +899,7 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
           ) : (
             <>
               <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', textAlign: 'center', maxWidth: 400 }}>Select a rule from the sidebar to see it running live</p>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', opacity: 0.7, textAlign: 'center' }}>Updates arrive automatically · showing the last 24 hours</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', opacity: 0.7, textAlign: 'center' }}>Updates arrive automatically · showing the last hour</p>
             </>
           )}
         </div>
