@@ -1,5 +1,6 @@
 import React from 'react';
 import { ShieldCheck } from 'lucide-react';
+import { FEATURE_HISTORICAL_REPLAY } from '../../config/appConfig';
 
 const ROLE_COLOR = {
   SUPER_ADMIN: 'badge-violet',
@@ -32,7 +33,15 @@ const PERMISSION_LABELS = {
 export default function RoleReference({ roles }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.8rem' }}>
-      {roles.map((role) => (
+      {roles.map((role) => {
+        // Historical Replay is dormant in the UI (FEATURE_HISTORICAL_REPLAY,
+        // appConfig.js) — hide its permission rows here too, even though the
+        // backend still genuinely grants them, so this reference view doesn't
+        // mention a feature nobody can currently reach.
+        const visiblePermissions = role.permissions.filter(
+          (p) => FEATURE_HISTORICAL_REPLAY || !p.startsWith('historical_analysis:')
+        );
+        return (
         <div key={role.name} className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
             <ShieldCheck size={15} color="var(--violet-light)" />
@@ -44,17 +53,18 @@ export default function RoleReference({ roles }) {
             {role.description}
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-            {role.permissions.map((p) => (
+            {visiblePermissions.map((p) => (
               <div key={p} style={{ fontSize: '0.75rem', color: 'var(--text-3)', display: 'flex', gap: '0.4rem' }}>
                 <span style={{ color: 'var(--success)' }}>✓</span> {PERMISSION_LABELS[p] || p}
               </div>
             ))}
-            {role.permissions.length === 0 && (
+            {visiblePermissions.length === 0 && (
               <div style={{ fontSize: '0.75rem', color: 'var(--text-3)', fontStyle: 'italic' }}>No permissions.</div>
             )}
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import { getRuleColor } from '../constants';
 import { formatISTTime } from '../utils/istUtils';
+import { FEATURE_HISTORICAL_REPLAY } from '../config/appConfig';
 import { Modal, Drawer, RuleLink } from './ui/Overlay';
 import ScoreTriad from './ui/ScoreTriad';
 import JsonViewer from './ui/JsonViewer';
@@ -818,7 +819,11 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
           {hasDraftOnly ? (
             <>
               <p style={{ color: 'var(--warning)', fontSize: '1rem', textAlign: 'center', maxWidth: 440, fontWeight: 600 }}>The selected rule is still in Draft</p>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', maxWidth: 440 }}>Draft rules aren&apos;t live yet, so there&apos;s no real-time traffic to show. Publish the rule to make it Active, or use Historical Replay to test it against past data first.</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', maxWidth: 440 }}>
+                {FEATURE_HISTORICAL_REPLAY
+                  ? "Draft rules aren't live yet, so there's no real-time traffic to show. Publish the rule to make it Active, or use Historical Replay to test it against past data first."
+                  : "Draft rules aren't live yet, so there's no real-time traffic to show. Publish the rule to make it Active to see it here."}
+              </p>
             </>
           ) : (
             <>

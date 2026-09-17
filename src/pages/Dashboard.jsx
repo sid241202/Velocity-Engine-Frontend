@@ -12,7 +12,7 @@ import AdminPanel from '../components/AdminPanel/AdminPanel';
 import ErrorBoundary from '../components/ErrorBoundary';
 import PermissionGuard from '../components/PermissionGuard';
 import AccessDenied from '../components/AccessDenied';
-import { API_BASE } from '../config/appConfig';
+import { API_BASE, FEATURE_HISTORICAL_REPLAY } from '../config/appConfig';
 import { toISTDatetimeLocal, parseISTStringToEpochMs } from '../utils/istUtils';
 import { useRBAC } from '../context/RBACContext';
 import { PERMISSIONS } from '../permissions';
@@ -27,11 +27,13 @@ import { PERMISSIONS } from '../permissions';
 const NAV_ITEMS = [
   { key: 'live',       label: 'Live Stream',       icon: Activity,   tip: 'Real-time event stream & breach detection', anyOf: [PERMISSIONS.LIVE_ANALYSIS_READ] },
   { key: 'agg',        label: 'Analytics',         icon: BarChart3,  tip: 'Aggregated rule analysis over a custom date range', anyOf: [PERMISSIONS.AGGREGATED_ANALYSIS_READ] },
-  { key: 'historical', label: 'Historical Replay', icon: History,    tip: 'Replay and test rules on historical data', anyOf: [PERMISSIONS.HISTORICAL_ANALYSIS_READ] },
+  // Historical Replay — dormant via FEATURE_HISTORICAL_REPLAY (see appConfig.js).
+  // Filtered out below rather than deleted, so re-enabling is a one-line flip.
+  FEATURE_HISTORICAL_REPLAY && { key: 'historical', label: 'Historical Replay', icon: History, tip: 'Replay and test rules on historical data', anyOf: [PERMISSIONS.HISTORICAL_ANALYSIS_READ] },
   { key: 'build',      label: 'Create Rule',       icon: PlusSquare, tip: 'Build a new anomaly detection rule', anyOf: [PERMISSIONS.RULES_CREATE, PERMISSIONS.RULES_UPDATE] },
   { key: 'summary',    label: 'Rule Summary',      icon: Shield,     tip: 'View and manage a specific rule', anyOf: [PERMISSIONS.RULES_READ] },
   { key: 'admin',      label: 'Admin Panel',       icon: Settings,   tip: 'Manage users, teams, and roles', custom: 'canAccessAdminPanel' },
-];
+].filter(Boolean);
 
 /**
  * Dashboard — all five panels are always mounted (display:none when inactive).
@@ -306,15 +308,21 @@ export default function Dashboard() {
             </ErrorBoundary>
           </div>
 
-          {/* Historical Analysis — always mounted */}
-          <div style={{ display: activeTab === 'historical' ? 'block' : 'none' }}
-               className={activeTab === 'historical' ? 'animate-fade-in' : ''}>
-            <ErrorBoundary label="Historical Analysis">
-              <PermissionGuard permission={PERMISSIONS.HISTORICAL_ANALYSIS_READ} label="Historical Replay">
-                <HistoricalAnalysis rules={rules} selectedRuleId={analysisSelectedId} prefill={historicalPrefill} />
-              </PermissionGuard>
-            </ErrorBoundary>
-          </div>
+          {/* Historical Analysis — dormant via FEATURE_HISTORICAL_REPLAY (see
+              appConfig.js). Nothing sets activeTab to 'historical' anymore
+              (no nav button, no drill-through buttons — see AggregatedAnalysis.jsx
+              and RuleBuilder.jsx), so this is an unreached route; still gated
+              here directly too so re-enabling is purely the one flag flip. */}
+          {FEATURE_HISTORICAL_REPLAY && (
+            <div style={{ display: activeTab === 'historical' ? 'block' : 'none' }}
+                 className={activeTab === 'historical' ? 'animate-fade-in' : ''}>
+              <ErrorBoundary label="Historical Analysis">
+                <PermissionGuard permission={PERMISSIONS.HISTORICAL_ANALYSIS_READ} label="Historical Replay">
+                  <HistoricalAnalysis rules={rules} selectedRuleId={analysisSelectedId} prefill={historicalPrefill} />
+                </PermissionGuard>
+              </ErrorBoundary>
+            </div>
+          )}
 
           {/* Rule Builder — lazy mount on first visit */}
           {visitedTabsRef.current.has('build') && (

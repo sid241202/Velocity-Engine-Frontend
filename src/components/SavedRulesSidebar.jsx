@@ -1,6 +1,7 @@
 import React from 'react';
 import { ShieldCheck, Info, TrendingUp } from 'lucide-react';
 import { getRuleColor } from '../constants';
+import { FEATURE_HISTORICAL_REPLAY } from '../config/appConfig';
 
 const SEV_COLORS = {
   CRITICAL: 'var(--danger)',
@@ -67,7 +68,9 @@ export default function SavedRulesSidebar({
                 toggleRuleSelection(ruleId);
               }}
               title={isProdOnlyAnalysis && meta.status === 'DRAFT'
-                ? 'DRAFT rules are not available for Live or Agg analysis. Use Historical Analysis instead, or publish this rule.'
+                ? (FEATURE_HISTORICAL_REPLAY
+                  ? 'DRAFT rules are not available for Live or Agg analysis. Use Historical Analysis instead, or publish this rule.'
+                  : 'DRAFT rules are not available for Live or Agg analysis. Publish this rule to test it here.')
                 : ''}
               style={{
                 background: isSelected ? `${color}12` : 'var(--surface-2)',

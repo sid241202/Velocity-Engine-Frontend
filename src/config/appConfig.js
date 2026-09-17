@@ -23,6 +23,16 @@ export const LIVE_POLL_INTERVAL  = 0;     // 0 = WebSocket push, >0 = polling in
 // ── Historical Analysis Config ───────────────────────────────────────────────
 export const HISTORICAL_MAX_DAYS = 7;     // Maximum lookback in days
 
+// ── Feature Flags ─────────────────────────────────────────────────────────────
+// FEATURE_HISTORICAL_REPLAY: single switch for whether Historical Replay is
+// reachable/visible anywhere in the UI (nav tab, HomeView panel, cross-panel
+// "jump to historical" buttons, and every tooltip/hint that names it). Flip
+// back to true to restore it — HistoricalAnalysis.jsx and the backend/
+// DuckDB/Iceberg replay code it talks to are untouched either way, this only
+// gates what's reachable/visible in the UI. See src/pages/Dashboard.jsx and
+// the other call sites that import this flag.
+export const FEATURE_HISTORICAL_REPLAY = false;
+
 // ── Rule Builder Defaults ────────────────────────────────────────────────────
 export const DEFAULT_SOURCE_TOPIC     = 'BI.AUTH.AUTH_TXN.UNION.V1';
 export const DEFAULT_PENALTY_TTL_SEC  = 3600;   // 1 hour — used as Redis key TTL

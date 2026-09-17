@@ -6,7 +6,7 @@ import VisualFilterBuilder, { processFilterTree } from './VisualFilterBuilder';
 import FieldSelect from './FieldSelect';
 import RuleReferenceModal from './RuleReferenceModal';
 import { Modal } from './ui/Overlay';
-import { API_BASE, DEFAULT_SOURCE_TOPIC, DEFAULT_WINDOW_SIZE_SEC, DEFAULT_SLIDE_SEC } from '../config/appConfig';
+import { API_BASE, DEFAULT_SOURCE_TOPIC, DEFAULT_WINDOW_SIZE_SEC, DEFAULT_SLIDE_SEC, FEATURE_HISTORICAL_REPLAY } from '../config/appConfig';
 import { isValidRuleId, isNonEmpty, isValidJexlAlias, isPositiveInt } from '../utils/validators';
 import { getAuthHeaders } from '../services/apiClient';
 import { ENVELOPE_FIELD_OPTIONS, DATA_FIELD_OPTIONS } from '../constants/eventFields';
@@ -1389,13 +1389,15 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
             What would you like to do next?
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-            <button type="button" className="btn" style={{ background: 'rgba(var(--violet-rgb),0.15)', border: '1px solid rgba(var(--violet-rgb),0.35)', color: 'var(--violet-light)', justifyContent: 'flex-start', alignItems: 'flex-start', fontSize: '0.85rem', padding: '0.75rem 1rem' }} onClick={goToHistoricalFromModal}>
-              <History size={16} style={{ flexShrink: 0, marginTop: 2 }} />
-              <span style={{ textAlign: 'left', whiteSpace: 'normal', flex: 1, minWidth: 0 }}>
-                <span style={{ display: 'block', fontWeight: 600, lineHeight: 1.3 }}>Test it in Historical Replay</span>
-                <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-3)', fontWeight: 400, lineHeight: 1.45, marginTop: 2 }}>See how this rule would have performed on real past traffic — drafts can only be replayed, not run live.</span>
-              </span>
-            </button>
+            {FEATURE_HISTORICAL_REPLAY && (
+              <button type="button" className="btn" style={{ background: 'rgba(var(--violet-rgb),0.15)', border: '1px solid rgba(var(--violet-rgb),0.35)', color: 'var(--violet-light)', justifyContent: 'flex-start', alignItems: 'flex-start', fontSize: '0.85rem', padding: '0.75rem 1rem' }} onClick={goToHistoricalFromModal}>
+                <History size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+                <span style={{ textAlign: 'left', whiteSpace: 'normal', flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontWeight: 600, lineHeight: 1.3 }}>Test it in Historical Replay</span>
+                  <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-3)', fontWeight: 400, lineHeight: 1.45, marginTop: 2 }}>See how this rule would have performed on real past traffic — drafts can only be replayed, not run live.</span>
+                </span>
+              </button>
+            )}
             <button
               type="button"
               className="btn btn-accent"

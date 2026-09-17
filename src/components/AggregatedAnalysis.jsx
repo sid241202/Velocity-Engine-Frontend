@@ -7,6 +7,7 @@ import {
   ResponsiveContainer, Brush, Cell, Scatter, PieChart, Pie
 } from 'recharts';
 import { getRuleColor } from '../constants';
+import { FEATURE_HISTORICAL_REPLAY } from '../config/appConfig';
 import {
   toISTDatetimeLocal,
   toISTDatetimeLocalFromOffset,
@@ -876,8 +877,10 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
               <>
                 <p style={{ color: 'var(--amber)', fontSize: '0.9rem', fontWeight: 600, margin: '0 0 0.3rem' }}>The selected rule is still in Draft</p>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: 0, maxWidth: 360 }}>
-                  Draft rules aren&apos;t live yet, so there&apos;s no historical data to show.
-                  Publish the rule to make it Active, or use Historical Replay to test it against past traffic instead.
+                  Draft rules aren&apos;t live yet, so there&apos;s no historical data to show.{' '}
+                  {FEATURE_HISTORICAL_REPLAY
+                    ? 'Publish the rule to make it Active, or use Historical Replay to test it against past traffic instead.'
+                    : 'Publish the rule to make it Active to see data here.'}
                 </p>
               </>
             ) : (
@@ -1100,7 +1103,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
                                   <Timer size={9} />{ttl.text}
                                 </span>
                               )}
-                              {onDrillToHistorical && (
+                              {FEATURE_HISTORICAL_REPLAY && onDrillToHistorical && (
                                 <button
                                   type="button"
                                   className="btn"
