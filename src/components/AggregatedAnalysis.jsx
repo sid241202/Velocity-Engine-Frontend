@@ -126,7 +126,7 @@ function getBreachColor(rate) {
   if (rate < 5)   return '#3fb950'; // var(--success)
   if (rate <= 20) return '#e3a008'; // var(--warning)
   if (rate <= 50) return '#ff7b72';
-  return '#f85149'; // var(--danger)
+  return '#ff6b62'; // var(--danger)
 }
 
 function formatHourRange(hour) {

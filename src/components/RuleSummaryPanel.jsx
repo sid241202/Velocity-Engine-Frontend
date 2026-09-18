@@ -431,7 +431,7 @@ export default function RuleSummaryPanel({ rule, rules, fetchRules, navigateToEd
             {(allowed) => (
               <button
                 className="btn"
-                style={{ background: 'var(--warning)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
+                style={{ background: 'var(--warning)', color: 'var(--gray-1)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
                 onClick={() => updateStatus(meta.rule_id, 'PAUSED')}
                 title={!allowed ? "Your role doesn't have permission to change rule status (requires rules:publish)" : "Pausing the rule brings it back to draft, enabling editing."}
                 disabled={isActioning || !allowed}
@@ -449,7 +449,7 @@ export default function RuleSummaryPanel({ rule, rules, fetchRules, navigateToEd
               {(allowed) => (
                 <button
                   className="btn"
-                  style={{ background: 'var(--success)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
+                  style={{ background: 'var(--success)', color: 'var(--gray-1)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
                   onClick={() => updateStatus(meta.rule_id, 'ACTIVE')}
                   disabled={isActioning || !allowed}
                   title={!allowed ? "Your role doesn't have permission to change rule status (requires rules:publish)" : undefined}
@@ -472,7 +472,7 @@ export default function RuleSummaryPanel({ rule, rules, fetchRules, navigateToEd
           {(allowed) => (
             <button
               className="btn"
-              style={{ background: 'var(--danger)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
+              style={{ background: 'var(--danger)', color: 'var(--gray-1)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
               onClick={() => deleteRule(meta.rule_id)}
               disabled={isActioning || !allowed}
               title={!allowed ? "Your role doesn't have permission to delete rules (requires rules:delete)" : undefined}

@@ -25,7 +25,7 @@
   --gray-6:  #363a3f;
   --gray-7:  #43484e;
   --gray-8:  #5a6169;
-  --gray-9:  #696e77;
+  --gray-9:  #999da3;
   --gray-10: #777b84;
   --gray-11: #b0b4ba;
   --gray-12: #edeef0;
@@ -57,8 +57,8 @@
   --violet-dark:     #2e4aa6;
 
   /* Data accent — Castle's actual jade-9/jade-11 */
-  --teal-rgb:        41, 163, 131;
-  --teal:            #29a383;
+  --teal-rgb:        47, 179, 145;
+  --teal:            #2fb391;
   --teal-light:      #1fd8a4;
   --teal-glow:       rgba(var(--teal-rgb), 0.14);
   --teal-subtle:     rgba(var(--teal-rgb), 0.08);
@@ -69,12 +69,12 @@
   --amber-subtle:    rgba(227, 160, 8, 0.07);
 
   /* Semantic — danger / warning / success, for breach & anomaly states */
-  --danger-rgb:      248, 81, 73;
+  --danger-rgb:      255, 107, 98;
   --success:         #3fb950;
   --success-subtle:  rgba(63, 185, 80, 0.10);
   --warning:         #e3a008;
   --warning-subtle:  rgba(227, 160, 8, 0.10);
-  --danger:          #f85149;
+  --danger:          #ff6b62;
   --danger-subtle:   rgba(var(--danger-rgb), 0.10);
   --info:            var(--teal);
 
@@ -398,7 +398,7 @@ select {
 .badge-draft   { background: var(--surface-4);      color: var(--text-2);       border: 1px solid var(--border-2); }
 
 /* Severity */
-.sev-critical { color: #f85149; }
+.sev-critical { color: var(--danger); }
 .sev-high     { color: #ff7b72; }
 .sev-medium   { color: var(--amber); }
 .sev-low      { color: var(--teal); }
@@ -601,9 +601,9 @@ tr.table-row-breach td { background: rgba(248,81,73,0.055) !important; }
   isolation: isolate;
 }
 .tooltip-icon {
-  width: 15px; height: 15px;
+  width: 18px; height: 18px;
   border-radius: 50%; background: var(--surface-4); border: 1px solid var(--border-2);
-  color: var(--text-3); font-size: 0.62rem; cursor: help;
+  color: var(--text-2); font-size: 0.74rem; cursor: help;
   display: inline-flex; align-items: center; justify-content: center;
   margin-left: 5px; flex-shrink: 0; font-weight: 700;
   transition: border-color 0.14s ease, color 0.14s ease, background 0.14s ease;
