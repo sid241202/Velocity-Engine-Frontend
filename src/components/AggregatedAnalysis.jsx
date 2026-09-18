@@ -418,12 +418,24 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
   // they can still be used to compare across groups.
   const showGroupFilter = !!(currentRule && Array.isArray(currentRule.grouping?.keys) && currentRule.grouping.keys.length > 0);
 
-  const availableGroups = useMemo(() => {
+  // Capped — for a high-cardinality rule (a 6-key grouping can see 100k-600k+
+  // concurrent groups at peak, see PRODUCTION_CAPACITY_SPECS.txt), allRows'
+  // up-to-5000 raw rows can carry close to 5000 DISTINCT groupKeys, and a
+  // native <select> with that many <option> elements is pathologically slow
+  // to render/open. Cap it hard; when truncated, point at the same scalable
+  // ranking + exact-ID lookup the Entity Breach Ranking table already offers
+  // for this exact problem instead of trying to list every entity here too.
+  const GROUP_FILTER_OPTION_CAP = 300;
+  const { availableGroups, availableGroupsTruncated } = useMemo(() => {
     const set = new Set();
     for (const row of allRows) {
       if (row.groupKey) set.add(row.groupKey);
     }
-    return [...set].sort();
+    const sorted = [...set].sort();
+    return {
+      availableGroups: sorted.slice(0, GROUP_FILTER_OPTION_CAP),
+      availableGroupsTruncated: sorted.length > GROUP_FILTER_OPTION_CAP ? sorted.length : 0,
+    };
   }, [allRows]);
 
   const chartRows = useMemo(() => {
@@ -966,7 +978,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
         <>
           {/* Group-by filter — only shown for rules that group by a non-global key */}
           {showGroupFilter && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
               <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Select Entity</label>
               <select
                 value={selectedGroup}
@@ -977,6 +989,11 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
                 <option value="__ALL__">All Entities (Overview)</option>
                 {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
+              {availableGroupsTruncated > 0 && (
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                  Showing {GROUP_FILTER_OPTION_CAP} of {availableGroupsTruncated.toLocaleString()} entities seen in this range — use the Entity Breach Ranking table below to look up any other entity by exact key.
+                </span>
+              )}
             </div>
           )}
 
