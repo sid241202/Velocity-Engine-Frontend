@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import { getRuleColor } from '../constants';
 import { formatISTTime } from '../utils/istUtils';
+import { FEATURE_HISTORICAL_REPLAY } from '../config/appConfig';
 import { Modal, Drawer, RuleLink } from './ui/Overlay';
 import ScoreTriad from './ui/ScoreTriad';
 import JsonViewer from './ui/JsonViewer';
@@ -50,6 +51,16 @@ const STATUS_COLORS = {
 };
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+// How much rolling history this panel keeps client-side. Narrower than the
+// backend's LiveStore retention alone would give you snappier charts/tables
+// (smaller arrays behind every useMemo below) — but the real win only lands
+// once the backend's LIVE_STORE_HOURS is *also* turned down to match (see
+// internal/services/livestore.go's pruneStale and resources/configmap-
+// release.txt in the backend repo): otherwise every WS bootstrap/reconnect
+// and every HTTP fallback poll still ships however many hours the backend
+// is configured to retain, and this constant only trims it after the fact.
+const LIVE_WINDOW_HOURS = 1;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -313,39 +324,80 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
   );
   const currentRule = selectedRules[0] || null;
 
+  // ─── Batched delta application ──────────────────────────────────────────
+  // A single busy rule under peak load can push many deltas/sec (Flink's
+  // early-fire emits up to once per 3s per active group, and most groups
+  // fire on their very first event with no throttle at all — see
+  // PRODUCTION_CAPACITY_SPECS.txt section 3.2). Calling setData once per
+  // delta re-runs every useMemo below plus 3 Recharts charts on every single
+  // message — the single biggest UI-smoothness risk on this panel. Deltas
+  // are now accumulated in a ref and applied in one batched state update per
+  // flush window instead, mirroring the throughput counter's own
+  // ref-plus-interval pattern above. 250ms is well under human perception of
+  // "instant" for a monitoring dashboard, and collapses what could be
+  // hundreds of deltas/sec into ~4 re-renders/sec.
+  const DELTA_FLUSH_MS = 250;
+  // Safety valve independent of the LIVE_WINDOW_HOURS time filter below: a
+  // high-cardinality rule can still accumulate more rows within that window
+  // than any chart/table here actually uses, and the old per-message
+  // findIndex/filter scan over that whole array was itself an O(n) cost paid
+  // on every delta. Rows are sorted by windowStart before capping, so this
+  // always drops the oldest first.
+  const MAX_ROWS_PER_RULE = 5000;
+  const pendingDeltasRef = useRef(new Map()); // ruleId -> Map<"groupKey|windowStart", row>
+
   const handleDelta = useCallback((ruleId, row) => {
     deltaCountRef.current += 1;
     const normRow = normalizeRow(row);
-    setData(prev => {
-      const next = { ...prev };
-      const existing = next[ruleId] || [];
-      // Upsert by (groupKey, windowStart): a Flink early-fire (partial) row and
-      // the eventual final row for the same window share that key, so the
-      // later tick replaces the row in place instead of piling up a duplicate
-      // entry per partial tick — mirrors LiveStore.Add on the backend.
-      const idx = existing.findIndex(
-        r => r.groupKey === normRow.groupKey && r.windowStart === normRow.windowStart
-      );
-      if (idx >= 0) {
-        const updated = [...existing];
-        updated[idx] = normRow;
-        next[ruleId] = updated;
-      } else {
-        next[ruleId] = [...existing, normRow];
-      }
-      const cutoffEpoch = Date.now() - 24 * 60 * 60 * 1000;
-      const istWall = new Date(cutoffEpoch + IST_OFFSET_MS);
-      const pad = (n) => String(n).padStart(2, '0');
-      const cutoff = `${istWall.getUTCFullYear()}-${pad(istWall.getUTCMonth()+1)}-${pad(istWall.getUTCDate())} ${pad(istWall.getUTCHours())}:${pad(istWall.getUTCMinutes())}:${pad(istWall.getUTCSeconds())}`;
-      next[ruleId] = next[ruleId].filter(r => (r.windowStart || '') >= cutoff);
-      return next;
-    });
+    let ruleMap = pendingDeltasRef.current.get(ruleId);
+    if (!ruleMap) {
+      ruleMap = new Map();
+      pendingDeltasRef.current.set(ruleId, ruleMap);
+    }
+    // Upsert by (groupKey, windowStart): a Flink early-fire (partial) row and
+    // the eventual final row for the same window share that key, so the
+    // later tick replaces the row in place instead of piling up a duplicate
+    // entry per partial tick — mirrors LiveStore.Add on the backend.
+    ruleMap.set(`${normRow.groupKey}|${normRow.windowStart}`, normRow);
+  }, []);
+
+  useEffect(() => {
+    const flush = () => {
+      if (pendingDeltasRef.current.size === 0) return;
+      const pending = pendingDeltasRef.current;
+      pendingDeltasRef.current = new Map();
+
+      setData(prev => {
+        const next = { ...prev };
+        const cutoffEpoch = Date.now() - LIVE_WINDOW_HOURS * 60 * 60 * 1000;
+        const istWall = new Date(cutoffEpoch + IST_OFFSET_MS);
+        const pad = (n) => String(n).padStart(2, '0');
+        const cutoff = `${istWall.getUTCFullYear()}-${pad(istWall.getUTCMonth()+1)}-${pad(istWall.getUTCDate())} ${pad(istWall.getUTCHours())}:${pad(istWall.getUTCMinutes())}:${pad(istWall.getUTCSeconds())}`;
+
+        for (const [ruleId, ruleMap] of pending) {
+          const existing = next[ruleId] || [];
+          // O(1)-per-row upsert via Map, replacing the old O(n) findIndex
+          // scan — matters once a flush can carry many deltas at once.
+          const byKey = new Map(existing.map(r => [`${r.groupKey}|${r.windowStart}`, r]));
+          for (const [key, r] of ruleMap) byKey.set(key, r);
+          let merged = [...byKey.values()].filter(r => (r.windowStart || '') >= cutoff);
+          if (merged.length > MAX_ROWS_PER_RULE) {
+            merged.sort((a, b) => (a.windowStart || '').localeCompare(b.windowStart || ''));
+            merged = merged.slice(merged.length - MAX_ROWS_PER_RULE);
+          }
+          next[ruleId] = merged;
+        }
+        return next;
+      });
+    };
+    const interval = setInterval(flush, DELTA_FLUSH_MS);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchDataHttp = useCallback(async () => {
     if (!selectedRuleId) return;
     try {
-      const res = await fetch(`/api/rules/live-analysis?rule_ids=${selectedRuleId}&hours=24`);
+      const res = await fetch(`/api/rules/live-analysis?rule_ids=${selectedRuleId}&hours=${LIVE_WINDOW_HOURS}`);
       if (res.ok) {
         const json = await res.json();
         setData(json.results || {});
@@ -769,6 +821,13 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
   // ─── Window Detail modal data — every entity's row for one specific
   // window, independent of the group filter, so a click always shows the
   // full picture of what happened in that window. ───────────────────────────
+  // rows is capped for render (see BREACH_LIST_DISPLAY_CAP above for why —
+  // same no-virtualization concern, this time for a busy window with many
+  // concurrent groupKeys). totalCount/breachedCount are computed from the
+  // FULL set before capping, so the KPI tiles above the list stay accurate
+  // even when the list itself is truncated. Already sorted by event count
+  // descending, so capping keeps the highest-volume entities.
+  const WINDOW_DETAIL_DISPLAY_CAP = 300;
   const windowDetail = useMemo(() => {
     if (!overlay || overlay.type !== 'window') return null;
     const rows = allRows
@@ -776,14 +835,27 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
       .sort((a, b) => getEventCount(b) - getEventCount(a));
     const totalCount = rows.reduce((s, r) => s + getEventCount(r), 0);
     const breachedCount = rows.filter(isBreached).length;
-    return { windowStart: overlay.windowStart, windowEnd: rows[0]?.windowEnd, rows, totalCount, breachedCount };
+    return {
+      windowStart: overlay.windowStart,
+      windowEnd: rows[0]?.windowEnd,
+      rows: rows.slice(0, WINDOW_DETAIL_DISPLAY_CAP),
+      totalRows: rows.length,
+      totalCount, breachedCount,
+    };
   }, [overlay, allRows]);
 
   // ─── Breach List modal data — respects the group filter, so the count
   // shown here always matches the "Breaches" KPI tile that opened it. ───────
-  const breachListRows = useMemo(() => {
-    if (!overlay || overlay.type !== 'breachList') return [];
-    return [...chartRows].filter(isBreached).sort((a, b) => new Date(b.windowStart) - new Date(a.windowStart));
+  // Capped for render: with no list virtualization in this app, a
+  // high-cardinality rule breaching heavily under peak load could otherwise
+  // hand this modal thousands of DOM rows at once. Sorted most-recent-first
+  // before capping, so the cap always keeps the latest breaches — the ones
+  // an analyst is most likely to be checking on.
+  const BREACH_LIST_DISPLAY_CAP = 200;
+  const { breachListRows, breachListTotal } = useMemo(() => {
+    if (!overlay || overlay.type !== 'breachList') return { breachListRows: [], breachListTotal: 0 };
+    const sorted = [...chartRows].filter(isBreached).sort((a, b) => new Date(b.windowStart) - new Date(a.windowStart));
+    return { breachListRows: sorted.slice(0, BREACH_LIST_DISPLAY_CAP), breachListTotal: sorted.length };
   }, [overlay, chartRows]);
 
   // having_thresholds on a real rule is a JEXL boolean expression (e.g.
@@ -818,12 +890,16 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
           {hasDraftOnly ? (
             <>
               <p style={{ color: 'var(--warning)', fontSize: '1rem', textAlign: 'center', maxWidth: 440, fontWeight: 600 }}>The selected rule is still in Draft</p>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', maxWidth: 440 }}>Draft rules aren&apos;t live yet, so there&apos;s no real-time traffic to show. Publish the rule to make it Active, or use Historical Replay to test it against past data first.</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', maxWidth: 440 }}>
+                {FEATURE_HISTORICAL_REPLAY
+                  ? "Draft rules aren't live yet, so there's no real-time traffic to show. Publish the rule to make it Active, or use Historical Replay to test it against past data first."
+                  : "Draft rules aren't live yet, so there's no real-time traffic to show. Publish the rule to make it Active to see it here."}
+              </p>
             </>
           ) : (
             <>
               <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', textAlign: 'center', maxWidth: 400 }}>Select a rule from the sidebar to see it running live</p>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', opacity: 0.7, textAlign: 'center' }}>Updates arrive automatically · showing the last 24 hours</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', opacity: 0.7, textAlign: 'center' }}>Updates arrive automatically · showing the last hour</p>
             </>
           )}
         </div>
@@ -1056,8 +1132,7 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
                     fill="url(#gradEventVolume)"
                     name={`evt_${id}`}
                     activeDot={{ r: 6, fill: ACCENT_BLUE, stroke: '#fff', strokeWidth: 2 }}
-                    isAnimationActive={true}
-                    animationDuration={800}
+                    isAnimationActive={false}
                     hide={hiddenSeries[`evt_${id}`]}
                   />
                 );
@@ -1230,8 +1305,7 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
                         );
                       }}
                       activeDot={{ r: 5, fill: BREACH_RED, stroke: '#fff', strokeWidth: 2 }}
-                      isAnimationActive={true}
-                      animationDuration={900}
+                      isAnimationActive={false}
                     />
                   );
                 })}
@@ -1446,7 +1520,7 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
         onClose={closeOverlay}
         icon={Layers}
         title={windowDetail ? `${formatTimeShort(windowDetail.windowStart)} – ${formatTimeShort(windowDetail.windowEnd)} IST` : ''}
-        subtitle={windowDetail ? `${windowDetail.rows.length} entit${windowDetail.rows.length !== 1 ? 'ies' : 'y'} active in this window` : ''}
+        subtitle={windowDetail ? `${windowDetail.totalRows} entit${windowDetail.totalRows !== 1 ? 'ies' : 'y'} active in this window` : ''}
         width={580}
       >
         {windowDetail && (
@@ -1466,7 +1540,14 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
               </div>
             </div>
             <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-              <span>Per-Entity Breakdown <span style={{ textTransform: 'none', fontWeight: 400 }}>· click one for its full history</span></span>
+              <span>
+                Per-Entity Breakdown <span style={{ textTransform: 'none', fontWeight: 400 }}>· click one for its full history</span>
+                {windowDetail.totalRows > WINDOW_DETAIL_DISPLAY_CAP && (
+                  <span style={{ textTransform: 'none', fontWeight: 400, color: 'var(--warning)' }}>
+                    {' '}· showing top {WINDOW_DETAIL_DISPLAY_CAP} by volume
+                  </span>
+                )}
+              </span>
               <div className="chart-switcher-tabs">
                 <button type="button" className={`chart-switcher-tab ${windowViewMode === 'list' ? 'active' : ''}`} onClick={() => setWindowViewMode('list')}>Grouped</button>
                 <button type="button" className={`chart-switcher-tab ${windowViewMode === 'json' ? 'active' : ''}`} onClick={() => setWindowViewMode('json')}>Raw JSON</button>
@@ -1507,7 +1588,10 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
         icon={Zap}
         iconColor={BREACH_RED}
         title="Breach Events"
-        subtitle={showGroupFilter && selectedGroup !== '__ALL__' ? `Filtered to ${selectedGroup}` : 'All entities · current view'}
+        subtitle={
+          (showGroupFilter && selectedGroup !== '__ALL__' ? `Filtered to ${selectedGroup}` : 'All entities · current view')
+          + (breachListTotal > BREACH_LIST_DISPLAY_CAP ? ` · showing most recent ${BREACH_LIST_DISPLAY_CAP} of ${breachListTotal}` : '')
+        }
         width={580}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>

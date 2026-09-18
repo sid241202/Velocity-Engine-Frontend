@@ -1,36 +1,33 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './Dashboard.css';
-import { Zap, History, PlusSquare, Activity, BarChart3, Shield, AlertTriangle, RefreshCw, Send, ArrowRight, X, Settings } from 'lucide-react';
+import { Zap, History, PlusSquare, Activity, BarChart3, Shield, AlertTriangle, RefreshCw, Settings } from 'lucide-react';
 import RuleBuilderPage from '../components/RuleBuilderPage';
 import SavedRulesSidebar from '../components/SavedRulesSidebar';
 import RuleSummaryPanel from '../components/RuleSummaryPanel';
+import HomeView from '../components/HomeView';
 import LiveAnalysis from '../components/LiveAnalysis';
 import AggregatedAnalysis from '../components/AggregatedAnalysis';
 import HistoricalAnalysis from '../components/HistoricalAnalysis';
 import AdminPanel from '../components/AdminPanel/AdminPanel';
 import ErrorBoundary from '../components/ErrorBoundary';
 import PermissionGuard from '../components/PermissionGuard';
-import AccessDenied from '../components/AccessDenied';
-import { API_BASE } from '../config/appConfig';
+import { API_BASE, FEATURE_HISTORICAL_REPLAY } from '../config/appConfig';
 import { toISTDatetimeLocal, parseISTStringToEpochMs } from '../utils/istUtils';
 import { useRBAC } from '../context/RBACContext';
 import { PERMISSIONS } from '../permissions';
 
 // build's tab also doubles as the rule-edit surface (navigateToEdit routes
 // here), so it accepts create OR update rather than requiring create alone.
-//
-// 'admin' has no `anyOf` — access isn't a flat PERMISSIONS.* key (a team
-// lead's scope is data — which team — not a boolean), so it's gated by
-// `custom: 'canAccessAdminPanel'` instead and checked separately everywhere
-// `anyOf` would normally be read below.
 const NAV_ITEMS = [
   { key: 'live',       label: 'Live Stream',       icon: Activity,   tip: 'Real-time event stream & breach detection', anyOf: [PERMISSIONS.LIVE_ANALYSIS_READ] },
   { key: 'agg',        label: 'Analytics',         icon: BarChart3,  tip: 'Aggregated rule analysis over a custom date range', anyOf: [PERMISSIONS.AGGREGATED_ANALYSIS_READ] },
-  { key: 'historical', label: 'Historical Replay', icon: History,    tip: 'Replay and test rules on historical data', anyOf: [PERMISSIONS.HISTORICAL_ANALYSIS_READ] },
+  // Historical Replay — dormant via FEATURE_HISTORICAL_REPLAY (see appConfig.js).
+  // Filtered out below rather than deleted, so re-enabling is a one-line flip.
+  FEATURE_HISTORICAL_REPLAY && { key: 'historical', label: 'Historical Replay', icon: History, tip: 'Replay and test rules on historical data', anyOf: [PERMISSIONS.HISTORICAL_ANALYSIS_READ] },
   { key: 'build',      label: 'Create Rule',       icon: PlusSquare, tip: 'Build a new anomaly detection rule', anyOf: [PERMISSIONS.RULES_CREATE, PERMISSIONS.RULES_UPDATE] },
   { key: 'summary',    label: 'Rule Summary',      icon: Shield,     tip: 'View and manage a specific rule', anyOf: [PERMISSIONS.RULES_READ] },
-  { key: 'admin',      label: 'Admin Panel',       icon: Settings,   tip: 'Manage users, teams, and roles', custom: 'canAccessAdminPanel' },
-];
+  { key: 'admin',      label: 'Admin Panel',       icon: Settings,   tip: 'Manage users and roles', anyOf: [PERMISSIONS.IAM_MANAGE] },
+].filter(Boolean);
 
 /**
  * Dashboard — all five panels are always mounted (display:none when inactive).
@@ -48,14 +45,9 @@ const NAV_ITEMS = [
  * because the JS runtime is destroyed — no extra logic needed.
  */
 export default function Dashboard() {
-  const { hasAnyPermission, canAccessAdminPanel, loading: rbacLoading } = useRBAC();
-  // isNavAllowed: NAV_ITEMS' one non-permission-based entry ('admin') can't
-  // go through hasAnyPermission — see the NAV_ITEMS comment above.
-  const isNavAllowed = useCallback(
-    (item) => (item.custom === 'canAccessAdminPanel' ? canAccessAdminPanel : hasAnyPermission(item.anyOf)),
-    [canAccessAdminPanel, hasAnyPermission]
-  );
-  const [activeTab, setActiveTab]         = useState('live');
+  const { hasAnyPermission, loading: rbacLoading } = useRBAC();
+  const isNavAllowed = useCallback((item) => hasAnyPermission(item.anyOf), [hasAnyPermission]);
+  const [activeTab, setActiveTab]         = useState('home');
   const [rules, setRules]                 = useState([]);
   // Single-select: choosing a rule replaces whatever was previously selected
   // (radio-button behavior, not a multi-select checkbox list).
@@ -65,15 +57,6 @@ export default function Dashboard() {
   const [editingRule, setEditingRule]     = useState(null);
   const [historicalPrefill, setHistoricalPrefill] = useState(null);
 
-  // First-run onboarding card — dismissed permanently once closed, persisted
-  // across sessions since there's no user-account backing this yet.
-  const [showOnboarding, setShowOnboarding] = useState(
-    () => typeof window !== 'undefined' && localStorage.getItem('ve_onboarding_dismissed') !== 'true'
-  );
-  const dismissOnboarding = () => {
-    localStorage.setItem('ve_onboarding_dismissed', 'true');
-    setShowOnboarding(false);
-  };
 
   // Track which tabs have been visited so we can lazy-mount panels
   const visitedTabsRef = useRef(new Set(['live']));
@@ -160,6 +143,14 @@ export default function Dashboard() {
     handleTabChange('historical');
   };
 
+  // Lighter-weight than drillToHistorical above — no breach timestamp to
+  // center on yet (used right after creating a brand-new draft rule, which
+  // has no live data), just select the rule and switch tabs.
+  const goToHistoricalForRule = (ruleId) => {
+    setSelectedRuleId(ruleId);
+    handleTabChange('historical');
+  };
+
   // Determine which rule a draft user can access per panel
   // Draft rules: ONLY historical analysis allowed
   // Prod/Paused rules: all panels allowed
@@ -171,14 +162,26 @@ export default function Dashboard() {
     ? selectedRuleId
     : null;
 
+  // Detection Rules sidebar only makes sense where a selected rule actually
+  // drives what's shown (Live/Analytics/Historical) — Create Rule, Rule
+  // Summary (now its own browsable list), and Admin Panel don't use it.
+  const showSidebar = ['live', 'agg', 'historical'].includes(activeTab);
+
   return (
     <div className="app-container">
       {/* Header */}
       <header className="header">
-        <div className="header-logo">
-          <Zap size={16} color="#fff" strokeWidth={2.5} />
-        </div>
-        <h1>Velocity Engine</h1>
+        <button
+          type="button"
+          onClick={() => handleTabChange('home')}
+          title="Home"
+          style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+        >
+          <div className="header-logo">
+            <Zap size={16} color="#fff" strokeWidth={2.5} />
+          </div>
+          <h1 style={{ margin: 0 }}>Velocity Engine</h1>
+        </button>
         <div className="header-right">
           <span style={{ fontSize: '0.68rem', color: 'var(--text-3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>UIDAI · Auth Analytics</span>
           <span
@@ -197,50 +200,6 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* First-run onboarding — explains the Create → Publish → Monitor
-          workflow once, dismissible, remembered via localStorage. */}
-      {showOnboarding && (
-        <div style={{
-          background: 'linear-gradient(90deg, rgba(var(--violet-rgb),0.12), rgba(var(--teal-rgb),0.05))',
-          border: '1px solid rgba(var(--violet-rgb),0.3)',
-          borderRadius: '8px',
-          margin: '0.5rem 1rem',
-          padding: '0.75rem 2.25rem 0.75rem 1rem',
-          position: 'relative',
-        }}>
-          <button
-            onClick={dismissOnboarding}
-            title="Dismiss"
-            style={{ position: 'absolute', top: '0.6rem', right: '0.6rem', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: 4, display: 'flex' }}
-          >
-            <X size={14} />
-          </button>
-          <p style={{ margin: '0 0 0.65rem', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-1)' }}>
-            New here? This is a fraud-detection tool for Aadhaar authentication traffic. Here&apos;s how it works:
-          </p>
-          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
-            {[
-              { icon: PlusSquare, label: '1. Create a Rule', desc: 'Describe what unusual activity looks like' },
-              { icon: Send, label: '2. Publish It', desc: 'Make it live so it starts watching real traffic' },
-              { icon: Activity, label: '3. Monitor Results', desc: 'See it work in Live Stream, Analytics & Historical Replay' },
-            ].map(({ icon: Icon, label, desc }, i, arr) => (
-              <React.Fragment key={label}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 200 }}>
-                  <div style={{ width: 26, height: 26, borderRadius: 7, background: 'rgba(var(--violet-rgb),0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Icon size={13} color="var(--violet-light)" />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-1)' }}>{label}</div>
-                    <div style={{ fontSize: '0.68rem', color: 'var(--text-3)' }}>{desc}</div>
-                  </div>
-                </div>
-                {i < arr.length - 1 && <ArrowRight size={13} color="var(--text-3)" style={{ flexShrink: 0 }} />}
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Offline banner */}
       {backendStatus === 'down' && (
         <div className="backend-banner">
@@ -258,7 +217,11 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Nav */}
+      {/* Nav — hidden on Home. Home is the one deliberate-choice screen:
+          navigating away happens only by picking one of its own buttons.
+          The nav bar takes over for movement between panels once you're
+          inside one, via the logo (always back to Home) or another tab. */}
+      {activeTab !== 'home' && (
       <nav className="nav-bar">
         {NAV_ITEMS.map((item) => {
           const { key, label, icon: Icon, tip, anyOf } = item;
@@ -278,19 +241,22 @@ export default function Dashboard() {
           );
         })}
       </nav>
+      )}
 
       {/* Main layout */}
-      <div className="app-layout">
-        <aside>
-          <SavedRulesSidebar
-            rules={rules}
-            fetchRules={fetchRules}
-            selectedRuleId={selectedRuleId}
-            toggleRuleSelection={toggleRuleSelection}
-            activeTab={activeTab}
-            navigateToSummary={navigateToSummary}
-          />
-        </aside>
+      <div className={`app-layout${showSidebar ? '' : ' no-sidebar'}`}>
+        {showSidebar && (
+          <aside>
+            <SavedRulesSidebar
+              rules={rules}
+              fetchRules={fetchRules}
+              selectedRuleId={selectedRuleId}
+              toggleRuleSelection={toggleRuleSelection}
+              activeTab={activeTab}
+              navigateToSummary={navigateToSummary}
+            />
+          </aside>
+        )}
         <main className="content-area">
           {/*
            * All analysis panels are permanently mounted. We use display:none to
@@ -302,6 +268,14 @@ export default function Dashboard() {
            *
            * Lazy-mount: RuleBuilder, Summary, Build are only mounted once visited.
            */}
+
+          {/* Home — the landing menu, lightweight enough to not need the
+              always-mounted/lazy-mount treatment the data panels use. */}
+          {activeTab === 'home' && (
+            <div className="animate-fade-in">
+              <HomeView navItems={NAV_ITEMS} isNavAllowed={isNavAllowed} rbacLoading={rbacLoading} onNavigate={handleTabChange} rules={rules} />
+            </div>
+          )}
 
           {/* Live Analysis — always mounted */}
           <div style={{ display: activeTab === 'live' ? 'block' : 'none' }}
@@ -323,15 +297,21 @@ export default function Dashboard() {
             </ErrorBoundary>
           </div>
 
-          {/* Historical Analysis — always mounted */}
-          <div style={{ display: activeTab === 'historical' ? 'block' : 'none' }}
-               className={activeTab === 'historical' ? 'animate-fade-in' : ''}>
-            <ErrorBoundary label="Historical Analysis">
-              <PermissionGuard permission={PERMISSIONS.HISTORICAL_ANALYSIS_READ} label="Historical Replay">
-                <HistoricalAnalysis rules={rules} selectedRuleId={analysisSelectedId} prefill={historicalPrefill} />
-              </PermissionGuard>
-            </ErrorBoundary>
-          </div>
+          {/* Historical Analysis — dormant via FEATURE_HISTORICAL_REPLAY (see
+              appConfig.js). Nothing sets activeTab to 'historical' anymore
+              (no nav button, no drill-through buttons — see AggregatedAnalysis.jsx
+              and RuleBuilder.jsx), so this is an unreached route; still gated
+              here directly too so re-enabling is purely the one flag flip. */}
+          {FEATURE_HISTORICAL_REPLAY && (
+            <div style={{ display: activeTab === 'historical' ? 'block' : 'none' }}
+                 className={activeTab === 'historical' ? 'animate-fade-in' : ''}>
+              <ErrorBoundary label="Historical Analysis">
+                <PermissionGuard permission={PERMISSIONS.HISTORICAL_ANALYSIS_READ} label="Historical Replay">
+                  <HistoricalAnalysis rules={rules} selectedRuleId={analysisSelectedId} prefill={historicalPrefill} />
+                </PermissionGuard>
+              </ErrorBoundary>
+            </div>
+          )}
 
           {/* Rule Builder — lazy mount on first visit */}
           {visitedTabsRef.current.has('build') && (
@@ -344,6 +324,8 @@ export default function Dashboard() {
                     fetchRules={fetchRules}
                     editingRule={editingRule}
                     onEditComplete={handleEditComplete}
+                    onGoToHistorical={goToHistoricalForRule}
+                    onGoToSummary={navigateToSummary}
                   />
                 </PermissionGuard>
               </ErrorBoundary>
@@ -358,8 +340,12 @@ export default function Dashboard() {
                 <PermissionGuard permission={PERMISSIONS.RULES_READ} label="Rule Summary">
                   <RuleSummaryPanel
                     rule={rules.find(r => r.rule_metadata?.rule_id === summaryRuleId)}
+                    rules={rules}
                     fetchRules={fetchRules}
                     navigateToEdit={navigateToEdit}
+                    onSelectRule={navigateToSummary}
+                    onBack={() => setSummaryRuleId(null)}
+                    onCreateRule={() => handleTabChange('build')}
                   />
                 </PermissionGuard>
               </ErrorBoundary>
@@ -371,7 +357,9 @@ export default function Dashboard() {
             <div style={{ display: activeTab === 'admin' ? 'block' : 'none' }}
                  className={activeTab === 'admin' ? 'animate-fade-in' : ''}>
               <ErrorBoundary label="Admin Panel">
-                {canAccessAdminPanel ? <AdminPanel /> : <AccessDenied label="Admin Panel" />}
+                <PermissionGuard permission={PERMISSIONS.IAM_MANAGE} label="Admin Panel">
+                  <AdminPanel />
+                </PermissionGuard>
               </ErrorBoundary>
             </div>
           )}

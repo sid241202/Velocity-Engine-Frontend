@@ -1,36 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Eye, 
-  Fingerprint, 
-  Zap, 
-  Shield, 
-  Activity, 
-  AlertCircle, 
-  Sliders, 
-  BarChart3, 
-  FolderGit2 
+import { useNavigate } from 'react-router-dom';
+import {
+  Eye,
+  Fingerprint,
+  Zap,
+  Shield,
+  Activity,
+  AlertCircle,
+  Sliders,
+  BarChart3,
+  FolderGit2
 } from 'lucide-react';
 import authService from '../services/AuthService';
+import { useAuth } from '../context/AuthContext';
+import SessionLoading from '../components/SessionLoading';
 import './Landing.css';
 
 const LandingPage = () => {
+  const { status } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // AuthContext (not a separate probe here) owns session state — Landing
+  // just reacts to it. Navigating client-side (not window.location.href)
+  // avoids the hard reload that used to re-bootstrap the whole app and
+  // restart the RBAC/permission race from scratch.
   useEffect(() => {
-    checkAuthentication();
-  }, []);
-
-  const checkAuthentication = async () => {
-    try {
-      const isAuth = await authService.isAuthenticated();
-      if (isAuth) {
-        window.location.href = '/dashboard';
-      }
-    } catch (err) {
-      console.error('Error checking authentication:', err);
+    if (status === 'authenticated') {
+      navigate('/dashboard', { replace: true });
     }
-  };
+  }, [status, navigate]);
 
   const handleSignIn = async () => {
     setLoading(true);
@@ -43,6 +43,15 @@ const LandingPage = () => {
       setLoading(false);
     }
   };
+
+  // While the session is still being probed, or once it resolves
+  // authenticated and we're about to navigate away, never show the "Sign In"
+  // form — a user who is (or might already be) logged in landing here (e.g.
+  // browser back button) should see the same loading transition as everyone
+  // else mid-bootstrap, not a flash of the login screen.
+  if (status === 'checking' || status === 'authenticated') {
+    return <SessionLoading message="Verifying secure access..." />;
+  }
 
   return (
     <div className="landing-root">

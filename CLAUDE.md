@@ -53,18 +53,14 @@ a plain ConfigMap value.
 
 ## UI/UX design system
 
-This app's visual language and reusable component set evolved across
-several dedicated design passes, all on sandbox branches (never directly on
-`release` — see Branches below for exactly which branch has what). Read
-this before starting UI/UX work so it builds on what already exists instead
-of reinventing it.
+**This branch (`test-simulation`) now runs the same UI/UX code as `release`**
+— ported wholesale 2026-09-18 (see "Simulation architecture" below) so the
+simulation demonstrates the actual release experience, not an older design.
+Read this before starting UI/UX work so it builds on what already exists
+instead of reinventing it.
 
-**Design tokens (Castle-inspired v3, `src/index.css`)** — currently live on
-`test-castle` only, **not yet ported to `release`** (release still runs the
-original approximated dark palette: `--violet: #5865f2`, `--teal:
-#2dd4bf`). Confirm which of these you're targeting before writing new CSS —
-don't assume Castle's tokens are already in effect unless you've checked
-the actual branch. The full, exact palette (extracted directly from
+**Design tokens (Castle-inspired v3, `src/index.css`)** — live on `release`
+and this branch. The full, exact palette (extracted directly from
 https://castle.io's computed styles, not approximated):
 - Neutral scale: `--slate-1: #111113` (page bg) → `--slate-12: #edeef0`
   (primary text), with `2 #18191b, 3 #212225, 4 #272a2d, 5 #2e3135,
@@ -78,9 +74,8 @@ https://castle.io's computed styles, not approximated):
   layered on top of this scale — see `src/index.css` directly for the
   full derived-variant list rather than assuming only the above exist.
 
-**Reusable component library (`src/components/ui/`)** — built across the
-interactivity and Castle-fidelity passes, all still `test-castle`-only
-except where noted:
+**Reusable component library (`src/components/ui/`)** — live on `release`
+and this branch:
 - `Overlay.jsx` — the shared Modal/Drawer/RuleLink primitive. Every panel's
   click-to-drill-down interaction (entity detail, window/hour detail,
   breach list, rule-name links) is built on this — extend it rather than
@@ -175,27 +170,102 @@ by actually running the app, not by code review alone.
 
 ## Branches
 
-- `release` — stable/demo branch. Has the full RBAC surface merged in
-  (2026-07-16, `--no-ff` merge commit `70b2005` — real backend calls only,
-  no `SIMULATION_MODE`/mock-data fallback), *and* the real WSO2/OIDC PKCE
-  login flow merged in (2026-07-20, `wso2 integrated in version 3.0.0`,
-  commit `e1e7674`). Only `release`, `demo`, and `test-simulation-refactored`
-  exist as branches in this repo now; the original `rbac` and
-  `test-simulation` branches have been merged and deleted.
-- `demo` — a separate, deliberately-diverged branch, **not** merged into
-  `release`. Still uses the pre-WSO2 `X-Debug-User-Id` debug-identity flow
-  against the backend's `demo` branch (whose RBAC/rule-store storage layer
-  differs from `release`'s — verify demo's own `CLAUDE.md` and code
-  directly rather than assuming parity with this file) and may still have
-  single-rule selection / a per-group chart filter not present on `release`.
-- `test-simulation-refactored` — dedicated simulation branch (refactored
-  plain-language UI pass + `SIMULATION_MODE`/mock data generators); the only
-  simulation branch left. Deliberately never merged into `release` — still
-  requires explicit permission to merge.
-- The original `test-simulation` branch (pre-refactor) was superseded by
-  `test-simulation-refactored` and deleted 2026-07-16, both locally and on
-  `github`, at the user's explicit request — its full history is preserved
-  via `test-simulation-refactored`'s ancestry, nothing was lost.
+**Verify with `git branch -a` before trusting this section** — see the root
+`../CLAUDE.md`'s explicit warning that this repo's branch set changes often.
+As of 2026-09-18: `release`, `test`, `test-simulation`, `revamp`,
+`feature/finger-auth-fraud-rules`.
+
+- `release` — stable/production branch. Full RBAC surface, real WSO2/OIDC
+  login (single-transition SessionLoading fix landed 2026-09-18), the entire
+  Castle-inspired/`revamp` UI redesign, Historical Replay hidden behind
+  `FEATURE_HISTORICAL_REPLAY`, and no multi-team admin-panel scoping (removed
+  2026-09-18). No `SIMULATION_MODE`/mock-data fallback of any kind — every
+  `fetch`/WebSocket call is real.
+- `test-simulation` (this branch) — **as of 2026-09-18, ported to full UI
+  parity with `release`**: every component/page/context/service file was
+  bulk-copied from `release` (`git checkout release -- <path>` per file),
+  except `src/simulation/*` and the 3-line `installSimulation()` hook in
+  `main.jsx`. See "Simulation architecture" below for how the simulation
+  layer hooks into this otherwise-unmodified release code. Before this port,
+  this branch ran a much older pre-`revamp` UI with its own
+  `TeamsPanel.jsx`/`RuleBuilderHelper.jsx` (both deleted in the port,
+  superseded by `release`'s versions) — don't assume anything about this
+  branch's UI from before 2026-09-18 still applies.
+- `test` — the design/feature-integration branch, cut from `release`, does
+  **not** have the `revamp` redesign that `release` and `test-simulation`
+  now both have (see `../CLAUDE.md`). Not a simulation branch — talks to a
+  real backend.
+- `revamp` — local-only (never pushed), the active branch for further
+  UI/UX iteration if more design rounds happen; unrelated to this branch's
+  simulation work.
+- `feature/finger-auth-fraud-rules` — deferred Raw-JEXL/percentage-threshold
+  work, not merged anywhere.
+
+## Simulation architecture (`src/simulation/`)
+
+This branch IS the simulation environment — `main.jsx` calls
+`installSimulation()` unconditionally (no env flag). It intercepts
+`window.fetch` and `window.WebSocket` globally so every real, unmodified
+component (imported straight from `release`) keeps making its normal
+`/api/...` calls without knowing a real backend isn't there:
+
+- `interceptFetch.js` — routes every `/api/*` call to the matching generator/
+  store module. Also catches the one non-`/api/` absolute URL this app calls
+  directly: WSO2's real token endpoint (`authConfig.metadata.token_endpoint`)
+  — never let that reach the real network (see `interceptAuth.js`).
+- `interceptAuth.js` — simulates the WSO2 OAuth round-trip **in-tab**, no
+  external hop. Wraps (doesn't rewrite) `authService.login()`/`logout()` on
+  the singleton instance: `login()` replicates the real state/return-url
+  bookkeeping, then navigates straight to this app's own `/callback` with a
+  fake code instead of a real cross-origin redirect. `handleCallback()`
+  itself runs completely unmodified — its POST to the token endpoint is
+  answered by `handleSimulatedTokenExchange()` with a realistic response,
+  including a real base64url-encoded fake-signed ID token, so the real JWT-
+  decode logic in `AuthService.js` runs for real too. **Deliberately does
+  NOT pre-seed a session at boot** (an earlier version of this branch did) —
+  the app boots genuinely signed out so the real Landing page and the actual
+  post-SSO-click transition are what's demonstrated.
+- `mockWebSocket.js` — replaces `window.WebSocket` for `/api/ws/live-analysis`
+  only; speaks the real bootstrap/delta protocol.
+- `rule.js` — the one hardcoded, already-ACTIVE rule this branch ships with:
+  **Rule 5 from `BUSINESS_RULES_UI_GUIDE.md`**
+  (`finger-6key-failure-count-5min`), chosen as the most complex rule in that
+  guide (6 grouping keys, ~630,000 modeled concurrent groups at peak — see
+  `PRODUCTION_CAPACITY_SPECS.txt` §2.3).
+- `entities.js` — the synthetic entity population for that rule, built to
+  real August 2026 cardinality/volume figures (not toy data): the real
+  131-code financial-AUA list, a 5,000-entity pool with a power-law severity
+  distribution (a small head of persistent repeat offenders, a long tail
+  that almost never breaches — matching how a real 6-key composite actually
+  behaves), plus deterministic synthesis for arbitrary keys an analyst types
+  into the exact-ID lookup box.
+- `dataGenerators.js` — realistic RESULTS-shaped rows mirroring the real
+  backend's ClickHouse query behavior exactly, including its `LIMIT 5000`/
+  `ORDER BY windowStart DESC` raw-row cap and the `top-groups`/`group-detail`
+  server-side-ranking endpoints' real contract (`GroupSummary` shape,
+  `?limit&offset` pagination).
+- `adminData.js` — no teams (mirrors `release`'s de-teamed admin model).
+
+**A real bug this exercise found and fixed on `release`** (then ported here,
+commit matching the message "Cap Select Entity dropdown option count for
+high-cardinality rules"): `AggregatedAnalysis.jsx`'s/`LiveAnalysis.jsx`'s
+"Select Entity" dropdown built one native `<option>` per distinct `groupKey`
+seen — fine for a low-cardinality rule, but Rule 5's real scale produces
+close to 5,000 distinct keys in the raw row cap, and a `<select>` with that
+many options hangs the tab. `AggregatedAnalysis.jsx` is now capped at 300
+options with a note pointing at the Entity Breach Ranking table's exact-key
+lookup instead. **`LiveAnalysis.jsx`'s own separate "Top Groups by Breach
+Activity" table has the same underlying shape of gap** (client-side grouping
+of `allRows`, not the server-side ranked query `AggregatedAnalysis.jsx`'s
+table now uses) — it doesn't hang (it's a plain table, capped at 20 rows,
+not a native `<select>`), but for a high-cardinality rule its "top 20" is
+only ever a live-session sample, not a guaranteed global ranking. Documented
+as a known caveat in `LIVE_AND_AGGREGATED_ANALYSIS_GUIDE.md` (see root
+`E:\Projects\`) rather than fixed — flagged here for whoever picks it up.
+
+See `LIVE_AND_AGGREGATED_ANALYSIS_GUIDE.md` (root `E:\Projects\`) for a full
+explanation of every metric/chart on the Live Stream and Analytics panels,
+written using Rule 5 as the worked example.
 
 ## Dev server
 

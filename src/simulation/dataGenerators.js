@@ -1,60 +1,67 @@
 /**
- * dataGenerators.js — deterministic, realistic-looking synthetic data for
- * every panel this app has. "Deterministic" matters here: the same entity
+ * dataGenerators.js — deterministic, realistic-looking synthetic RESULTS
+ * data for Rule 5 (see rule.js/entities.js), shaped exactly like the real
+ * backend's ClickHouse-backed endpoints (see GetAggResults/GetTopGroups/
+ * GetGroupDetail in the backend's internal/services/clickhouse.go —
+ * groupKey/windowStart/windowEnd/aggResult/thresholdBreached, `ORDER BY
+ * windowStart DESC LIMIT 5000` for raw-row endpoints, `ORDER BY
+ * breachedWindows DESC LIMIT/OFFSET` for the ranked entity endpoint).
+ *
+ * "Deterministic" matters here the same way it did before: the same entity
  * at the same window always produces the same numbers (seeded by
  * entity+window, not Math.random()), so re-querying a date range or
- * reloading the page doesn't reshuffle who's the worst offender — it reads
- * like a real, consistent dataset instead of noise.
+ * reloading the page doesn't reshuffle who's the worst offender.
+ *
+ * Rows are NOT generated as a dense entity x time-bucket cross product —
+ * with a 5,000-entity pool that would wildly overshoot the real backend's
+ * behavior. Instead each entity "fires" (produces a window row) in a given
+ * bucket with a per-tier probability (severe/repeat offenders fire almost
+ * every window; the long tail fires rarely) — mirroring how a real 6-key
+ * composite group actually behaves: most groups are one-shot, a few are
+ * genuinely persistent. Generation walks buckets newest-first and stops at
+ * 5,000 rows, matching the real `LIMIT 5000` raw-row cap exactly (including
+ * its real limitation: for a date range with more than 5,000 firing rows,
+ * older activity silently isn't returned — same as production).
  */
-import {
-  SIM_ENTITIES, SIM_ENTITY_PROFILE, evaluateBreach,
-  FAIL_COUNT_THRESHOLD, UNIQUE_DEVICES_THRESHOLD,
-} from './rule';
+import { getEntityPool, findEntityByKey, syntheticEntityForArbitraryKey, seededRandom, MODELED_PEAK_CONCURRENT_GROUPS } from './entities';
+import { SIM_RULE_ID, WINDOW_SIZE_MS, evaluateBreach } from './rule';
 import { toISTBackendString } from './istTime';
 
-function seededRandom(seedStr) {
-  let h = 1779033703 ^ seedStr.length;
-  for (let i = 0; i < seedStr.length; i++) {
-    h = Math.imul(h ^ seedStr.charCodeAt(i), 3432918353);
-    h = (h << 13) | (h >>> 19);
-  }
-  return function next() {
-    h = Math.imul(h ^ (h >>> 16), 2246822507);
-    h = Math.imul(h ^ (h >>> 13), 3266489909);
-    h ^= h >>> 16;
-    return (h >>> 0) / 4294967296;
-  };
-}
+const RAW_ROW_CAP = 5000;
 
-/** Business-hours traffic curve in IST, peaking mid-afternoon. */
+const FIRE_PROBABILITY = { severe: 0.9, moderate: 0.35, light: 0.03 };
+
+/** Business-hours traffic curve in IST, peaking mid-afternoon — modulates
+ * both fire probability and magnitude so activity (and breaches) cluster
+ * around realistic hours instead of being flat all day. */
 function trafficMultiplier(epochMs) {
   const ist = new Date(epochMs + 5.5 * 3600 * 1000);
   const hour = ist.getUTCHours() + ist.getUTCMinutes() / 60;
   const x = ((hour - 14) / 24) * 2 * Math.PI;
-  return 0.5 + 0.5 * Math.cos(x);
+  return 0.45 + 0.55 * Math.cos(x);
 }
 
+/** For one entity at one window start: does it fire, and with what failed_count? */
 export function computeEntityWindowStats(entity, windowStartMs) {
-  const profile = SIM_ENTITY_PROFILE[entity] || { baseline: 10, volatility: 1 };
-  const rnd = seededRandom(`${entity}|${Math.floor(windowStartMs / 60000)}`);
+  const rnd = seededRandom(`${entity.groupKey}|${Math.floor(windowStartMs / 60000)}`);
+  const fireP = FIRE_PROBABILITY[entity.tier] ?? 0.05;
   const mult = trafficMultiplier(windowStartMs);
+  if (rnd() > fireP * (0.6 + 0.4 * mult)) return null; // did not fire this window
+
   const wobble = 0.6 + rnd() * 0.8;
-  const spike = rnd() < 0.07 ? 1.8 + rnd() * 1.6 : 1; // occasional burst so breaches cluster realistically
-  const fail_count = Math.max(0, Math.round(profile.baseline * mult * wobble * spike * profile.volatility));
-  const unique_residents = Math.max(0, Math.round(fail_count * (0.35 + rnd() * 0.25)));
-  const unique_devices = Math.max(0, Math.round(fail_count * (0.15 + rnd() * 0.35)));
-  return { fail_count, unique_residents, unique_devices, breached: evaluateBreach({ fail_count, unique_residents, unique_devices }) };
+  const spike = rnd() < 0.06 ? 1.6 + rnd() * 1.8 : 1; // occasional burst
+  const failed_count = Math.max(0, Math.round(entity.baseline * mult * wobble * spike * entity.volatility)) || (rnd() < 0.5 ? 0 : 1);
+  return { failed_count, breached: evaluateBreach(failed_count) };
 }
 
-function windowRow(ruleId, entity, windowStartMs, windowSizeMs, isFinal) {
-  const stats = computeEntityWindowStats(entity, windowStartMs);
+function windowRow(entity, windowStartMs, stats, isFinal) {
   return {
-    ruleId,
-    groupKey: entity,
+    ruleId: SIM_RULE_ID,
+    groupKey: entity.groupKey,
     windowStart: toISTBackendString(windowStartMs),
-    windowEnd: toISTBackendString(windowStartMs + windowSizeMs),
-    evaluatedAt: toISTBackendString(windowStartMs + windowSizeMs),
-    aggResult: { fail_count: stats.fail_count, unique_residents: stats.unique_residents, unique_devices: stats.unique_devices },
+    windowEnd: toISTBackendString(windowStartMs + WINDOW_SIZE_MS),
+    evaluatedAt: toISTBackendString(windowStartMs + WINDOW_SIZE_MS),
+    aggResult: { failed_count: stats.failed_count },
     thresholdMet: stats.breached,
     thresholdBreached: stats.breached,
     isFinal: isFinal !== false,
@@ -70,29 +77,41 @@ function pickStepMs(rangeMs) {
   return candidates[candidates.length - 1];
 }
 
-/** Live-analysis / agg-analysis shaped rows over [fromMs, toMs]. */
-export function generateWindows(ruleId, fromMs, toMs, { stepMs, entities = SIM_ENTITIES, windowSizeMs = 5 * 60 * 1000 } = {}) {
+/**
+ * Live-analysis / agg-analysis shaped rows over [fromMs, toMs] — walks time
+ * buckets NEWEST FIRST across the whole 5,000-entity pool, keeping every
+ * firing row, and stops at RAW_ROW_CAP — exactly mirroring the real
+ * `ORDER BY windowStart DESC LIMIT 5000` behavior (ties broken by pool
+ * order, close enough to "recency" for a simulation).
+ */
+export function generateWindows(ruleId, fromMs, toMs, { stepMs, entities } = {}) {
   const step = stepMs || pickStepMs(Math.max(1, toMs - fromMs));
+  const pool = entities || getEntityPool();
   const rows = [];
   const start = Math.floor(fromMs / step) * step;
-  for (let t = start; t <= toMs; t += step) {
-    for (const e of entities) rows.push(windowRow(ruleId, e, t, windowSizeMs));
+  const end = Math.floor(toMs / step) * step;
+
+  for (let t = end; t >= start && rows.length < RAW_ROW_CAP; t -= step) {
+    for (const entity of pool) {
+      const stats = computeEntityWindowStats(entity, t);
+      if (stats) rows.push(windowRow(entity, t, stats));
+      if (rows.length >= RAW_ROW_CAP) break;
+    }
   }
   return rows;
 }
 
-/** Anomaly feed: one entry per breaching window in the lookback, richer
- * severity derived from how far the window overshot its threshold (not
- * random) so the Severity Mix pie reads as meaningful, not arbitrary. */
+/** Anomaly feed: one entry per breaching window in the lookback, severity
+ * derived from how far the window overshot its threshold. */
 export function generateAnomalies(ruleId, { lookbackMs = 8 * 60 * 60 * 1000, now = Date.now(), limit = 60 } = {}) {
   const rows = generateWindows(ruleId, now - lookbackMs, now, { stepMs: 60000 });
   const breached = rows.filter(r => r.thresholdBreached);
   const withSeverity = breached.map(r => {
-    const { fail_count, unique_devices } = r.aggResult;
+    const { failed_count } = r.aggResult;
     let severity;
-    if (fail_count > 60 || unique_devices > 30) severity = 'CRITICAL';
-    else if (fail_count > FAIL_COUNT_THRESHOLD * 1.6 || unique_devices > UNIQUE_DEVICES_THRESHOLD * 1.4) severity = 'HIGH';
-    else if (fail_count > FAIL_COUNT_THRESHOLD * 1.15) severity = 'MEDIUM';
+    if (failed_count > 40) severity = 'CRITICAL';
+    else if (failed_count > 20) severity = 'HIGH';
+    else if (failed_count > 14) severity = 'MEDIUM';
     else severity = 'LOW';
     return {
       ruleId,
@@ -100,7 +119,7 @@ export function generateAnomalies(ruleId, { lookbackMs = 8 * 60 * 60 * 1000, now
       timestamp: r.evaluatedAt,
       windowEnd: r.evaluatedAt,
       severity,
-      penaltyTtlSeconds: 900,
+      penaltyTtlSeconds: 3600,
       aggResult: r.aggResult,
     };
   });
@@ -108,33 +127,84 @@ export function generateAnomalies(ruleId, { lookbackMs = 8 * 60 * 60 * 1000, now
   return withSeverity.slice(0, limit);
 }
 
-/** Historical-analysis shaped rows — flat aggregation fields (row[alias]),
- * snake_case window_start/threshold_met, matching the real backend's shape. */
-export function generateHistoricalRows(ruleId, fromMs, toMs) {
+/**
+ * Server-side ranked entity list — mirrors GET /rules/:rule_id/top-groups:
+ * counts each pool entity's total/breached windows within [fromMs, toMs]
+ * (using the same per-bucket firing model at 1-minute resolution, capped to
+ * a bounded number of buckets so a wide date range stays fast), ranks by
+ * breachedWindows DESC then totalWindows DESC, and paginates.
+ */
+export function generateTopGroups(ruleId, fromMs, toMs, { limit = 50, offset = 0 } = {}) {
+  const pool = getEntityPool();
+  const step = pickStepMs(Math.max(1, toMs - fromMs));
+  const bucketCount = Math.min(500, Math.max(1, Math.round((toMs - fromMs) / step)));
+  const start = Math.floor(toMs / step) * step - (bucketCount - 1) * step;
+
+  const summaries = pool.map(entity => {
+    let totalWindows = 0, breachedWindows = 0, lastSeenMs = null;
+    for (let i = 0; i < bucketCount; i++) {
+      const t = start + i * step;
+      const stats = computeEntityWindowStats(entity, t);
+      if (!stats) continue;
+      totalWindows += 1;
+      if (stats.breached) breachedWindows += 1;
+      lastSeenMs = t;
+    }
+    return { entity, totalWindows, breachedWindows, lastSeenMs };
+  }).filter(s => s.totalWindows > 0);
+
+  summaries.sort((a, b) => (b.breachedWindows - a.breachedWindows) || (b.totalWindows - a.totalWindows));
+
+  const page = summaries.slice(offset, offset + limit);
+  return {
+    groups: page.map(s => ({
+      groupKey: s.entity.groupKey,
+      totalWindows: s.totalWindows,
+      breachedWindows: s.breachedWindows,
+      breachRate: s.totalWindows > 0 ? s.breachedWindows / s.totalWindows : 0,
+      lastSeen: s.lastSeenMs != null ? toISTBackendString(s.lastSeenMs + WINDOW_SIZE_MS) : '',
+    })),
+    totalRanked: summaries.length,
+    modeledPopulation: MODELED_PEAK_CONCURRENT_GROUPS,
+  };
+}
+
+/**
+ * Exact-key drill-in — mirrors GET /rules/:rule_id/group-detail. Works for
+ * both pool members and arbitrary well-formed keys an analyst types in (see
+ * entities.js's syntheticEntityForArbitraryKey), same as a real ClickHouse
+ * exact-match query would return real rows for a key it has actually seen.
+ */
+export function generateGroupDetail(ruleId, groupKey, fromMs, toMs) {
+  const entity = findEntityByKey(groupKey) || syntheticEntityForArbitraryKey(groupKey);
   const step = pickStepMs(Math.max(1, toMs - fromMs));
   const rows = [];
   const start = Math.floor(fromMs / step) * step;
-  for (let t = start; t <= toMs; t += step) {
-    for (const entity of SIM_ENTITIES) {
-      const stats = computeEntityWindowStats(entity, t);
-      rows.push({
-        rule_id: ruleId,
-        groupKey: entity,
-        window_start: toISTBackendString(t),
-        window_end: toISTBackendString(t + 5 * 60 * 1000),
-        threshold_met: stats.breached,
-        fail_count: stats.fail_count,
-        unique_residents: stats.unique_residents,
-        unique_devices: stats.unique_devices,
-      });
-    }
+  const end = Math.floor(toMs / step) * step;
+  for (let t = end; t >= start && rows.length < 2000; t -= step) {
+    const stats = computeEntityWindowStats(entity, t);
+    if (stats) rows.push(windowRow(entity, t, stats));
   }
   return rows;
 }
 
-const DISTRICT_LABELS = ['South Delhi', 'Pune', 'Bengaluru Urban', 'Ahmedabad', 'Lucknow', 'Patna', 'Jaipur', 'Chennai'];
-const MODALITY_LABELS = ['OTP', 'Fingerprint', 'Iris', 'Face'];
-const OUTCOME_LABELS = ['Success', 'PID Mismatch', 'OTP Expired', 'Device Not Registered', 'Locked — Too Many Attempts'];
+// ── Historical Replay generators — kept functional (HistoricalAnalysis.jsx
+// itself is untouched by the dormancy flag, only its nav/entry points are
+// hidden — see appConfig.js FEATURE_HISTORICAL_REPLAY) even though nothing
+// in the UI can currently reach this tab. ──────────────────────────────────
+export function generateHistoricalRows(ruleId, fromMs, toMs) {
+  return generateWindows(ruleId, fromMs, toMs, {}).map(r => ({
+    rule_id: r.ruleId,
+    groupKey: r.groupKey,
+    window_start: r.windowStart,
+    window_end: r.windowEnd,
+    threshold_met: r.thresholdMet,
+    failed_count: r.aggResult.failed_count,
+  }));
+}
+
+const MODALITY_LABELS = ['Fingerprint (Single)', 'Fingerprint (Multi)', 'Iris', 'Face'];
+const OUTCOME_LABELS = ['PID Mismatch', 'Device Not Registered', 'Locked — Too Many Attempts', 'Biometric Lock', 'Server Timeout'];
 
 export function generateHistoricalBreakdown(ruleId, fromMs, toMs) {
   const rows = generateHistoricalRows(ruleId, fromMs, toMs);
@@ -149,12 +219,12 @@ export function generateHistoricalBreakdown(ruleId, fromMs, toMs) {
   };
 
   return {
-    modality_mix: distribute(MODALITY_LABELS, [0.42, 0.3, 0.16, 0.12]),
-    auth_outcome: distribute(OUTCOME_LABELS, [0.08, 0.34, 0.27, 0.14, 0.17]),
-    geo_hotspot: distribute(DISTRICT_LABELS.slice(0, 6), DISTRICT_LABELS.slice(0, 6).map(() => 0.5 + rnd())),
+    modality_mix: distribute(MODALITY_LABELS, [0.55, 0.2, 0.15, 0.1]),
+    auth_outcome: distribute(OUTCOME_LABELS, [0.38, 0.22, 0.18, 0.14, 0.08]),
+    geo_hotspot: distribute(['South Delhi', 'Pune', 'Bengaluru Urban', 'Ahmedabad', 'Lucknow', 'Patna'], [0.5 + rnd(), 0.5 + rnd(), 0.5 + rnd(), 0.5 + rnd(), 0.5 + rnd(), 0.5 + rnd()]),
     match_score_histogram: ['0-20', '21-40', '41-60', '61-80', '81-100'].map((label, i) => ({
       label,
-      count: Math.max(1, Math.round(totalMatched * (2 + rnd()) * [0.28, 0.24, 0.18, 0.16, 0.14][i])),
+      count: Math.max(1, Math.round(totalMatched * (2 + rnd()) * [0.32, 0.26, 0.18, 0.14, 0.10][i])),
     })),
   };
 }

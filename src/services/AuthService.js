@@ -13,9 +13,14 @@ class AuthService {
       stateStore: new WebStorageStateStore({ store: window.sessionStorage })
     });
 
-    // Whitelist of allowed redirect paths to prevent open redirect vulnerability
+    // Whitelist of allowed post-login redirect paths to prevent open
+    // redirect vulnerability. Deliberately excludes '/' (Landing): login is
+    // only ever initiated from there, so window.location.pathname at
+    // login() time is always '/' — whitelisting it used to mean a freshly
+    // authenticated user got routed straight back to the login screen
+    // (which then hard-redirected to /dashboard itself), instead of
+    // straight to /dashboard. '/' is never a valid *post-login* destination.
     this.allowedReturnPaths = [
-      '/',
       '/dashboard',
     ];
 

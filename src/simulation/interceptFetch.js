@@ -3,10 +3,17 @@
  * simulated data/store modules. Every real component (LiveAnalysis,
  * AggregatedAnalysis, HistoricalAnalysis, RuleBuilder, RuleSummaryPanel,
  * RBACContext, AdminPanel/adminApi.js, AuthService.js) keeps making its
- * normal fetch() calls to /api/... — none of them know this exists.
+ * normal fetch() calls to /api/... — none of them know this exists. Also
+ * catches the one non-/api/ absolute URL this app calls directly: WSO2's
+ * token endpoint, hit once by AuthService.handleCallback() during the
+ * simulated SSO round-trip (see interceptAuth.js) — never let that request
+ * reach the real network, both because there's nothing there to answer it
+ * correctly and because it would otherwise be a real request toward a
+ * production government SSO host.
  */
-import { generateWindows, generateAnomalies, generateHistoricalRows, generateHistoricalBreakdown } from './dataGenerators';
+import { generateWindows, generateAnomalies, generateTopGroups, generateGroupDetail, generateHistoricalRows, generateHistoricalBreakdown } from './dataGenerators';
 import { parseBackendOrIsoToEpochMs } from './istTime';
+import { handleSimulatedTokenExchange, isTokenEndpoint } from './interceptAuth';
 import * as ruleStore from './ruleStore';
 import * as admin from './adminData';
 import { VIEWER_USER_ID } from './adminData';
@@ -36,7 +43,6 @@ async function route(path, method, query, init) {
       user_id: VIEWER_USER_ID,
       roles: ['SUPER_ADMIN'],
       permissions: admin.roles.find(r => r.name === 'SUPER_ADMIN').permissions,
-      led_team_ids: [],
     });
   }
 
@@ -91,6 +97,21 @@ async function route(path, method, query, init) {
     return jsonResponse({ results: all.slice(0, limit) });
   }
 
+  // ── Scalable entity ranking (high-cardinality rules) ──────────────────
+  if ((m = path.match(/^\/api\/rules\/([^/]+)\/top-groups$/)) && method === 'GET') {
+    const { startMs, endMs } = parseRange(query);
+    const limit = Math.min(200, Math.max(1, Number(query.get('limit')) || 50));
+    const offset = Math.max(0, Number(query.get('offset')) || 0);
+    const { groups } = generateTopGroups(m[1], startMs, endMs, { limit, offset });
+    return jsonResponse({ groups, limit, offset });
+  }
+
+  if ((m = path.match(/^\/api\/rules\/([^/]+)\/group-detail$/)) && method === 'GET') {
+    const key = query.get('key') || '';
+    const { startMs, endMs } = parseRange(query);
+    return jsonResponse({ results: generateGroupDetail(m[1], key, startMs, endMs) });
+  }
+
   if (path === '/api/rules/historical-analysis' && method === 'POST') {
     const body = await readJsonBody(init);
     const ruleId = body?.rule_metadata?.rule_id || 'unknown-rule';
@@ -105,25 +126,13 @@ async function route(path, method, query, init) {
     return jsonResponse({ result: generateHistoricalBreakdown(ruleId, startMs, endMs) });
   }
 
-  // ── Admin Panel ────────────────────────────────────────────────────────
+  // ── Admin Panel (no teams — release removed multi-team RBAC scoping) ──
   if (path === '/api/admin/users' && method === 'GET') return jsonResponse(admin.users);
-  if (path === '/api/admin/teams' && method === 'GET') return jsonResponse(admin.teams);
   if (path === '/api/admin/roles' && method === 'GET') return jsonResponse(admin.roles);
   if (path === '/api/admin/audit-log' && method === 'GET') return jsonResponse(admin.auditLog);
-  if (path === '/api/admin/teams' && method === 'POST') {
-    const body = await readJsonBody(init);
-    return jsonResponse(admin.createTeam(body));
-  }
   if ((m = path.match(/^\/api\/admin\/users\/([^/]+)$/)) && method === 'PATCH') {
     const body = await readJsonBody(init);
     return jsonResponse(admin.updateUser(m[1], body));
-  }
-  if ((m = path.match(/^\/api\/admin\/teams\/([^/]+)\/leads$/)) && method === 'POST') {
-    const body = await readJsonBody(init);
-    return jsonResponse(admin.grantTeamLead(m[1], body?.user_id));
-  }
-  if ((m = path.match(/^\/api\/admin\/teams\/([^/]+)\/leads\/([^/]+)$/)) && method === 'DELETE') {
-    return jsonResponse(admin.revokeTeamLead(m[1], m[2]));
   }
 
   console.warn('[simulation] unhandled request', method, path);
@@ -134,6 +143,12 @@ export function installFetchInterceptor() {
   const realFetch = window.fetch.bind(window);
   window.fetch = async (input, init) => {
     const rawUrl = typeof input === 'string' ? input : input.url;
+
+    if (isTokenEndpoint(rawUrl)) {
+      const { status, body } = handleSimulatedTokenExchange(init);
+      return jsonResponse(body, status);
+    }
+
     if (!rawUrl.startsWith('/api/')) return realFetch(input, init);
 
     const url = new URL(rawUrl, window.location.origin);

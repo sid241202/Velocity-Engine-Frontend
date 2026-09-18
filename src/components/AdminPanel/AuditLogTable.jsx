@@ -4,20 +4,14 @@ import { formatISTDateTime } from '../../utils/istUtils';
 
 const ACTION_LABELS = {
   'role.assign': 'Role changed',
-  'team.assign': 'Team changed',
   'user.status_change': 'Status changed',
   'user.jit_provision': 'Auto-provisioned on first login',
-  'team.create': 'Team created',
-  'team.lead_grant': 'Team lead granted',
-  'team.lead_revoke': 'Team lead revoked',
 };
 
 /**
  * AuditLogTable — read-only. First real consumer of the audit_log table
  * (see internal/migrations/mysql/0001_init_rbac.sql) — nothing wrote to it
- * before this feature. Scoping (a lead seeing only their team's entries vs.
- * a super admin seeing everything) is expected to happen server-side; this
- * just renders whatever the endpoint returns.
+ * before this feature. Just renders whatever the endpoint returns.
  */
 export default function AuditLogTable({ entries, users }) {
   const usersById = Object.fromEntries(users.map((u) => [u.id, u]));

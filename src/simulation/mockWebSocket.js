@@ -5,11 +5,26 @@
  * subscribe/bootstrap/delta protocol as the real backend's ws handler, so
  * LiveAnalysis.jsx needs zero changes to work against it.
  */
-import { generateWindows } from './dataGenerators';
-import { SIM_ENTITIES } from './rule';
+import { generateWindows, computeEntityWindowStats } from './dataGenerators';
+import { getEntityPool } from './entities';
+import { SIM_RULE_ID } from './rule';
+import { toISTBackendString } from './istTime';
 
-const DELTA_INTERVAL_MS = 3500;
+const DELTA_INTERVAL_MS = 3000;
 const BOOTSTRAP_LOOKBACK_MS = 20 * 60 * 1000; // last 20 minutes, at real 1-min slide resolution
+
+// Weight which tier fires the *next* live delta — mirrors the real firing
+// probabilities in dataGenerators.js (severe/moderate genuinely do fire
+// more often), just resampled per tick instead of scanning the whole pool
+// every 3 seconds.
+function pickDeltaEntity() {
+  const pool = getEntityPool();
+  const r = Math.random();
+  const tier = r < 0.35 ? 'severe' : r < 0.7 ? 'moderate' : 'light';
+  const candidates = pool.filter(e => e.tier === tier);
+  const from = candidates.length > 0 ? candidates : pool;
+  return from[Math.floor(Math.random() * from.length)];
+}
 
 export class SimulatedLiveSocket {
   constructor(url) {
@@ -43,9 +58,23 @@ export class SimulatedLiveSocket {
 
     if (this._timer) clearInterval(this._timer);
     this._timer = setInterval(() => {
+      const tNow = Date.now();
+      const windowStartMs = Math.floor(tNow / 60000) * 60000;
       for (const ruleId of this._ruleIds) {
-        const entity = SIM_ENTITIES[Math.floor(Math.random() * SIM_ENTITIES.length)];
-        const [row] = generateWindows(ruleId, now, now, { stepMs: 60000, entities: [entity] });
+        if (ruleId !== SIM_RULE_ID) continue;
+        const entity = pickDeltaEntity();
+        const stats = computeEntityWindowStats(entity, windowStartMs) || { failed_count: 1, breached: false };
+        const row = {
+          ruleId,
+          groupKey: entity.groupKey,
+          windowStart: toISTBackendString(windowStartMs),
+          windowEnd: toISTBackendString(windowStartMs + 5 * 60 * 1000),
+          evaluatedAt: toISTBackendString(tNow),
+          aggResult: { failed_count: stats.failed_count },
+          thresholdMet: stats.breached,
+          thresholdBreached: stats.breached,
+          isFinal: false,
+        };
         this._emit({ type: 'delta', rule_id: ruleId, row });
       }
     }, DELTA_INTERVAL_MS);
