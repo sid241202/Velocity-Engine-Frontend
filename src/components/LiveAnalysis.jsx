@@ -548,12 +548,23 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
   // be used to compare across groups.
   const showGroupFilter = !!(currentRule && Array.isArray(currentRule.grouping?.keys) && currentRule.grouping.keys.length > 0);
 
-  const availableGroups = useMemo(() => {
+  // Cap the native <select>'s option count — a high-cardinality rule can see
+  // thousands of distinct groupKeys in the live window, and a <select> with
+  // that many options hangs the tab (same failure mode fixed in
+  // AggregatedAnalysis.jsx's "Select Entity" dropdown; this page's version of
+  // that same dropdown had the identical gap). Point overflow at the Top
+  // Groups table instead of trying to list every entity here too.
+  const GROUP_FILTER_OPTION_CAP = 300;
+  const { availableGroups, availableGroupsTruncated } = useMemo(() => {
     const set = new Set();
     for (const row of allRows) {
       if (row.groupKey) set.add(row.groupKey);
     }
-    return [...set].sort();
+    const sorted = [...set].sort();
+    return {
+      availableGroups: sorted.slice(0, GROUP_FILTER_OPTION_CAP),
+      availableGroupsTruncated: sorted.length > GROUP_FILTER_OPTION_CAP ? sorted.length : 0,
+    };
   }, [allRows]);
 
   const chartRows = useMemo(() => {
@@ -985,11 +996,16 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
             value={selectedGroup}
             onChange={e => setSelectedGroup(e.target.value)}
             style={{ maxWidth: 260 }}
-            title="Filter the charts below to a single entity. Tables further down always show every entity."
+            title="Filter the charts below to a single entity. The Top Groups table further down always shows the highest-activity entities."
           >
             <option value="__ALL__">All Entities (Overview)</option>
             {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
           </select>
+          {availableGroupsTruncated > 0 && (
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+              Showing {GROUP_FILTER_OPTION_CAP} of {availableGroupsTruncated.toLocaleString()} entities seen in this window — see the Top Groups by Breach Activity table below for the highest-activity entities.
+            </span>
+          )}
         </div>
       )}
 
