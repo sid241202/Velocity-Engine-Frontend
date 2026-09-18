@@ -7,6 +7,12 @@
  *   - Null checks: IS_NULL, IS_NOT_NULL  (no value field required)
  *   - Date/Time:   DATE_BEFORE, DATE_AFTER, DATE_EQUALS
  *                  Format: EPOCH_MILLIS (Unix ms) | ISO_STRING (IST format: 2024-01-15T05:30:00+05:30)
+ *   - Special:     IS_FINANCIAL_AUA — checks _data.aua against a hardcoded
+ *                  financial-AUA list maintained server-side (Flink job +
+ *                  backend historical-query engine). No field or value
+ *                  needed — both are cleared when this is selected, since
+ *                  the field is always _data.aua and the list isn't
+ *                  user-editable from here.
  *
  * ALL date/time values must be in IST (Indian Standard Time, UTC+05:30).
  */
@@ -27,6 +33,9 @@ const STANDARD_OPERATORS = [
 
 const NULL_OPERATORS = ['IS_NULL', 'IS_NOT_NULL'];
 const DATE_OPERATORS = ['DATE_BEFORE', 'DATE_AFTER', 'DATE_EQUALS'];
+// Operators that ignore whatever field/value the condition row otherwise
+// holds — the field and target set are both fixed server-side.
+const FINANCIAL_AUA_OPERATORS = ['IS_FINANCIAL_AUA'];
 
 // Plain-English display text for each operator — the underlying value sent
 // to the backend is unchanged, this only affects what the dropdown shows.
@@ -48,10 +57,12 @@ const OPERATOR_LABELS = {
   DATE_BEFORE: 'is before',
   DATE_AFTER: 'is after',
   DATE_EQUALS: 'is exactly',
+  IS_FINANCIAL_AUA: 'should be a financial AUA',
 };
 
 const isNullOp = (op) => NULL_OPERATORS.includes(op?.toUpperCase());
 const isDateOp = (op) => DATE_OPERATORS.includes(op?.toUpperCase());
+const isFinancialAuaOp = (op) => FINANCIAL_AUA_OPERATORS.includes(op?.toUpperCase());
 
 /** Validate a date filter value — returns error string or null */
 function getDateValueError(value, format) {
@@ -86,6 +97,12 @@ export function processFilterTree(node) {
   const process = (n) => {
     if (n.type === 'group') {
       if (n.conditions) n.conditions = n.conditions.map(process);
+      return n;
+    }
+    if (isFinancialAuaOp(n.operator)) {
+      delete n.field;
+      delete n.value;
+      delete n.format;
       return n;
     }
     if (isNullOp(n.operator)) {
@@ -205,7 +222,9 @@ export default function VisualFilterBuilder({ filterTree, setFilterTree }) {
 
     // ── Condition row ────────────────────────────────────────────────────────
     const op          = node.operator || 'EQUALS';
-    const showValue   = !isNullOp(op);
+    const isFinAua    = isFinancialAuaOp(op);
+    const showField   = !isFinAua;
+    const showValue   = !isNullOp(op) && !isFinAua;
     const showDateFmt = isDateOp(op);
     const fmt         = node.format || 'EPOCH_MILLIS';
 
@@ -236,13 +255,15 @@ export default function VisualFilterBuilder({ filterTree, setFilterTree }) {
         }}
       >
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* Field */}
-          <FieldSelect
-            value={node.field || ''}
-            onChange={val => updateNode(path, { field: val })}
-            hasError={node.field === ''}
-            style={{ flex: 2, minWidth: '120px', margin: 0 }}
-          />
+          {/* Field — hidden for IS_FINANCIAL_AUA, which always targets _data.aua */}
+          {showField && (
+            <FieldSelect
+              value={node.field || ''}
+              onChange={val => updateNode(path, { field: val })}
+              hasError={node.field === ''}
+              style={{ flex: 2, minWidth: '120px', margin: 0 }}
+            />
+          )}
 
           {/* Operator */}
           <select
@@ -253,6 +274,7 @@ export default function VisualFilterBuilder({ filterTree, setFilterTree }) {
               if (isNullOp(newOp))         { updates.value = undefined; updates.format = undefined; }
               if (isDateOp(newOp) && !isDateOp(op)) { updates.format = 'EPOCH_MILLIS'; updates.value = ''; }
               if (!isDateOp(newOp) && isDateOp(op)) { updates.format = undefined; }
+              if (isFinancialAuaOp(newOp)) { updates.field = ''; updates.value = undefined; updates.format = undefined; }
               updateNode(path, updates);
             }}
             style={{ flex: 1, minWidth: '140px', margin: 0 }}
@@ -266,7 +288,16 @@ export default function VisualFilterBuilder({ filterTree, setFilterTree }) {
             <optgroup label="── Date / Time (IST) ──">
               {DATE_OPERATORS.map(o => <option key={o} value={o}>{OPERATOR_LABELS[o] || o.replace('DATE_', '')}</option>)}
             </optgroup>
+            <optgroup label="── Special ──">
+              {FINANCIAL_AUA_OPERATORS.map(o => <option key={o} value={o}>{OPERATOR_LABELS[o] || o}</option>)}
+            </optgroup>
           </select>
+
+          {isFinAua && (
+            <span style={{ flex: 2, minWidth: '160px', fontSize: '0.78rem', color: 'var(--text-3)', fontStyle: 'italic' }}>
+              Checks <code>_data.aua</code> against the maintained financial-AUA list
+            </span>
+          )}
 
           {/* Date format picker */}
           {showDateFmt && (
