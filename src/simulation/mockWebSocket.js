@@ -3,12 +3,15 @@
  * for the one socket this app opens (/api/ws/live-analysis — see
  * LiveAnalysis.jsx connectWebSocket()). Speaks the exact same
  * subscribe/bootstrap/delta protocol as the real backend's ws handler, so
- * LiveAnalysis.jsx needs zero changes to work against it.
+ * LiveAnalysis.jsx needs zero changes to work against it. Generic across
+ * however many rule_ids the page subscribes to — LiveAnalysis.jsx only ever
+ * subscribes to whichever one rule is currently selected, but this class
+ * doesn't assume that.
  */
-import { generateWindows, computeEntityWindowStats } from './dataGenerators';
-import { getEntityPool } from './entities';
-import { SIM_RULE_ID } from './rule';
-import { toISTBackendString } from './istTime';
+import { generateWindows, computeEntityWindowStats } from './dataGenerators.js';
+import { getEntityPool } from './entities.js';
+import { getRule } from './rules.js';
+import { toISTBackendString } from './istTime.js';
 
 const DELTA_INTERVAL_MS = 3000;
 const BOOTSTRAP_LOOKBACK_MS = 20 * 60 * 1000; // last 20 minutes, at real 1-min slide resolution
@@ -17,8 +20,8 @@ const BOOTSTRAP_LOOKBACK_MS = 20 * 60 * 1000; // last 20 minutes, at real 1-min 
 // probabilities in dataGenerators.js (severe/moderate genuinely do fire
 // more often), just resampled per tick instead of scanning the whole pool
 // every 3 seconds.
-function pickDeltaEntity() {
-  const pool = getEntityPool();
+function pickDeltaEntity(rule) {
+  const pool = getEntityPool(rule);
   const r = Math.random();
   const tier = r < 0.35 ? 'severe' : r < 0.7 ? 'moderate' : 'light';
   const candidates = pool.filter(e => e.tier === tier);
@@ -61,16 +64,17 @@ export class SimulatedLiveSocket {
       const tNow = Date.now();
       const windowStartMs = Math.floor(tNow / 60000) * 60000;
       for (const ruleId of this._ruleIds) {
-        if (ruleId !== SIM_RULE_ID) continue;
-        const entity = pickDeltaEntity();
-        const stats = computeEntityWindowStats(entity, windowStartMs) || { failed_count: 1, breached: false };
+        const rule = getRule(ruleId);
+        if (!rule) continue;
+        const entity = pickDeltaEntity(rule);
+        const stats = computeEntityWindowStats(rule, entity, windowStartMs) || { metricValue: 1, breached: false };
         const row = {
           ruleId,
           groupKey: entity.groupKey,
           windowStart: toISTBackendString(windowStartMs),
-          windowEnd: toISTBackendString(windowStartMs + 5 * 60 * 1000),
+          windowEnd: toISTBackendString(windowStartMs + rule.windowSizeMs),
           evaluatedAt: toISTBackendString(tNow),
-          aggResult: { failed_count: stats.failed_count },
+          aggResult: { [rule.aggregation.alias]: stats.metricValue },
           thresholdMet: stats.breached,
           thresholdBreached: stats.breached,
           isFinal: false,

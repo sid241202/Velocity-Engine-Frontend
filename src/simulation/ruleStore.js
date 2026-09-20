@@ -1,12 +1,13 @@
 /**
- * ruleStore.js — the in-memory rule list. Starts with the one hardcoded,
- * already-ACTIVE rule (see rule.js); Rule Builder's Save/Publish/Pause/
- * Delete actions mutate this array directly so the UI shows real feedback
- * instead of being read-only.
+ * ruleStore.js — the in-memory rule list. Starts with the four rules being
+ * deployed to office prod (RULES_TO_DEPLOY_12_14_16_17.txt / rules.js),
+ * all already ACTIVE. Rule Builder's Save/Publish/Pause/Delete actions
+ * mutate this array directly so the UI shows real feedback instead of
+ * being read-only.
  */
-import { makeSimRule } from './rule';
+import { RULES, makeSimRule } from './rules.js';
 
-export const rules = [makeSimRule()];
+export const rules = RULES.map(makeSimRule);
 
 let nextDraftSeq = 1;
 

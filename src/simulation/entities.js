@@ -1,38 +1,36 @@
 /**
- * entities.js — the synthetic Rule 5 (see rule.js) entity population, built
- * to the real August 2026 volume/cardinality profile from
- * PRODUCTION_CAPACITY_SPECS.txt (section 1.1, 2.3) and the real financial-
- * AUA list from BUSINESS_RULES_UI_GUIDE.md's appendix (every event this
- * rule sees is pre-filtered to a financial AUA, so every simulated entity's
- * `aua` is drawn from this same 131-code list, not a placeholder).
+ * entities.js — synthetic entity populations for every rule in rules.js,
+ * built to the real August 2026 volume/cardinality profile from
+ * PRODUCTION_CAPACITY_SPECS.txt (§1.1, §2.3) and the real financial-AUA
+ * list from BUSINESS_RULES_UI_GUIDE.md's appendix.
  *
- * MODELED_PEAK_CONCURRENT_GROUPS (~630,000) is the real, documented
- * capacity-sizing estimate for this exact rule's grouping key at peak
- * traffic — it is deliberately NOT materialized as 630,000 JS objects here.
- * A real analyst never browses that many rows either (that's the whole
- * point of the server-side top-groups ranking this UI uses, see
- * dataGenerators.js) — they only ever look at the worst offenders. This
- * module generates a large-but-tractable POOL (5,000 entities) with a
- * realistic power-law severity distribution so the ranked table, pagination,
- * and exact-key lookup all behave like the real, much larger population
- * would: a small head of persistent repeat offenders, a mid-size band of
- * occasional breachers, and a long tail that almost never crosses the
- * threshold — which is exactly what a 6-key grouping on real auth traffic
- * produces (most 6-tuples are seen only once or twice).
+ * Each rule's `modeledPeakConcurrentGroups` (rules.js) is the real,
+ * documented capacity-sizing estimate for that rule's own grouping key at
+ * peak traffic — deliberately NOT materialized as that many JS objects. A
+ * real analyst never browses that many rows either (that's the whole point
+ * of the server-side top-groups ranking this UI uses, see
+ * dataGenerators.js) — they only ever look at the worst offenders. Every
+ * rule gets the same large-but-tractable POOL (5,000 entities) with a
+ * realistic power-law severity distribution, scaled to that rule's own
+ * threshold, so the ranked table, pagination, and exact-key lookup all
+ * behave like the real, much larger population would: a small head of
+ * persistent repeat offenders, a mid-size band of occasional breachers, and
+ * a long tail that almost never crosses the threshold.
  */
 
 // ── Real cardinalities, August 10 2026 (peak day) — PRODUCTION_CAPACITY_SPECS.txt §1.1 ──
-export const REAL_AUA_CARDINALITY = 233;
+export const REAL_AUA_CARDINALITY = 233; // all AUAs seen that day, not just financial ones
 export const REAL_SA_CARDINALITY = 569;
 export const REAL_DEVICE_CARDINALITY = 1_859_887;
 export const REAL_EID_CARDINALITY = 52_307_061;
 export const REAL_PEAK_DAY_EVENTS = 122_291_666;
 export const REAL_AVG_DAY_EVENTS = 89_093_456;
-export const MODELED_PEAK_CONCURRENT_GROUPS = 630_000; // PRODUCTION_CAPACITY_SPECS.txt §2.3, rule 16
 
 // The exact 131-code financial AUA allow-list (BUSINESS_RULES_UI_GUIDE.md
-// appendix) — every simulated entity's `aua` is one of these, matching the
-// rule's real IS_FINANCIAL_AUA filter.
+// appendix) — every simulated event across all four rules is pre-filtered
+// to IS_FINANCIAL_AUA, so every simulated entity's/event's `aua` is one of
+// these, matching the real filter. Note this is a SUBSET of the 233
+// real-world distinct AUAs above (only ones on UIDAI's financial-AUA list).
 export const FINANCIAL_AUAS = [
   '0003520000', '0000980000', '0003410000', '0001500000', '0003370000', '0008500000', '0003200000', '0009600000',
   '0006500000', '0001060000', '0000050000', '0023000200', '0002670000', '0000180000', '0005700000', '0000320000',
@@ -57,13 +55,13 @@ export const FINANCIAL_AUAS = [
 // "What's common to every rule" note) — all five CONTAIN "F".
 export const AUTH_TYPES = ['DF', 'DFO', 'F', 'FO', 'FT'];
 
-// Non-'Y' auth-result codes (this rule filters auth_result != 'Y', so every
-// simulated event failed one of these ways).
+// Non-'Y' auth-result codes (rules 16/17 filter auth_result != 'Y', so every
+// simulated event for those two rules failed one of these ways).
 export const AUTH_RESULTS = ['N', 'E', 'T'];
 
 const DISTRICTS = ['South Delhi', 'Pune', 'Bengaluru Urban', 'Ahmedabad', 'Lucknow', 'Patna', 'Jaipur', 'Chennai', 'Surat', 'Kanpur'];
 
-function seededRandom(seedStr) {
+export function seededRandom(seedStr) {
   let h = 1779033703 ^ seedStr.length;
   for (let i = 0; i < seedStr.length; i++) {
     h = Math.imul(h ^ seedStr.charCodeAt(i), 3432918353);
@@ -81,9 +79,23 @@ function pick(rnd, arr) {
   return arr[Math.floor(rnd() * arr.length)];
 }
 
-/** Deterministic, real-looking 10-digit zero-padded device code from a seed. */
+/**
+ * Deterministic, real-looking 10-digit zero-padded device code from a seed.
+ * The random component must span the full 9-digit range (up to 999,999,998)
+ * — an earlier version of this function drew from Math.floor(rnd()*999999),
+ * only ~1e6 possible values despite padding to look like 9 digits. That's
+ * fine in isolation but silently corrupts a 5,000-entity pool for any rule
+ * whose grouping key is deviceCode ALONE (rule 17): birthday-paradox math
+ * over only 1e6 values with 5,000 draws gives a >99.9% chance of at least
+ * one collision, which two different entities sharing the same groupKey
+ * turns into real data corruption (findEntityByKey's map silently keeps
+ * only the last one written). Caught by scripts/verify-simulation-math.mjs
+ * disagreeing with itself on rule 17's numbers between a narrow-range and
+ * wide-range lookup of the same entity. 1e9 possible values makes a
+ * collision across 5,000 draws negligible (~1.25e-5).
+ */
 function makeDeviceCode(rnd) {
-  const n = Math.floor(rnd() * 999999);
+  const n = Math.floor(rnd() * 999999999);
   return `1${String(n).padStart(9, '0')}`;
 }
 
@@ -95,83 +107,105 @@ function makeEnrolmentReferenceId(rnd) {
 }
 
 /**
- * A severity tier for how often a 6-key group re-appears/breaches within a
- * window. Real 6-key composite groups are almost all one-shot or
- * two-shot — only a small head of device/resident combinations genuinely
- * repeat-offend within a 5-minute window.
+ * Synthetic SA (sub-AUA) universe, matching the real distinct-SA cardinality
+ * for August 10 2026 (569, PRODUCTION_CAPACITY_SPECS.txt §1.1). There is no
+ * real hardcoded SA list the way there is for financial AUAs, so this is
+ * generated once, deterministically, from a fixed global seed — stable
+ * across reloads and across the verification script (same seed, same list).
  */
-const TIERS = [
-  { name: 'severe', share: 0.01, baselineMin: 20, baselineMax: 60, volatility: 1.3 },
-  { name: 'moderate', share: 0.09, baselineMin: 6, baselineMax: 16, volatility: 1.0 },
-  { name: 'light', share: 0.90, baselineMin: 0, baselineMax: 6, volatility: 0.7 },
-];
+function buildSaUniverse() {
+  const rnd = seededRandom('sa-universe|v1');
+  const out = [];
+  const seen = new Set();
+  while (out.length < REAL_SA_CARDINALITY) {
+    const code = `2${String(Math.floor(rnd() * 999999999)).padStart(9, '0')}`;
+    if (seen.has(code)) continue;
+    seen.add(code);
+    out.push(code);
+  }
+  return out;
+}
+export const SA_UNIVERSE = buildSaUniverse();
+
+/**
+ * A severity tier for how often a group re-appears/breaches within a
+ * window, expressed as a MULTIPLE of the rule's own threshold so the same
+ * shape (small severe head, mid moderate band, long light tail) scales
+ * correctly whether the threshold is 3 (rule 14) or 75 (rule 17). Real
+ * composite groups (2-key or 6-key) are almost all one-shot or two-shot —
+ * only a small head of resident/device combinations genuinely repeat-offend
+ * within a window.
+ */
+function makeTiers(threshold) {
+  return [
+    { name: 'severe', share: 0.01, baselineMin: threshold * 2.0, baselineMax: threshold * 6.0, volatility: 1.3 },
+    { name: 'moderate', share: 0.09, baselineMin: threshold * 0.6, baselineMax: threshold * 1.6, volatility: 1.0 },
+    { name: 'light', share: 0.90, baselineMin: 0, baselineMax: threshold * 0.6, volatility: 0.7 },
+  ];
+}
 
 export const ENTITY_POOL_SIZE = 5000;
 
-function buildEntity(index) {
-  const rnd = seededRandom(`entity|${index}`);
-  let tier = TIERS[TIERS.length - 1];
+function buildEntity(rule, tiers, index) {
+  const rnd = seededRandom(`entity|${rule.id}|${index}`);
+  let tier = tiers[tiers.length - 1];
   const r = rnd();
   let cum = 0;
-  for (const t of TIERS) {
+  for (const t of tiers) {
     cum += t.share;
     if (r <= cum) { tier = t; break; }
   }
-  const eid = makeEnrolmentReferenceId(rnd);
-  const aua = pick(rnd, FINANCIAL_AUAS);
-  const sa = `2${String(Math.floor(rnd() * 99999)).padStart(9, '0')}`;
-  const device = makeDeviceCode(rnd);
-  const authType = pick(rnd, AUTH_TYPES);
-  const authResult = pick(rnd, AUTH_RESULTS);
+
+  const fields = {};
+  for (const key of rule.groupingFieldKeys) {
+    if (key === 'enrolmentReferenceId') fields.enrolmentReferenceId = makeEnrolmentReferenceId(rnd);
+    else if (key === 'deviceCode') fields.deviceCode = makeDeviceCode(rnd);
+    else if (key === 'aua') fields.aua = pick(rnd, FINANCIAL_AUAS);
+    else if (key === 'sa') fields.sa = pick(rnd, SA_UNIVERSE);
+    else if (key === 'authType') fields.authType = pick(rnd, AUTH_TYPES);
+    else if (key === 'authResult') fields.authResult = pick(rnd, AUTH_RESULTS);
+  }
+
+  const groupKey = rule.groupingFieldKeys.map(k => fields[k]).join('|');
   const district = pick(rnd, DISTRICTS);
   const baseline = tier.baselineMin + rnd() * (tier.baselineMax - tier.baselineMin);
 
-  return {
-    groupKey: [eid, aua, sa, device, authType, authResult].join('|'),
-    fields: { enrolmentReferenceId: eid, aua, sa, deviceCode: device, authType, authResult },
-    tier: tier.name,
-    baseline,
-    volatility: tier.volatility,
-    district,
-  };
+  return { ruleId: rule.id, groupKey, fields, tier: tier.name, baseline, volatility: tier.volatility, district };
 }
 
-let _pool = null;
-/** The full 5,000-entity synthetic population, built once and cached. */
-export function getEntityPool() {
-  if (!_pool) _pool = Array.from({ length: ENTITY_POOL_SIZE }, (_, i) => buildEntity(i));
-  return _pool;
-}
+const _pools = new Map(); // ruleId -> entity[]
+const _byKeyPerRule = new Map(); // ruleId -> Map<groupKey, entity>
 
-const _byKey = new Map();
-export function findEntityByKey(groupKey) {
-  if (_byKey.size === 0) {
-    for (const e of getEntityPool()) _byKey.set(e.groupKey, e);
+/** The full 5,000-entity synthetic population for one rule, built once and cached. */
+export function getEntityPool(rule) {
+  if (!_pools.has(rule.id)) {
+    const tiers = makeTiers(rule.threshold);
+    _pools.set(rule.id, Array.from({ length: ENTITY_POOL_SIZE }, (_, i) => buildEntity(rule, tiers, i)));
   }
-  return _byKey.get(groupKey) || null;
+  return _pools.get(rule.id);
+}
+
+export function findEntityByKey(rule, groupKey) {
+  if (!_byKeyPerRule.has(rule.id)) {
+    const map = new Map();
+    for (const e of getEntityPool(rule)) map.set(e.groupKey, e);
+    _byKeyPerRule.set(rule.id, map);
+  }
+  return _byKeyPerRule.get(rule.id).get(groupKey) || null;
 }
 
 /**
  * For a groupKey typed into the exact-ID lookup that ISN'T one of the 5,000
  * pool members (any well-formed key an analyst might paste in) — deterministic,
- * low-activity synthetic entity, matching how real 6-key composites behave:
+ * low-activity synthetic entity, matching how real composite groups behave:
  * the overwhelming majority of real combinations are one-shot/rarely-repeat,
  * never a "severe" or "moderate" offender (those are rare enough to already
  * be in the ranked pool).
  */
-export function syntheticEntityForArbitraryKey(groupKey) {
-  const known = findEntityByKey(groupKey);
+export function syntheticEntityForArbitraryKey(rule, groupKey) {
+  const known = findEntityByKey(rule, groupKey);
   if (known) return known;
-  const rnd = seededRandom(`arbitrary|${groupKey}`);
-  const baseline = rnd() * 4; // 0-4, essentially never breaches (threshold is 10)
-  return {
-    groupKey,
-    fields: null,
-    tier: 'light',
-    baseline,
-    volatility: 0.6,
-    district: pick(rnd, DISTRICTS),
-  };
+  const rnd = seededRandom(`arbitrary|${rule.id}|${groupKey}`);
+  const baseline = rnd() * rule.threshold * 0.4; // essentially never breaches
+  return { ruleId: rule.id, groupKey, fields: null, tier: 'light', baseline, volatility: 0.6, district: pick(rnd, DISTRICTS) };
 }
-
-export { seededRandom };

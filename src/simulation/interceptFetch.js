@@ -11,12 +11,12 @@
  * correctly and because it would otherwise be a real request toward a
  * production government SSO host.
  */
-import { generateWindows, generateAnomalies, generateTopGroups, generateGroupDetail, generateHistoricalRows, generateHistoricalBreakdown } from './dataGenerators';
-import { parseBackendOrIsoToEpochMs } from './istTime';
-import { handleSimulatedTokenExchange, isTokenEndpoint } from './interceptAuth';
-import * as ruleStore from './ruleStore';
-import * as admin from './adminData';
-import { VIEWER_USER_ID } from './adminData';
+import { generateWindows, generateAnomalies, generateTopGroups, generateGroupDetail, generateHistoricalRows, generateHistoricalBreakdown } from './dataGenerators.js';
+import { parseBackendOrIsoToEpochMs } from './istTime.js';
+import { handleSimulatedTokenExchange, isTokenEndpoint } from './interceptAuth.js';
+import * as ruleStore from './ruleStore.js';
+import * as admin from './adminData.js';
+import { VIEWER_USER_ID } from './adminData.js';
 
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });

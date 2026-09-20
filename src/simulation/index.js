@@ -9,9 +9,9 @@
  * "Sign In with SSO" click plays out the real post-login transition instead
  * of attempting a real WSO2 redirect.
  */
-import { installAuthSimulation } from './interceptAuth';
-import { installFetchInterceptor } from './interceptFetch';
-import { installMockWebSocket } from './mockWebSocket';
+import { installAuthSimulation } from './interceptAuth.js';
+import { installFetchInterceptor } from './interceptFetch.js';
+import { installMockWebSocket } from './mockWebSocket.js';
 
 export function installSimulation() {
   installAuthSimulation();

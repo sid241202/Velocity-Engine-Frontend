@@ -226,46 +226,95 @@ component (imported straight from `release`) keeps making its normal
   the app boots genuinely signed out so the real Landing page and the actual
   post-SSO-click transition are what's demonstrated.
 - `mockWebSocket.js` — replaces `window.WebSocket` for `/api/ws/live-analysis`
-  only; speaks the real bootstrap/delta protocol.
-- `rule.js` — the one hardcoded, already-ACTIVE rule this branch ships with:
-  **Rule 5 from `BUSINESS_RULES_UI_GUIDE.md`**
-  (`finger-6key-failure-count-5min`), chosen as the most complex rule in that
-  guide (6 grouping keys, ~630,000 modeled concurrent groups at peak — see
-  `PRODUCTION_CAPACITY_SPECS.txt` §2.3).
-- `entities.js` — the synthetic entity population for that rule, built to
-  real August 2026 cardinality/volume figures (not toy data): the real
-  131-code financial-AUA list, a 5,000-entity pool with a power-law severity
-  distribution (a small head of persistent repeat offenders, a long tail
-  that almost never breaches — matching how a real 6-key composite actually
-  behaves), plus deterministic synthesis for arbitrary keys an analyst types
-  into the exact-ID lookup box.
-- `dataGenerators.js` — realistic RESULTS-shaped rows mirroring the real
-  backend's ClickHouse query behavior exactly, including its `LIMIT 5000`/
-  `ORDER BY windowStart DESC` raw-row cap and the `top-groups`/`group-detail`
-  server-side-ranking endpoints' real contract (`GroupSummary` shape,
-  `?limit&offset` pagination).
+  only; speaks the real bootstrap/delta protocol. Generic across whatever
+  `rule_ids` the page subscribes to — resolves each one via `rules.js`'s
+  `getRule()` rather than assuming a single hardcoded rule.
+- `rules.js` — **as of 2026-09-21, a registry of all four ACTIVE rules this
+  branch ships with**, matching exactly what's being deployed to office prod
+  (`E:\Projects\RULES_TO_DEPLOY_12_14_16_17.txt`): legacy ruleIds 12, 14, 16,
+  17 from `BUSINESS_RULES_UI_GUIDE.md` (that guide's own Rule 1, 3, 5, 6).
+  Two DISTINCT-aggregation rules (5/3-min windows, 2-key grouping) and two
+  COUNT-aggregation rules (5-min window, 6-key and 1-key grouping
+  respectively) — see the guide's own comparison table. Supersedes the
+  original single-rule `rule.js` (Rule 5 only), which no longer exists.
+  `getRule(ruleId)`/`makeSimRule(rule)`/`evaluateBreach(rule, value)` are the
+  registry's public surface — every other simulation module resolves a rule
+  object through `getRule` rather than importing a hardcoded constant.
+- `entities.js` — **per-rule** synthetic entity populations (a separate
+  5,000-entity pool per rule, `getEntityPool(rule)`), built to real August
+  2026 cardinality/volume figures (not toy data): the real 131-code
+  financial-AUA list, a synthetic 569-code SA universe matching the real
+  distinct-SA cardinality, and a power-law severity distribution scaled to
+  each rule's own threshold (`makeTiers(rule.threshold)`) — a small head of
+  persistent repeat offenders, a long tail that almost never breaches,
+  regardless of whether that rule's threshold is 3, 5, 10, or 75. Plus
+  deterministic synthesis for arbitrary keys an analyst types into the
+  exact-ID lookup box.
+- `dataGenerators.js` — **ground truth is raw events, not a pre-computed
+  aggregate formula** (changed 2026-09-21, see the bugs below):
+  `generateRawEventsForWindow(rule, entity, windowStartMs)` synthesizes the
+  actual individual auth-event records for one entity/window — real per-event
+  IDs and timestamps, and for a DISTINCT rule, an independently-drawn touch
+  value per event (with realistic repeat-touches) so the DISTINCT reduction
+  has genuine deduplication to do. Every other generator
+  (`computeEntityWindowStats`, `generateWindows`, `generateGroupDetail`,
+  `generateTopGroups`) reduces over that same raw list — `.length` for
+  COUNT, `new Set().size` for DISTINCT — mirroring the real Flink job's
+  `RuleEvaluatorFunction`. This split exists specifically so the math is
+  independently checkable — see `scripts/verify-simulation-math.mjs` below.
+  Still mirrors the real backend's ClickHouse query behavior exactly,
+  including its `LIMIT 5000`/`ORDER BY windowStart DESC` raw-row cap and the
+  `top-groups`/`group-detail` server-side-ranking endpoints' real contract
+  (`GroupSummary` shape incl. `breachRate` on a 0–100 scale, `?limit&offset`
+  pagination).
 - `adminData.js` — no teams (mirrors `release`'s de-teamed admin model).
 
-**A real bug this exercise found and fixed on `release`** (then ported here,
-commit matching the message "Cap Select Entity dropdown option count for
-high-cardinality rules"): `AggregatedAnalysis.jsx`'s/`LiveAnalysis.jsx`'s
-"Select Entity" dropdown built one native `<option>` per distinct `groupKey`
-seen — fine for a low-cardinality rule, but Rule 5's real scale produces
-close to 5,000 distinct keys in the raw row cap, and a `<select>` with that
-many options hangs the tab. `AggregatedAnalysis.jsx` is now capped at 300
-options with a note pointing at the Entity Breach Ranking table's exact-key
-lookup instead. **`LiveAnalysis.jsx`'s own separate "Top Groups by Breach
-Activity" table has the same underlying shape of gap** (client-side grouping
-of `allRows`, not the server-side ranked query `AggregatedAnalysis.jsx`'s
-table now uses) — it doesn't hang (it's a plain table, capped at 20 rows,
-not a native `<select>`), but for a high-cardinality rule its "top 20" is
-only ever a live-session sample, not a guaranteed global ranking. Documented
-as a known caveat in `LIVE_AND_AGGREGATED_ANALYSIS_GUIDE.md` (see root
-`E:\Projects\`) rather than fixed — flagged here for whoever picks it up.
+**`scripts/verify-simulation-math.mjs` (repo root, plain Node ESM script, not
+bundled)** — independently re-derives every rule's window metrics from raw
+events using its own fresh reduction logic (not by calling
+`computeEntityWindowStats`), and cross-checks the result against the app's
+real generator functions, for a single window and for a 61-window hourly
+rollup. Run with `node scripts/verify-simulation-math.mjs`. All internal
+`src/simulation/*.js` imports use explicit `.js` extensions specifically so
+this script (plain Node ESM, no bundler) can resolve them the same way Vite
+does — don't drop them back to extensionless imports.
+
+**Real bugs this verification pass found and fixed on `test-simulation`
+(2026-09-21)**, all in `dataGenerators.js`/`entities.js`:
+1. **`makeDeviceCode()` had only ~1e6 bits of entropy** (`Math.floor(rnd() *
+   999999)`) despite padding to look like a 9-digit code — a >99.9% collision
+   chance across a 5,000-entity pool. Harmless for multi-key rules, but
+   Rule 6 groups by device code *alone*, so a collision there corrupted
+   `findEntityByKey`'s lookup map (silently kept the last-written of two
+   colliding entities). Caught by the verification script's hour-rollup
+   disagreeing with a fresh exact-key lookup for the same entity. Fixed by
+   widening to `Math.floor(rnd() * 999999999)`.
+2. **`generateTopGroups`' `breachRate` was a bare 0–1 fraction**, but the
+   real backend (`clickhouse.go`) computes it on a 0–100 scale and
+   `AggregatedAnalysis.jsx` renders it directly with no rescaling — a 100%-
+   breaching entity rendered as `"1.0%"` in the live Entity Breach Ranking
+   table. Not caught by the math script (it never asserted this specific
+   display-scale field) — only by actually opening the Analytics panel and
+   reading it. Fixed by multiplying by 100 to match the real contract.
+3. **`generateTopGroups` and `generateGroupDetail` walked different bucket
+   ranges for the identical `[from, to]` query** (an approximate
+   `bucketCount ≈ range/step` walk vs. an exact inclusive
+   `floor(from)..floor(to)` walk) — realigned to match each other and the
+   real backend's identical inclusive-both-ends ClickHouse filter.
 
 See `LIVE_AND_AGGREGATED_ANALYSIS_GUIDE.md` (root `E:\Projects\`) for a full
-explanation of every metric/chart on the Live Stream and Analytics panels,
-written using Rule 5 as the worked example.
+explanation of every metric/chart on the Live Stream and Analytics panels —
+now covering all four rules, including a COUNT-vs-DISTINCT explainer and a
+full "Verifying the simulation's math" section with the browser-reproducible
+walkthrough for the bugs above.
+
+**Still-open, pre-existing caveat, not touched by this pass**:
+`LiveAnalysis.jsx`'s own "Top Groups by Breach Activity" table ranks
+client-side over whatever streamed to the browser this session (capped at 20
+rows, not a native `<select>` so it doesn't hang) — for a high-cardinality
+rule that's a live-session sample, not a guaranteed global ranking, unlike
+Analytics' server-side-ranked equivalent. Documented as a known caveat in
+`LIVE_AND_AGGREGATED_ANALYSIS_GUIDE.md` rather than fixed.
 
 ## Dev server
 
