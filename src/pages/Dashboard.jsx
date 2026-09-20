@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import './Dashboard.css';
 import { Zap, History, PlusSquare, Activity, BarChart3, Shield, AlertTriangle, RefreshCw, Settings } from 'lucide-react';
 import RuleBuilderPage from '../components/RuleBuilderPage';
@@ -41,28 +42,66 @@ const NAV_ITEMS = [
  *   • DuckDB queries run in the background and show results on return
  *   • No wasted re-fetches or reconnect latency
  *
- * Hard-reload (browser F5) resets all ephemeral React state automatically
- * because the JS runtime is destroyed — no extra logic needed.
+ * Hard-reload (browser F5) re-derives `activeTab` from the URL (`?tab=`)
+ * and `selectedRuleId`/`summaryRuleId` from sessionStorage — see
+ * handleTabChange/SELECTED_RULE_KEY/SUMMARY_RULE_KEY below — so the user
+ * lands roughly back where they were instead of always on Home. Everything
+ * else (chart data, per-panel filters/date-ranges, in-progress rule-builder
+ * drafts) is still ephemeral React state and resets on a hard reload, same
+ * as before — deliberately out of scope here, since persisting it would mean
+ * auditing/wiring every panel's internal state rather than the handful of
+ * view-identity fields Dashboard itself owns.
  */
+const SELECTED_RULE_KEY = 'velocity.dashboard.selectedRuleId';
+const SUMMARY_RULE_KEY = 'velocity.dashboard.summaryRuleId';
+
 export default function Dashboard() {
   const { hasAnyPermission, loading: rbacLoading } = useRBAC();
   const isNavAllowed = useCallback((item) => hasAnyPermission(item.anyOf), [hasAnyPermission]);
-  const [activeTab, setActiveTab]         = useState('home');
+  // activeTab lives in the URL (?tab=...) instead of plain state, so browser
+  // Back/Forward move through in-app tab history via React Router rather
+  // than exiting toward the pre-login route chain (Landing/WSO2/Callback) —
+  // see handleTabChange. No param means 'home', the default landing view.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'home';
   const [rules, setRules]                 = useState([]);
   // Single-select: choosing a rule replaces whatever was previously selected
-  // (radio-button behavior, not a multi-select checkbox list).
-  const [selectedRuleId, setSelectedRuleId] = useState(null);
-  const [summaryRuleId, setSummaryRuleId] = useState(null);
+  // (radio-button behavior, not a multi-select checkbox list). Persisted to
+  // sessionStorage (not the URL) so a reload restores the selection without
+  // making every rule click its own Back/Forward-able history entry.
+  const [selectedRuleId, setSelectedRuleId] = useState(() => sessionStorage.getItem(SELECTED_RULE_KEY) || null);
+  const [summaryRuleId, setSummaryRuleId] = useState(() => sessionStorage.getItem(SUMMARY_RULE_KEY) || null);
   const [backendStatus, setBackendStatus] = useState('connecting');
   const [editingRule, setEditingRule]     = useState(null);
   const [historicalPrefill, setHistoricalPrefill] = useState(null);
 
+  useEffect(() => {
+    if (selectedRuleId) sessionStorage.setItem(SELECTED_RULE_KEY, selectedRuleId);
+    else sessionStorage.removeItem(SELECTED_RULE_KEY);
+  }, [selectedRuleId]);
 
-  // Track which tabs have been visited so we can lazy-mount panels
-  const visitedTabsRef = useRef(new Set(['live']));
-  const handleTabChange = (tab) => {
+  useEffect(() => {
+    if (summaryRuleId) sessionStorage.setItem(SUMMARY_RULE_KEY, summaryRuleId);
+    else sessionStorage.removeItem(SUMMARY_RULE_KEY);
+  }, [summaryRuleId]);
+
+  // Track which tabs have been visited so we can lazy-mount panels. Seeded
+  // with the URL's initial tab (in addition to 'live') so a reload landing
+  // straight on e.g. ?tab=summary still mounts that panel — otherwise it'd
+  // stay unmounted forever since nothing would call handleTabChange for it.
+  const visitedTabsRef = useRef(new Set(['live', activeTab]));
+  // opts.replace: true for automatic/corrective tab changes (e.g. the RBAC
+  // redirect below) so they don't leave a confusing extra Back/Forward stop;
+  // omitted (push, the default) for user-driven navigation — nav clicks,
+  // drill-throughs — so Back actually undoes them.
+  const handleTabChange = (tab, opts = {}) => {
     visitedTabsRef.current.add(tab);
-    setActiveTab(tab);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (tab === 'home') next.delete('tab');
+      else next.set('tab', tab);
+      return next;
+    }, { replace: !!opts.replace });
   };
 
   const fetchRules = useCallback(async () => {
@@ -95,7 +134,7 @@ export default function Dashboard() {
     const current = NAV_ITEMS.find(n => n.key === activeTab);
     if (current && !isNavAllowed(current)) {
       const firstAllowed = NAV_ITEMS.find(n => isNavAllowed(n));
-      if (firstAllowed) handleTabChange(firstAllowed.key);
+      if (firstAllowed) handleTabChange(firstAllowed.key, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rbacLoading, activeTab]);
