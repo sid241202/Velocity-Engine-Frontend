@@ -129,9 +129,14 @@ class AuthService {
 
       console.log('Authorization URL:', authUrl.toString());
       console.log('Redirecting to WSO2...');
-      
-      // Redirect to WSO2
-      window.location.href = authUrl.toString();
+
+      // Redirect to WSO2. Uses replace() rather than assigning .href so this
+      // navigation doesn't push a new browser-history entry — otherwise the
+      // WSO2 authorize page (a one-time, already-consumed URL once the code
+      // exchange completes) sits in history and pressing Back far enough
+      // from inside the dashboard lands on that stale external page instead
+      // of exiting cleanly toward wherever the user was before signing in.
+      window.location.replace(authUrl.toString());
       
     } catch (error) {
       console.error('=== ERROR DURING LOGIN REDIRECT ===');
