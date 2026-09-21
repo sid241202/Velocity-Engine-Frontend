@@ -13,7 +13,13 @@ import { SIM_PROFILE } from './simIdentity.js';
 export const VIEWER_USER_ID = SIM_PROFILE.id;
 
 const ALL_PERMS = Object.values(PERMISSIONS);
-const NO_IAM = ALL_PERMS.filter(p => p !== PERMISSIONS.IAM_MANAGE);
+// RULE_MANAGER already holds the unconditional RULES_DELETE, so it doesn't
+// also get the narrower RULES_DELETE_DRAFT — mirrors the real backend seed
+// (0001_init_rbac.sql), which deliberately excludes that grant for the same
+// reason. Without this exclusion, RULE_MANAGER would pick it up for free
+// via ALL_PERMS whenever a new permission is added, silently drifting from
+// what the real backend actually grants that role.
+const NO_IAM = ALL_PERMS.filter(p => p !== PERMISSIONS.IAM_MANAGE && p !== PERMISSIONS.RULES_DELETE_DRAFT);
 
 export const roles = [
   { name: 'SUPER_ADMIN', description: 'Full system access — manage rules, view every analysis panel, and administer users and roles.', permissions: ALL_PERMS },
@@ -24,8 +30,8 @@ export const roles = [
   },
   {
     name: 'RULE_EDITOR',
-    description: 'Builds and edits rules and can view all analysis panels, but cannot publish, delete, or administer users.',
-    permissions: [PERMISSIONS.RULES_CREATE, PERMISSIONS.RULES_READ, PERMISSIONS.RULES_UPDATE, PERMISSIONS.LIVE_ANALYSIS_READ, PERMISSIONS.AGGREGATED_ANALYSIS_READ, PERMISSIONS.HISTORICAL_ANALYSIS_READ, PERMISSIONS.HISTORICAL_ANALYSIS_EXECUTE],
+    description: 'Builds and edits rules and can view all analysis panels; can delete a rule only while it’s still a DRAFT, and cannot publish, delete a published rule, or administer users.',
+    permissions: [PERMISSIONS.RULES_CREATE, PERMISSIONS.RULES_READ, PERMISSIONS.RULES_UPDATE, PERMISSIONS.RULES_DELETE_DRAFT, PERMISSIONS.LIVE_ANALYSIS_READ, PERMISSIONS.AGGREGATED_ANALYSIS_READ, PERMISSIONS.HISTORICAL_ANALYSIS_READ, PERMISSIONS.HISTORICAL_ANALYSIS_EXECUTE],
   },
   {
     name: 'READ_ONLY_ANALYST',
