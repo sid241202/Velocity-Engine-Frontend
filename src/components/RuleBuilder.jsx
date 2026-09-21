@@ -11,6 +11,8 @@ import { isValidRuleId, isNonEmpty, isValidJexlAlias, isPositiveInt } from '../u
 import { getAuthHeaders } from '../services/apiClient';
 import { ENVELOPE_FIELD_OPTIONS, DATA_FIELD_OPTIONS } from '../constants/eventFields';
 import { RULE_TEMPLATES } from '../constants/ruleTemplates';
+import { useRBAC } from '../context/RBACContext';
+import { PERMISSIONS } from '../permissions';
 
 /* ─── Smart Tooltip with viewport-aware positioning ─────────────── */
 function Tip({ text }) {
@@ -194,6 +196,7 @@ function describeSeconds(totalSeconds) {
 
 /* ─── Main Component ─────────────────────────────────────────── */
 export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onEditComplete, onGoToHistorical, onGoToSummary }) {
+  const { hasPermission } = useRBAC();
 
   // ── Core ───────────────────────────────────────────────────────
   const [ruleName, setRuleName]     = useState('');
@@ -480,10 +483,15 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
           alert('Rule updated and saved as draft. Go to Rule Details to review and re-publish.');
           if (onEditComplete) onEditComplete();
           resetForm();
-        } else {
+        } else if (hasPermission(PERMISSIONS.RULES_PUBLISH)) {
           // Offer the two real next steps instead of a dead-end "OK" alert
           // with nowhere to go — see postSaveRule modal below.
           setPostSaveRule({ id: ruleId, name: ruleName.trim() });
+        } else {
+          // Publishing isn't a real next step for a role without
+          // rules:publish (RULE_EDITOR) — skip the popup and behave as if
+          // "Maybe later" was already clicked: save as draft, reset the form.
+          dismissPostSave();
         }
       } else {
         const text = await res.text().catch(() => '');
