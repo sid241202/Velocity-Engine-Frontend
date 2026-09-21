@@ -401,46 +401,50 @@ export default function RuleSummaryPanel({ rule, rules, fetchRules, navigateToEd
       {/* Section 3 — Actions */}
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', paddingTop: '0.5rem' }}>
 
+        {/* Publish/Pause/Resume all require rules:publish and are hidden
+            entirely (not shown-disabled) for a role that lacks it — e.g.
+            RULE_EDITOR and READ_ONLY_ANALYST never see any of them, on any
+            status. Edit requires rules:update and is likewise hidden rather
+            than disabled for READ_ONLY_ANALYST. */}
+
         {/* DRAFT: Publish + Edit */}
         {meta.status === 'DRAFT' && (
           <>
             <RequirePermission permission={PERMISSIONS.RULES_PUBLISH}>
-              {(allowed) => (
-                <button
-                  className="btn btn-accent"
-                  style={{ flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
-                  onClick={() => publishRule(meta.rule_id)}
-                  disabled={isActioning || !allowed}
-                  title={!allowed ? "Your role doesn't have permission to publish rules (requires rules:publish)" : "Makes this rule live — it will start evaluating real traffic."}
-                >
-                  <Send size={16} /> {isActioning ? 'Publishing…' : 'Publish Rule'}
-                </button>
-              )}
+              <button
+                className="btn btn-accent"
+                style={{ flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
+                onClick={() => publishRule(meta.rule_id)}
+                disabled={isActioning}
+                title="Makes this rule live — it will start evaluating real traffic."
+              >
+                <Send size={16} /> {isActioning ? 'Publishing…' : 'Publish Rule'}
+              </button>
             </RequirePermission>
-            <button
-              className="btn"
-              style={{ background: 'rgba(var(--violet-rgb),0.2)', border: '1px solid rgba(var(--violet-rgb),0.4)', color: 'var(--violet-light)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
-              onClick={() => navigateToEdit && navigateToEdit(rule)}
-            >
-              <Pencil size={15} /> Edit Rule
-            </button>
+            <RequirePermission permission={PERMISSIONS.RULES_UPDATE}>
+              <button
+                className="btn"
+                style={{ background: 'rgba(var(--violet-rgb),0.2)', border: '1px solid rgba(var(--violet-rgb),0.4)', color: 'var(--violet-light)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
+                onClick={() => navigateToEdit && navigateToEdit(rule)}
+              >
+                <Pencil size={15} /> Edit Rule
+              </button>
+            </RequirePermission>
           </>
         )}
 
         {/* ACTIVE: Pause (to enable editing) */}
         {meta.status === 'ACTIVE' && (
           <RequirePermission permission={PERMISSIONS.RULES_PUBLISH}>
-            {(allowed) => (
-              <button
-                className="btn"
-                style={{ background: 'var(--warning)', color: 'var(--gray-1)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
-                onClick={() => updateStatus(meta.rule_id, 'PAUSED')}
-                title={!allowed ? "Your role doesn't have permission to change rule status (requires rules:publish)" : "Pausing the rule brings it back to draft, enabling editing."}
-                disabled={isActioning || !allowed}
-              >
-                <PauseCircle size={16} /> {isActioning ? 'Pausing…' : 'Pause'}
-              </button>
-            )}
+            <button
+              className="btn"
+              style={{ background: 'var(--warning)', color: 'var(--gray-1)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
+              onClick={() => updateStatus(meta.rule_id, 'PAUSED')}
+              title="Pausing the rule brings it back to draft, enabling editing."
+              disabled={isActioning}
+            >
+              <PauseCircle size={16} /> {isActioning ? 'Pausing…' : 'Pause'}
+            </button>
           </RequirePermission>
         )}
 
@@ -448,25 +452,24 @@ export default function RuleSummaryPanel({ rule, rules, fetchRules, navigateToEd
         {meta.status === 'PAUSED' && (
           <>
             <RequirePermission permission={PERMISSIONS.RULES_PUBLISH}>
-              {(allowed) => (
-                <button
-                  className="btn"
-                  style={{ background: 'var(--success)', color: 'var(--gray-1)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
-                  onClick={() => updateStatus(meta.rule_id, 'ACTIVE')}
-                  disabled={isActioning || !allowed}
-                  title={!allowed ? "Your role doesn't have permission to change rule status (requires rules:publish)" : undefined}
-                >
-                  <PlayCircle size={16} /> {isActioning ? 'Resuming…' : 'Resume'}
-                </button>
-              )}
+              <button
+                className="btn"
+                style={{ background: 'var(--success)', color: 'var(--gray-1)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
+                onClick={() => updateStatus(meta.rule_id, 'ACTIVE')}
+                disabled={isActioning}
+              >
+                <PlayCircle size={16} /> {isActioning ? 'Resuming…' : 'Resume'}
+              </button>
             </RequirePermission>
-            <button
-              className="btn"
-              style={{ background: 'rgba(var(--violet-rgb),0.2)', border: '1px solid rgba(var(--violet-rgb),0.4)', color: 'var(--violet-light)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
-              onClick={() => navigateToEdit && navigateToEdit(rule)}
-            >
-              <Pencil size={15} /> Edit Rule
-            </button>
+            <RequirePermission permission={PERMISSIONS.RULES_UPDATE}>
+              <button
+                className="btn"
+                style={{ background: 'rgba(var(--violet-rgb),0.2)', border: '1px solid rgba(var(--violet-rgb),0.4)', color: 'var(--violet-light)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
+                onClick={() => navigateToEdit && navigateToEdit(rule)}
+              >
+                <Pencil size={15} /> Edit Rule
+              </button>
+            </RequirePermission>
           </>
         )}
 
@@ -474,17 +477,14 @@ export default function RuleSummaryPanel({ rule, rules, fetchRules, navigateToEd
             only covers a rule still in DRAFT — matches the backend's DeleteRule
             check (internal/handlers/rules.go), which is the real boundary. */}
         <RequirePermission anyOf={meta.status === 'DRAFT' ? [PERMISSIONS.RULES_DELETE, PERMISSIONS.RULES_DELETE_DRAFT] : [PERMISSIONS.RULES_DELETE]}>
-          {(allowed) => (
-            <button
-              className="btn"
-              style={{ background: 'var(--danger)', color: 'var(--gray-1)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
-              onClick={() => deleteRule(meta.rule_id)}
-              disabled={isActioning || !allowed}
-              title={!allowed ? "Your role doesn't have permission to delete this rule (requires rules:delete, or rules:delete_draft while it's DRAFT)" : undefined}
-            >
-              <Trash2 size={16} /> {isActioning ? 'Deleting…' : 'Delete'}
-            </button>
-          )}
+          <button
+            className="btn"
+            style={{ background: 'var(--danger)', color: 'var(--gray-1)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
+            onClick={() => deleteRule(meta.rule_id)}
+            disabled={isActioning}
+          >
+            <Trash2 size={16} /> {isActioning ? 'Deleting…' : 'Delete'}
+          </button>
         </RequirePermission>
       </div>
     </div>
