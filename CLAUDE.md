@@ -125,8 +125,10 @@ by actually running the app, not by code review alone.
 
 ## RBAC (frontend half)
 
-- `src/permissions.js` — `PERMISSIONS` (ten `resource:action` keys) and
-  `ROLES` (four role names) constants. Must mirror
+- `src/permissions.js` — `PERMISSIONS` (eleven `resource:action` keys,
+  including `rules:delete_draft` added 2026-09-22 — RULE_EDITOR's
+  DRAFT-only delete right, distinct from the unconditional `rules:delete`)
+  and `ROLES` (four role names) constants. Must mirror
   `backend/internal/migrations/mysql/0001_init_rbac.sql` exactly (see
   `../CLAUDE.md` cross-repo contracts).
 - `src/context/RBACContext.jsx` — `RBACProvider`/`useRBAC()`. Fetches

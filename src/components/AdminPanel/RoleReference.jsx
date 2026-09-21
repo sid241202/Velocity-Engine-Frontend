@@ -16,6 +16,7 @@ const PERMISSION_LABELS = {
   'rules:read': 'View rule definitions',
   'rules:update': 'Edit existing rules',
   'rules:delete': 'Delete rules',
+  'rules:delete_draft': 'Delete DRAFT rules only',
   'rules:publish': 'Publish rules / change their status',
   'live_analysis:read': 'View Live Stream',
   'aggregated_analysis:read': 'View Analytics',
