@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Save, Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, Zap, Clock, Database, Filter, BarChart2, Bell, SlidersHorizontal, ArrowLeft, FileEdit, BookOpen, CheckCircle2, Send, History } from 'lucide-react';
+import { Save, Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, Zap, Clock, Filter, BarChart2, Bell, SlidersHorizontal, ArrowLeft, FileEdit, BookOpen, CheckCircle2, Send, History } from 'lucide-react';
 import VisualThresholdBuilder from './VisualThresholdBuilder';
 import SimpleThresholdEditor from './SimpleThresholdEditor';
 import VisualFilterBuilder, { processFilterTree } from './VisualFilterBuilder';
@@ -161,47 +161,6 @@ function Section({ icon: Icon, iconColor = 'var(--violet-light)', title, tip, ba
   );
 }
 
-/* ─── Sink Card ──────────────────────────────────────────────── */
-function SinkCard({ id, accentColor, title, subtitle, checked, onChange, onFocus, disabled }) {
-  return (
-    <label
-      htmlFor={id}
-      style={{
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: '0.6rem',
-        padding: '0.75rem 0.875rem',
-        borderRadius: 'var(--radius-sm)',
-        // color-mix, not a hex-alpha suffix — accentColor is usually var(...).
-        border: checked ? `1px solid color-mix(in srgb, ${accentColor} 25%, transparent)` : '1px solid var(--border)',
-        background: checked ? `color-mix(in srgb, ${accentColor} 5%, transparent)` : 'var(--surface-3)',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        /* Specific transitions only — never 'all' which causes layout bounce */
-        transition: 'border-color 0.14s ease, background 0.14s ease, opacity 0.14s ease',
-        flex: '1 1 0',
-        minWidth: '140px',
-        opacity: disabled ? 0.5 : 1,
-      }}
-    >
-      <input
-        id={id}
-        type="checkbox"
-        checked={checked}
-        onChange={onChange}
-        onFocus={onFocus}
-        disabled={disabled}
-        style={{ width: 'auto', marginTop: 3, accentColor, flexShrink: 0 }}
-      />
-      <span>
-        <span style={{ color: checked ? accentColor : 'var(--text-1)', fontWeight: 600, fontSize: '0.8rem', display: 'block', marginBottom: '0.18rem', transition: 'color 0.15s ease' }}>
-          {title}
-        </span>
-        <span style={{ color: 'var(--text-3)', fontSize: '0.7rem', lineHeight: 1.45 }}>{subtitle}</span>
-      </span>
-    </label>
-  );
-}
-
 /* ─── TTL Unit Converter ──────────────────────────────────────── */
 const TTL_UNITS = [
   { label: 'Seconds', value: 'sec',  factor: 1 },
@@ -291,13 +250,6 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
     });
   };
 
-  // ── Sinks ─────────────────────────────────────────────────────
-  const [aggSinkEnabled,          setAggSinkEnabled]          = useState(true);
-  const [anomalySinkEnabled,      setAnomalySinkEnabled]      = useState(true);
-  const [anomalyStoreSinkEnabled, setAnomalyStoreSinkEnabled] = useState(true);
-
-  const atLeastOneSink = aggSinkEnabled || anomalySinkEnabled || anomalyStoreSinkEnabled;
-
   const [isSaving, setIsSaving] = useState(false);
 
   // ── Simple / Advanced mode + template picker ──────────────────
@@ -375,13 +327,12 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
         if (!isNonEmpty(agg.field))       e[`agg_field_${i}`] = 'Field path is required (e.g. _data.authCode)';
       });
     }
-    if (!atLeastOneSink) e.sinks = 'At least one output must be enabled';
     if (useAnomalyEntityField && !isNonEmpty(anomalyEntityField)) {
       e.anomalyEntityField = 'Field path is required when this option is enabled';
     }
     return e;
   }, [ruleName, ruleId, ttlAmount, isGlobal, keys, noWindowing, windowSize, windowType, windowSlide,
-      timeType, eventTimeSource, customTsField, aggregations, atLeastOneSink,
+      timeType, eventTimeSource, customTsField, aggregations,
       useAnomalyEntityField, anomalyEntityField]);
 
   const hasErrors = Object.keys(errors).length > 0;
@@ -395,7 +346,6 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
     const grouping = editingRule.grouping || {};
     const w        = editingRule.windowing || {};
     const aggs     = editingRule.aggregations || [];
-    const sinks    = editingRule.sinks || {};
     const having   = editingRule.having_thresholds || {};
 
     setRuleName(meta.rule_name || '');
@@ -433,9 +383,6 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
 
     setAggregations(aggs.length > 0 ? aggs : [{ alias: 'total_count', field: '_data.authCode', function: 'COUNT', cardinality_hint: 'LOW' }]);
     setJexlExpression(having.expression || '');
-    setAggSinkEnabled(sinks.agg_sink_enabled !== false);
-    setAnomalySinkEnabled(sinks.anomaly_sink_enabled !== false);
-    setAnomalyStoreSinkEnabled(sinks.anomaly_store_sink_enabled !== false);
   }, [editingRule]);
 
   const resetForm = () => {
@@ -454,7 +401,6 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
     setFilterTree({ type: 'group', logic: 'AND', conditions: [] });
     setAggregations([{ alias: 'total_count', field: '_data.authCode', function: 'COUNT', cardinality_hint: 'LOW' }]);
     setJexlExpression('');
-    setAggSinkEnabled(true); setAnomalySinkEnabled(true); setAnomalyStoreSinkEnabled(true);
     setShowTemplatePicker(true);
     setBuilderMode('simple');
   };
@@ -508,10 +454,15 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
       windowing: windowingPayload,
       aggregations: noWindowing ? [] : aggregations,
       having_thresholds: { expression: jexlExpression },
+      // Not user-selectable — every rule writes to all three sinks (agg,
+      // anomaly, penalty store). The one automatic exception is agg: a
+      // No-Window rule never produces an AggregationResult to begin with
+      // (see RuleEvaluatorFunction.handleStatelessEvent in the Flink repo),
+      // so there is nothing for that sink to write regardless.
       sinks: {
-        agg_sink_enabled:           noWindowing ? false : aggSinkEnabled,
-        anomaly_sink_enabled:       anomalySinkEnabled,
-        anomaly_store_sink_enabled: anomalyStoreSinkEnabled,
+        agg_sink_enabled:           !noWindowing,
+        anomaly_sink_enabled:       true,
+        anomaly_store_sink_enabled: true,
       },
     };
 
@@ -564,8 +515,6 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
     if (onGoToSummary) onGoToSummary(postSaveRule.id);
     dismissPostSave();
   };
-
-  const sinkCount = [aggSinkEnabled, anomalySinkEnabled, anomalyStoreSinkEnabled].filter(Boolean).length;
 
   // ── Template picker — the guided flow's starting screen ──────────────
   if (showTemplatePicker && !isEditing) {
@@ -857,7 +806,7 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
             />
           </div>
 
-          {builderMode === 'advanced' && (anomalySinkEnabled || anomalyStoreSinkEnabled) && (
+          {builderMode === 'advanced' && (
             <div style={{ marginTop: '0.875rem', padding: '0.7rem 0.875rem', background: 'var(--violet-subtle)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(var(--violet-rgb),0.15)' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', cursor: 'pointer', fontSize: '0.78rem', color: 'var(--violet-light)', fontWeight: 500, marginBottom: useAnomalyEntityField ? '0.5rem' : 0 }}>
                 <input type="checkbox" checked={useAnomalyEntityField} onChange={e => setUseAnomalyEntityField(e.target.checked)} onFocus={() => onFieldFocus && onFieldFocus('anomaly_entity_field')} style={{ width: 'auto', accentColor: 'var(--violet)' }} />
@@ -917,11 +866,7 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
                 flex: '1 1 auto',
               }}>
                 <input type="radio" name="windowMode" checked={noWindowing === val}
-                  onChange={() => {
-                    setNoWindowing(val);
-                    if (val) setAggSinkEnabled(false);
-                    else     setAggSinkEnabled(true);
-                  }}
+                  onChange={() => setNoWindowing(val)}
                   style={{ width: 'auto', accentColor: 'var(--violet)' }}
                 />
                 {label}
@@ -1305,52 +1250,6 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
                 />
               )}
             </div>
-          )}
-        </Section>
-
-        {/* ── Section 7: Outputs ──────────────────────────────── */}
-        <Section
-          icon={Database}
-          iconColor="var(--teal)"
-          title="Outputs"
-          tip="Choose where results are sent. At least one must be enabled."
-          badge={`${sinkCount} active`}
-          error={!atLeastOneSink ? 'Select at least one' : null}
-        >
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <SinkCard
-              id="sink-agg"
-              accentColor="var(--violet)"
-              title="Save Summary Data"
-              subtitle="Store aggregated metrics per time window. Use for trend analysis and dashboards."
-              checked={aggSinkEnabled}
-              onChange={e => setAggSinkEnabled(e.target.checked)}
-              onFocus={() => onFieldFocus && onFieldFocus('sinks')}
-              disabled={noWindowing}
-            />
-            <SinkCard
-              id="sink-anomaly"
-              accentColor="var(--pink)"
-              title="Send Breach Alerts"
-              subtitle="Emit a real-time alert the moment a threshold is crossed."
-              checked={anomalySinkEnabled}
-              onChange={e => setAnomalySinkEnabled(e.target.checked)}
-              onFocus={() => onFieldFocus && onFieldFocus('sinks')}
-            />
-            <SinkCard
-              id="sink-store"
-              accentColor="var(--teal)"
-              title="Add to Penalty List"
-              subtitle="Flag the breaching entity for immediate blocking by other services."
-              checked={anomalyStoreSinkEnabled}
-              onChange={e => setAnomalyStoreSinkEnabled(e.target.checked)}
-              onFocus={() => onFieldFocus && onFieldFocus('sinks')}
-            />
-          </div>
-          {noWindowing && (
-            <p className="helper" style={{ marginTop: '0.5rem' }}>
-              &quot;Save Summary Data&quot; is not available in No-Window mode — there is no aggregation to store.
-            </p>
           )}
         </Section>
 
