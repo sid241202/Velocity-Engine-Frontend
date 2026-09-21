@@ -8,8 +8,9 @@
  * persistence is needed beyond the page's lifetime.
  */
 import { PERMISSIONS } from '../permissions';
+import { SIM_PROFILE } from './simIdentity.js';
 
-export const VIEWER_USER_ID = 1;
+export const VIEWER_USER_ID = SIM_PROFILE.id;
 
 const ALL_PERMS = Object.values(PERMISSIONS);
 const NO_IAM = ALL_PERMS.filter(p => p !== PERMISSIONS.IAM_MANAGE);

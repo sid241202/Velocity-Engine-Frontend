@@ -25,12 +25,13 @@
  */
 import authService from '../services/AuthService';
 import { authConfig } from '../config/appConfig';
+import { SIM_PROFILE as SIM_USER } from './simIdentity.js';
 
 const SIM_PROFILE = {
-  sub: 'sim-super-admin',
-  preferred_username: 'admin@uidai.net.in',
-  email: 'admin@uidai.net.in',
-  name: 'Simulation Admin',
+  sub: SIM_USER.sub,
+  preferred_username: SIM_USER.email,
+  email: SIM_USER.email,
+  name: SIM_USER.name,
 };
 
 const SIMULATED_CODE = 'simulated-authorization-code';

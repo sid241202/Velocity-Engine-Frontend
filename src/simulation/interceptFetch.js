@@ -16,7 +16,7 @@ import { parseBackendOrIsoToEpochMs } from './istTime.js';
 import { handleSimulatedTokenExchange, isTokenEndpoint } from './interceptAuth.js';
 import * as ruleStore from './ruleStore.js';
 import * as admin from './adminData.js';
-import { VIEWER_USER_ID } from './adminData.js';
+import { SIMULATED_ROLE, SIM_PROFILE } from './simIdentity.js';
 
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -40,9 +40,9 @@ async function route(path, method, query, init) {
   // ── Identity / RBAC ────────────────────────────────────────────────────
   if (path === '/api/me') {
     return jsonResponse({
-      user_id: VIEWER_USER_ID,
-      roles: ['SUPER_ADMIN'],
-      permissions: admin.roles.find(r => r.name === 'SUPER_ADMIN').permissions,
+      user_id: SIM_PROFILE.id,
+      roles: [SIMULATED_ROLE],
+      permissions: admin.roles.find(r => r.name === SIMULATED_ROLE).permissions,
     });
   }
 
