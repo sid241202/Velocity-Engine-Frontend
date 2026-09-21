@@ -13,7 +13,7 @@
  * adminData.js's `roles` list (which mirrors the backend's RBAC seed data
  * exactly) so there is exactly one place permission-to-role mapping lives.
  */
-export const SIMULATED_ROLE = 'SUPER_ADMIN';
+export const SIMULATED_ROLE = 'RULE_EDITOR';
 
 export const SIM_PROFILES = {
   SUPER_ADMIN: { id: 1, sub: 'sim-super-admin', email: 'admin@uidai.net.in', name: 'Simulation Admin' },
