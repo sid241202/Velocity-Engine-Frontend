@@ -2,7 +2,7 @@
  * permissions.js — RBAC permission and role constants.
  *
  * Mirrors internal/migrations/mysql/0001_init_rbac.sql on the backend
- * (uid-dp-velocity-engine-control-plane-backend) exactly — the ten seeded
+ * (uid-dp-velocity-engine-control-plane-backend) exactly — the eleven seeded
  * "resource:action" permission keys and four seeded role names. Keep these
  * two files in sync if the backend's RBAC schema/seed data changes.
  */
@@ -12,6 +12,7 @@ export const PERMISSIONS = {
   RULES_READ: 'rules:read',
   RULES_UPDATE: 'rules:update',
   RULES_DELETE: 'rules:delete',
+  RULES_DELETE_DRAFT: 'rules:delete_draft',
   RULES_PUBLISH: 'rules:publish',
   LIVE_ANALYSIS_READ: 'live_analysis:read',
   AGGREGATED_ANALYSIS_READ: 'aggregated_analysis:read',
