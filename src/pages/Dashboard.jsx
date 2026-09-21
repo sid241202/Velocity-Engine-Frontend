@@ -262,17 +262,20 @@ export default function Dashboard() {
           inside one, via the logo (always back to Home) or another tab. */}
       {activeTab !== 'home' && (
       <nav className="nav-bar">
-        {NAV_ITEMS.map((item) => {
-          const { key, label, icon: Icon, tip, anyOf } = item;
-          const allowed = rbacLoading || isNavAllowed(item);
+        {/* Hide tabs the current role can't use at all, rather than showing
+            them grayed out — e.g. Admin Panel only ever makes sense for
+            SUPER_ADMIN, and a disabled-but-visible button for it is just
+            confusing clutter for every other role. While permissions are
+            still loading, show every tab (rbacLoading short-circuits the
+            filter) so the bar doesn't flash near-empty before RBAC resolves. */}
+        {NAV_ITEMS.filter((item) => rbacLoading || isNavAllowed(item)).map((item) => {
+          const { key, label, icon: Icon, tip } = item;
           return (
             <button
               key={key}
               className={`nav-btn ${activeTab === key ? 'active' : ''}`}
-              onClick={() => allowed && handleTabChange(key)}
-              disabled={!allowed}
-              style={!allowed ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
-              title={allowed ? tip : (anyOf ? `Your role doesn't have access to ${label} (requires ${anyOf.join(' or ')})` : `You don't have access to ${label}`)}
+              onClick={() => handleTabChange(key)}
+              title={tip}
             >
               <Icon size={15} />
               {label}
