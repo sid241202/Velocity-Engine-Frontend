@@ -570,7 +570,7 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
   // ── Template picker — the guided flow's starting screen ──────────────
   if (showTemplatePicker && !isEditing) {
     return (
-      <div className="glass-panel" style={{ maxHeight: 'calc(100vh - 108px)', overflowY: 'auto', paddingBottom: '1.5rem' }}>
+      <div className="glass-panel" style={{ paddingBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.4rem' }}>
           <div style={{
             width: 32, height: 32, borderRadius: 'var(--radius-sm)',
@@ -675,7 +675,7 @@ export default function RuleBuilder({ fetchRules, onFieldFocus, editingRule, onE
   }
 
   return (
-    <div className="glass-panel" style={{ maxHeight: 'calc(100vh - 108px)', overflowY: 'auto', paddingBottom: '1.5rem' }}>
+    <div className="glass-panel" style={{ paddingBottom: '1.5rem' }}>
 
       {/* ── Header ────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
