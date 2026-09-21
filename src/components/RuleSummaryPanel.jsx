@@ -182,7 +182,7 @@ export default function RuleSummaryPanel({ rule, rules, fetchRules, navigateToEd
   };
 
   return (
-    <div className="glass-panel" style={{ maxHeight: 'calc(100vh - 100px)', overflowY: 'auto' }}>
+    <div className="glass-panel">
       {onBack && (
         <button type="button" className="btn btn-ghost" style={{ fontSize: '0.76rem', marginBottom: '0.75rem' }} onClick={onBack}>
           <ArrowLeft size={12} /> All Rules
