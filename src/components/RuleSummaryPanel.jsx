@@ -17,11 +17,13 @@ export default function RuleSummaryPanel({ rule, rules, fetchRules, navigateToEd
   const [isActioning, setIsActioning] = React.useState(false);
   const [showTechnical, setShowTechnical] = React.useState(false);
 
-  // rules:publish and rules:delete are enforced server-side (see
-  // internal/middleware/auth.go RequirePermission on POST /rules/:id/prod,
-  // POST /rules/:id/status, and DELETE /rules/:id) — these calls need the
-  // same identity headers RBACContext uses for GET /me so the backend can
-  // resolve who's asking.
+  // rules:publish is enforced server-side via RequirePermission (see
+  // internal/middleware/auth.go) on POST /rules/:id/prod and
+  // POST /rules/:id/status. DELETE /rules/:id has no such route-level gate —
+  // its rules:delete vs. rules:delete_draft-plus-DRAFT-status decision is
+  // made inside DeleteRule itself (internal/handlers/rules.go). Either way,
+  // these calls need the same identity headers RBACContext uses for GET /me
+  // so the backend can resolve who's asking.
   const publishRule = async (id) => {
     if (isActioning) return;
     setIsActioning(true);
@@ -468,14 +470,17 @@ export default function RuleSummaryPanel({ rule, rules, fetchRules, navigateToEd
           </>
         )}
 
-        <RequirePermission permission={PERMISSIONS.RULES_DELETE}>
+        {/* rules:delete allows deleting any rule; rules:delete_draft (RULE_EDITOR)
+            only covers a rule still in DRAFT — matches the backend's DeleteRule
+            check (internal/handlers/rules.go), which is the real boundary. */}
+        <RequirePermission anyOf={meta.status === 'DRAFT' ? [PERMISSIONS.RULES_DELETE, PERMISSIONS.RULES_DELETE_DRAFT] : [PERMISSIONS.RULES_DELETE]}>
           {(allowed) => (
             <button
               className="btn"
               style={{ background: 'var(--danger)', color: 'var(--gray-1)', flex: 1, justifyContent: 'center', fontSize: '0.9rem' }}
               onClick={() => deleteRule(meta.rule_id)}
               disabled={isActioning || !allowed}
-              title={!allowed ? "Your role doesn't have permission to delete rules (requires rules:delete)" : undefined}
+              title={!allowed ? "Your role doesn't have permission to delete this rule (requires rules:delete, or rules:delete_draft while it's DRAFT)" : undefined}
             >
               <Trash2 size={16} /> {isActioning ? 'Deleting…' : 'Delete'}
             </button>
