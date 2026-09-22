@@ -351,7 +351,13 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
       const nowEpoch   = Date.now();
       if (isNaN(startEpoch) || isNaN(endEpoch)) return 'Invalid date format.';
       if (startEpoch >= endEpoch) return 'Start time must be before end time.';
-      if (startEpoch < nowEpoch - 24 * 60 * 60 * 1000) return 'Start cannot be more than 24 hours ago.';
+      // 5-minute grace on the lower bound: startTs defaults to "24h ago" computed
+      // once when this panel mounted (minute-precision, via toISTDatetimeLocal),
+      // while nowEpoch here is a fresh Date.now() read at click-time — without
+      // slack, the untouched default value fails this exact check on virtually
+      // every real click, since any elapsed time (plus the up-to-59s already lost
+      // to minute-truncation) pushes startEpoch just past the boundary.
+      if (startEpoch < nowEpoch - 24 * 60 * 60 * 1000 - 5 * 60 * 1000) return 'Start cannot be more than 24 hours ago.';
       return '';
     };
     const validationErr = validate();
