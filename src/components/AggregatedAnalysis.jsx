@@ -330,15 +330,17 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
   );
   const currentRule = selectedRules[0] || null;
 
-  // min = 7 days ago, no max — users may query into the future (returns empty results).
-  const minDate = toISTDatetimeLocalFromOffset(-7 * 24 * 60 * 60 * 1000);
+  // min = 24 hours ago, no max — users may query into the future (returns empty
+  // results). Matches the ClickHouse agg-results table's 1-day TTL: there is
+  // no data older than this to query, so the picker doesn't offer it.
+  const minDate = toISTDatetimeLocalFromOffset(-24 * 60 * 60 * 1000);
 
   const fetchData = useCallback(async () => {
     if (!selectedRuleId) {
       setError('Please select a rule from the sidebar on the left.');
       return;
     }
-    // Validate: start must be within the 7-day lookback window, and start
+    // Validate: start must be within the 24-hour lookback window, and start
     // must be before end. Future end dates are allowed — ClickHouse simply
     // returns no rows. Inline (not a separate function) so its true
     // dependencies (startTs, endTs) are exactly this callback's own deps —
@@ -349,7 +351,13 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
       const nowEpoch   = Date.now();
       if (isNaN(startEpoch) || isNaN(endEpoch)) return 'Invalid date format.';
       if (startEpoch >= endEpoch) return 'Start time must be before end time.';
-      if (startEpoch < nowEpoch - 7 * 24 * 60 * 60 * 1000) return 'Start cannot be more than 7 days ago.';
+      // 5-minute grace on the lower bound: startTs defaults to "24h ago" computed
+      // once when this panel mounted (minute-precision, via toISTDatetimeLocal),
+      // while nowEpoch here is a fresh Date.now() read at click-time — without
+      // slack, the untouched default value fails this exact check on virtually
+      // every real click, since any elapsed time (plus the up-to-59s already lost
+      // to minute-truncation) pushes startEpoch just past the boundary.
+      if (startEpoch < nowEpoch - 24 * 60 * 60 * 1000 - 5 * 60 * 1000) return 'Start cannot be more than 24 hours ago.';
       return '';
     };
     const validationErr = validate();
@@ -888,7 +896,7 @@ export default function AggregatedAnalysis({ rules, selectedRuleId, allSelectedR
           <h2 style={{ color: 'var(--text-1)', margin: 0, fontSize: 'var(--fs-lg)', fontWeight: 700, letterSpacing: '-0.02em' }}>Aggregated Rule Analysis</h2>
         </div>
         <p style={{ color: 'var(--text-3)', fontSize: 'var(--fs-xs)', margin: 0 }}>
-          Analyze up to 7 days of historical results for the selected rule. Breach events are overlaid on every chart as red markers.
+          Analyze up to the last 24 hours of historical results for the selected rule. Breach events are overlaid on every chart as red markers.
         </p>
       </div>
 

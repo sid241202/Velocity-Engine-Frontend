@@ -35,7 +35,7 @@ export const FEATURE_HISTORICAL_REPLAY = false;
 
 // ── Rule Builder Defaults ────────────────────────────────────────────────────
 export const DEFAULT_SOURCE_TOPIC     = 'BI.AUTH.AUTH_TXN.UNION.V1';
-export const DEFAULT_PENALTY_TTL_SEC  = 3600;   // 1 hour — used as Redis key TTL
+export const DEFAULT_PENALTY_TTL_SEC  = 3600;   // 1 hour — used as KeyDB key TTL
 export const DEFAULT_WINDOW_SIZE_SEC  = 300;    // 5 minutes
 export const DEFAULT_SLIDE_SEC        = 60;     // 1 minute
 export const MAX_AGGREGATIONS         = 3;
