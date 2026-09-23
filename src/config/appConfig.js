@@ -12,9 +12,34 @@ export const API_BASE = '/api';
 export const WS_BASE  = ''; // Empty = same host. Override for cross-host: 'ws://host:port'
 
 // ── WebSocket Config ─────────────────────────────────────────────────────────
+// These are the canonical reconnect tuning values — LiveAnalysis.jsx imports
+// them rather than carrying its own hardcoded copies (it previously used a
+// different, undocumented 1000 * 2^attempt curve capped at 30s, so changing
+// anything here had no effect on the only WebSocket this app actually opens).
 export const WS_RECONNECT_DELAY_MS   = 2000;   // Initial reconnect delay
 export const WS_RECONNECT_MAX_MS     = 30000;  // Max backoff cap
 export const WS_RECONNECT_MULTIPLIER = 1.5;    // Exponential backoff multiplier
+
+// WS_RECONNECT_JITTER: fraction of the computed backoff applied as random
+// +/- jitter (0.2 = +/-20%). Without it, every open tab that lost its
+// connection to the same backend retries on the identical curve and they all
+// hit the server in lockstep — the reconnect storm then looks exactly like
+// the load event that caused the disconnect in the first place.
+export const WS_RECONNECT_JITTER = 0.2;
+
+// WS_MAX_RECONNECT_ATTEMPTS: consecutive failed reconnects before the panel
+// falls back to HTTP polling.
+export const WS_MAX_RECONNECT_ATTEMPTS = 3;
+
+// WS_FALLBACK_UPGRADE_MS: how often the panel retries upgrading from the
+// HTTP polling fallback back to a real WebSocket. Falling back used to be a
+// one-way door for the life of the page — a single rough patch during a load
+// spike left the tab on 5s polling until the user reloaded, long after the
+// backend had recovered.
+export const WS_FALLBACK_UPGRADE_MS = 30000;
+
+// LIVE_FALLBACK_POLL_MS: HTTP polling interval while the WebSocket is down.
+export const LIVE_FALLBACK_POLL_MS = 5000;
 
 // ── Live Analysis Config ──────────────────────────────────────────────────────
 export const LIVE_STORE_MAX_ROWS = 200;    // Max rows shown in live analysis table

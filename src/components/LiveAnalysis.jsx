@@ -7,7 +7,12 @@ import {
 } from 'recharts';
 import { getRuleColor } from '../constants';
 import { formatISTTime } from '../utils/istUtils';
-import { FEATURE_HISTORICAL_REPLAY } from '../config/appConfig';
+import {
+  FEATURE_HISTORICAL_REPLAY,
+  WS_RECONNECT_DELAY_MS, WS_RECONNECT_MAX_MS, WS_RECONNECT_MULTIPLIER,
+  WS_RECONNECT_JITTER, WS_MAX_RECONNECT_ATTEMPTS, WS_FALLBACK_UPGRADE_MS,
+  LIVE_FALLBACK_POLL_MS,
+} from '../config/appConfig';
 import { Modal, Drawer, RuleLink } from './ui/Overlay';
 import ScoreTriad from './ui/ScoreTriad';
 import JsonViewer from './ui/JsonViewer';
@@ -61,6 +66,89 @@ const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 // and every HTTP fallback poll still ships however many hours the backend
 // is configured to retain, and this constant only trims it after the fact.
 const LIVE_WINDOW_HOURS = 1;
+
+// Safety valve independent of the LIVE_WINDOW_HOURS time filter: a
+// high-cardinality rule can still accumulate more rows within that window
+// than any chart/table here actually uses. Rows are sorted by windowStart
+// before capping, so this always drops the oldest first.
+const MAX_ROWS_PER_RULE = 5000;
+
+// rowKey is this panel's row identity, matching the backend's own
+// (groupKey, windowStart) upsert key in internal/services/livestore.go —
+// Flink early-fires a window repeatedly as it fills, and every one of those
+// partial ticks must replace the previous state of that window rather than
+// pile up as a separate row.
+function rowKey(r) {
+  return `${r.groupKey}|${r.windowStart}`;
+}
+
+// windowCutoff returns the LIVE_WINDOW_HOURS boundary as an IST wall-clock
+// string, directly comparable to the "YYYY-MM-DD HH:mm:ss" windowStart
+// values Flink/ClickHouse emit. Built by shifting the epoch by
+// IST_OFFSET_MS first and then reading getUTC* — the same double-shift this
+// file uses everywhere else, because reading a UTC accessor without that
+// shift yields UTC digits mislabelled as IST.
+function windowCutoff() {
+  const istWall = new Date(Date.now() - LIVE_WINDOW_HOURS * 60 * 60 * 1000 + IST_OFFSET_MS);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${istWall.getUTCFullYear()}-${pad(istWall.getUTCMonth() + 1)}-${pad(istWall.getUTCDate())} `
+    + `${pad(istWall.getUTCHours())}:${pad(istWall.getUTCMinutes())}:${pad(istWall.getUTCSeconds())}`;
+}
+
+// mergeRuleRows folds incoming rows for ONE rule into that rule's existing
+// rows, keyed by (groupKey, windowStart), then applies the time window and
+// row cap.
+//
+// This is the single merge used by all three inbound paths — the batched
+// delta flush, the WebSocket bootstrap, and the HTTP polling fallback. The
+// bootstrap and polling paths used to call setData(payload) outright,
+// throwing away everything already on screen and replacing it with whatever
+// the server happened to hold at that instant. A bootstrap is sent on every
+// reconnect, so under load (when reconnects are most likely) the chart would
+// visibly snap to a different, usually smaller dataset and then refill —
+// the exact glitch this fixes. Merging keeps what the client already has and
+// lets the snapshot fill gaps instead of overwriting them.
+function mergeRuleRows(existingRows, incomingRows, cutoff) {
+  const byKey = new Map((existingRows || []).map(r => [rowKey(r), r]));
+  for (const raw of incomingRows) {
+    if (!raw) continue;
+    const r = normalizeRow(raw);
+    const key = rowKey(r);
+    const prev = byKey.get(key);
+    // Never let an early-fire partial overwrite its window's authoritative
+    // final row — messages can arrive out of order across a reconnect
+    // (bootstrap vs. in-flight deltas), and a settled window regressing to a
+    // half-counted value reads as data loss. Mirrors shouldReplace() in the
+    // backend's livestore.go.
+    if (prev && isFinalRow(prev) && !isFinalRow(r)) continue;
+    byKey.set(key, r);
+  }
+  let merged = [...byKey.values()].filter(r => (r.windowStart || '') >= cutoff);
+  if (merged.length > MAX_ROWS_PER_RULE) {
+    merged.sort((a, b) => (a.windowStart || '').localeCompare(b.windowStart || ''));
+    merged = merged.slice(merged.length - MAX_ROWS_PER_RULE);
+  }
+  return merged;
+}
+
+// isFinalRow mirrors the backend's normalization: a row with no isFinal
+// field predates that field and is always the settled end-of-window row, so
+// only an explicit false counts as a partial.
+function isFinalRow(r) {
+  return !(r.isFinal === false || r.isFinal === 0);
+}
+
+// reconnectDelay computes the backoff for attempt N (1-based) from the
+// shared appConfig tuning, with +/- jitter so many tabs that dropped during
+// the same load event don't all retry on the identical curve.
+function reconnectDelay(attempt) {
+  const base = Math.min(
+    WS_RECONNECT_DELAY_MS * Math.pow(WS_RECONNECT_MULTIPLIER, Math.max(0, attempt - 1)),
+    WS_RECONNECT_MAX_MS,
+  );
+  const jitter = base * WS_RECONNECT_JITTER * (Math.random() * 2 - 1);
+  return Math.max(0, Math.round(base + jitter));
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -259,6 +347,10 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
   const [sortCol, setSortCol] = useState('breaches');
   const [sortDir, setSortDir] = useState('desc');
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  // loadError surfaces a genuinely unreachable backend. Without it the idle
+  // skeleton below says "waiting for the first live event" indefinitely when
+  // the truth is that nothing can reach the live data service at all.
+  const [loadError, setLoadError] = useState(null);
   const [hiddenSeries, setHiddenSeries] = useState({});
   const [selectedGroup, setSelectedGroup] = useState('__ALL__');
 
@@ -294,6 +386,17 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
   const reconnectTimerRef = useRef(null);
   const fallbackIntervalRef = useRef(null);
   const usingFallbackRef = useRef(false);
+  const upgradeTimerRef = useRef(null);
+
+  // selectedRuleIdRef tracks the currently-selected rule for the WebSocket
+  // callbacks. ws.onmessage closes over the render that created the socket,
+  // but a rule change does NOT always recreate the socket — the mount effect
+  // below re-subscribes over the existing connection instead. Reading the
+  // rule from a ref is what lets a bootstrap arriving for a rule the user has
+  // already navigated away from be recognised and discarded, rather than
+  // being merged in as though it were the current selection.
+  const selectedRuleIdRef = useRef(selectedRuleId);
+  useEffect(() => { selectedRuleIdRef.current = selectedRuleId; }, [selectedRuleId]);
 
   // ─── Live throughput tracking ───────────────────────────────────────────
   // Counts every delta pushed from the server (partial + final ticks both
@@ -337,13 +440,6 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
   // "instant" for a monitoring dashboard, and collapses what could be
   // hundreds of deltas/sec into ~4 re-renders/sec.
   const DELTA_FLUSH_MS = 250;
-  // Safety valve independent of the LIVE_WINDOW_HOURS time filter below: a
-  // high-cardinality rule can still accumulate more rows within that window
-  // than any chart/table here actually uses, and the old per-message
-  // findIndex/filter scan over that whole array was itself an O(n) cost paid
-  // on every delta. Rows are sorted by windowStart before capping, so this
-  // always drops the oldest first.
-  const MAX_ROWS_PER_RULE = 5000;
   const pendingDeltasRef = useRef(new Map()); // ruleId -> Map<"groupKey|windowStart", row>
 
   const handleDelta = useCallback((ruleId, row) => {
@@ -358,8 +454,19 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
     // the eventual final row for the same window share that key, so the
     // later tick replaces the row in place instead of piling up a duplicate
     // entry per partial tick — mirrors LiveStore.Add on the backend.
-    ruleMap.set(`${normRow.groupKey}|${normRow.windowStart}`, normRow);
+    ruleMap.set(rowKey(normRow), normRow);
   }, []);
+
+  // handleDeltaBatch applies one consolidated server-side batch. The backend
+  // now coalesces a flush interval's worth of updates per rule into a single
+  // "delta_batch" message instead of one frame per Kafka message (see
+  // internal/services/wsmanager.go) — at peak ingest that is the difference
+  // between a few messages a second and thousands. "delta" is still handled
+  // above so a newer frontend keeps working against an older backend.
+  const handleDeltaBatch = useCallback((ruleId, rows) => {
+    if (!Array.isArray(rows)) return;
+    for (const row of rows) handleDelta(ruleId, row);
+  }, [handleDelta]);
 
   useEffect(() => {
     const flush = () => {
@@ -369,23 +476,9 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
 
       setData(prev => {
         const next = { ...prev };
-        const cutoffEpoch = Date.now() - LIVE_WINDOW_HOURS * 60 * 60 * 1000;
-        const istWall = new Date(cutoffEpoch + IST_OFFSET_MS);
-        const pad = (n) => String(n).padStart(2, '0');
-        const cutoff = `${istWall.getUTCFullYear()}-${pad(istWall.getUTCMonth()+1)}-${pad(istWall.getUTCDate())} ${pad(istWall.getUTCHours())}:${pad(istWall.getUTCMinutes())}:${pad(istWall.getUTCSeconds())}`;
-
+        const cutoff = windowCutoff();
         for (const [ruleId, ruleMap] of pending) {
-          const existing = next[ruleId] || [];
-          // O(1)-per-row upsert via Map, replacing the old O(n) findIndex
-          // scan — matters once a flush can carry many deltas at once.
-          const byKey = new Map(existing.map(r => [`${r.groupKey}|${r.windowStart}`, r]));
-          for (const [key, r] of ruleMap) byKey.set(key, r);
-          let merged = [...byKey.values()].filter(r => (r.windowStart || '') >= cutoff);
-          if (merged.length > MAX_ROWS_PER_RULE) {
-            merged.sort((a, b) => (a.windowStart || '').localeCompare(b.windowStart || ''));
-            merged = merged.slice(merged.length - MAX_ROWS_PER_RULE);
-          }
-          next[ruleId] = merged;
+          next[ruleId] = mergeRuleRows(next[ruleId], ruleMap.values(), cutoff);
         }
         return next;
       });
@@ -394,24 +487,52 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
     return () => clearInterval(interval);
   }, []);
 
+  // fetchDataHttp is the polling fallback used while the WebSocket is down.
+  // It merges rather than replaces, for the same reason the bootstrap
+  // handler does: a poll that returned a momentarily thinner snapshot used
+  // to wipe out everything already charted (setData(json.results)), which
+  // made the fallback path glitch the same way reconnects did.
   const fetchDataHttp = useCallback(async () => {
-    if (!selectedRuleId) return;
+    const ruleId = selectedRuleIdRef.current;
+    if (!ruleId) return;
     try {
-      const res = await fetch(`/api/rules/live-analysis?rule_ids=${selectedRuleId}&hours=${LIVE_WINDOW_HOURS}`);
-      if (res.ok) {
-        const json = await res.json();
-        setData(json.results || {});
+      const res = await fetch(`/api/rules/live-analysis?rule_ids=${ruleId}&hours=${LIVE_WINDOW_HOURS}`);
+      if (!res.ok) {
+        setLoadError(`Live data request failed (${res.status})`);
+        return;
       }
+      const json = await res.json();
+      const results = json.results || {};
+      setLoadError(null);
+      // Ignore a response for a rule the user has already navigated away from.
+      if (selectedRuleIdRef.current !== ruleId) return;
+      setData(prev => {
+        const cutoff = windowCutoff();
+        const next = { ...prev };
+        for (const [rid, rows] of Object.entries(results)) {
+          if (rid !== ruleId) continue;
+          next[rid] = mergeRuleRows(next[rid], rows || [], cutoff);
+        }
+        return next;
+      });
     } catch (e) {
       console.error('Live fetch error:', e);
+      setLoadError('Could not reach the live data service.');
     }
-  }, [selectedRuleId]);
+  }, []);
 
   const closeWebSocket = useCallback(() => {
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
     }
+    // Deliberately NOT clearing upgradeTimerRef here. connectWebSocket calls
+    // closeWebSocket on its way in, including for a fallback upgrade attempt
+    // — clearing the upgrade timer there would mean the first failed upgrade
+    // silently ended all future ones and put the panel right back in the
+    // permanent-polling trap this is meant to remove. The timer is owned by
+    // the fallback, so only stopFallbackPolling (on a successful open, a rule
+    // change, or unmount) cancels it.
     if (wsRef.current) {
       wsRef.current.onclose = null;
       wsRef.current.onerror = null;
@@ -421,12 +542,32 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
     }
   }, []);
 
+  // connectWebSocketRef breaks the mutual reference between the fallback
+  // poller (which must be able to retry a WebSocket upgrade) and
+  // connectWebSocket (which starts the fallback when it gives up).
+  const connectWebSocketRef = useRef(null);
+
   const startFallbackPolling = useCallback(() => {
     if (usingFallbackRef.current) return;
     usingFallbackRef.current = true;
     setConnectionStatus('disconnected');
     fetchDataHttp();
-    fallbackIntervalRef.current = setInterval(fetchDataHttp, 5000);
+    fallbackIntervalRef.current = setInterval(fetchDataHttp, LIVE_FALLBACK_POLL_MS);
+
+    // Keep trying to get back onto a WebSocket. Falling back used to be
+    // permanent for the life of the page load: three failed reconnects
+    // during a load spike left the tab on 5s polling forever, long after the
+    // backend had recovered, with no way back short of a reload. Polling
+    // continues until a connection actually opens (see ws.onopen), so an
+    // attempt that fails costs nothing.
+    if (!upgradeTimerRef.current) {
+      upgradeTimerRef.current = setInterval(() => {
+        if (!usingFallbackRef.current) return;
+        if (wsRef.current) return; // an attempt is already in flight
+        reconnectAttemptRef.current = 0;
+        connectWebSocketRef.current && connectWebSocketRef.current();
+      }, WS_FALLBACK_UPGRADE_MS);
+    }
   }, [fetchDataHttp]);
 
   const stopFallbackPolling = useCallback(() => {
@@ -435,17 +576,39 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
       clearInterval(fallbackIntervalRef.current);
       fallbackIntervalRef.current = null;
     }
+    if (upgradeTimerRef.current) {
+      clearInterval(upgradeTimerRef.current);
+      upgradeTimerRef.current = null;
+    }
   }, []);
 
   const connectWebSocket = useCallback(() => {
-    if (!selectedRuleId) return;
+    const ruleId = selectedRuleIdRef.current;
+    if (!ruleId) return;
 
     closeWebSocket();
-    stopFallbackPolling();
+    // Note: fallback polling is deliberately NOT stopped here. If this is an
+    // upgrade attempt from the fallback, polling keeps the panel fed until
+    // the socket genuinely opens — stopping it up front left a data gap for
+    // the whole handshake, and stranded the panel entirely if the attempt
+    // then failed.
     setConnectionStatus('reconnecting');
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/api/ws/live-analysis`;
+
+    const scheduleReconnect = () => {
+      reconnectAttemptRef.current += 1;
+      if (reconnectAttemptRef.current >= WS_MAX_RECONNECT_ATTEMPTS) {
+        startFallbackPolling();
+        return;
+      }
+      setConnectionStatus('reconnecting');
+      const delay = reconnectDelay(reconnectAttemptRef.current);
+      reconnectTimerRef.current = setTimeout(() => {
+        connectWebSocketRef.current && connectWebSocketRef.current();
+      }, delay);
+    };
 
     try {
       const ws = new WebSocket(wsUrl);
@@ -453,15 +616,37 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
 
       ws.onopen = () => {
         reconnectAttemptRef.current = 0;
+        stopFallbackPolling(); // only now is it safe to stop polling
         setConnectionStatus('connected');
-        ws.send(JSON.stringify({ type: 'subscribe', rule_ids: [selectedRuleId] }));
+        setLoadError(null);
+        ws.send(JSON.stringify({ type: 'subscribe', rule_ids: [selectedRuleIdRef.current] }));
       };
 
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === 'bootstrap') {
-            setData(msg.data || {});
+            // A bootstrap arrives on the initial connect AND on every
+            // reconnect. It used to be applied as setData(msg.data), which
+            // discarded everything already charted and swapped in whatever
+            // snapshot the server happened to hold — with no check that the
+            // snapshot was even for the rule currently on screen. That is
+            // the direct mechanism behind "the chart flashes to a different
+            // graph": reconnects cluster during load events, and the server
+            // snapshot can legitimately be thinner than what the client
+            // already accumulated. Merge into existing state instead, using
+            // the same (groupKey, windowStart) keying the delta path uses,
+            // and ignore any rule that isn't the current selection.
+            const current = selectedRuleIdRef.current;
+            const payload = msg.data || {};
+            const rows = payload[current];
+            if (!current || !Array.isArray(rows) || rows.length === 0) return;
+            setData(prev => ({
+              ...prev,
+              [current]: mergeRuleRows(prev[current], rows, windowCutoff()),
+            }));
+          } else if (msg.type === 'delta_batch') {
+            handleDeltaBatch(msg.rule_id, msg.rows);
           } else if (msg.type === 'delta') {
             handleDelta(msg.rule_id, msg.row);
           }
@@ -472,32 +657,27 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
 
       ws.onclose = () => {
         wsRef.current = null;
-        reconnectAttemptRef.current += 1;
-
-        if (reconnectAttemptRef.current >= 3) {
-          startFallbackPolling();
+        if (usingFallbackRef.current) {
+          // An upgrade attempt failed; the polling fallback is still running
+          // and its own timer will try again. Don't stack a second retry
+          // schedule on top of it.
           return;
         }
-
-        setConnectionStatus('reconnecting');
-        const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current), 30000);
-        reconnectTimerRef.current = setTimeout(connectWebSocket, delay);
+        scheduleReconnect();
       };
 
       ws.onerror = () => {
         ws.close();
       };
     } catch {
-      reconnectAttemptRef.current += 1;
-      if (reconnectAttemptRef.current >= 3) {
-        startFallbackPolling();
-      } else {
-        setConnectionStatus('reconnecting');
-        const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current), 30000);
-        reconnectTimerRef.current = setTimeout(connectWebSocket, delay);
-      }
+      wsRef.current = null;
+      if (!usingFallbackRef.current) scheduleReconnect();
     }
-  }, [selectedRuleId, closeWebSocket, stopFallbackPolling, startFallbackPolling, handleDelta]);
+  }, [closeWebSocket, stopFallbackPolling, startFallbackPolling, handleDelta, handleDeltaBatch]);
+
+  // Keep the ref pointing at the latest connectWebSocket so the reconnect and
+  // fallback-upgrade timers always call the current closure.
+  useEffect(() => { connectWebSocketRef.current = connectWebSocket; }, [connectWebSocket]);
 
   useEffect(() => {
     if (!selectedRuleId) {
@@ -505,12 +685,12 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
       closeWebSocket();
       stopFallbackPolling();
       setConnectionStatus('disconnected');
+      setLoadError(null);
       return;
     }
 
     if (usingFallbackRef.current) {
-      stopFallbackPolling();
-      startFallbackPolling();
+      fetchDataHttp(); // fetch the newly-selected rule immediately
     } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'subscribe', rule_ids: [selectedRuleId] }));
     } else {
@@ -522,7 +702,7 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
       closeWebSocket();
       stopFallbackPolling();
     };
-  }, [selectedRuleId, connectWebSocket, closeWebSocket, stopFallbackPolling, startFallbackPolling]);
+  }, [selectedRuleId, connectWebSocket, closeWebSocket, stopFallbackPolling, fetchDataHttp]);
 
   const getRuleName = useCallback((ruleId) => {
     const match = rules.find(rule => rule.rule_metadata.rule_id === ruleId);
@@ -935,7 +1115,16 @@ export default function LiveAnalysis({ rules, selectedRuleId, allSelectedRuleId,
             flexShrink: 0,
           }} />
           <span style={{ fontSize: '0.75rem', color: statusColor, textTransform: 'capitalize', fontWeight: 600 }}>{statusLabel}</span>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: 4 }}>· waiting for the first live event…</span>
+          {loadError ? (
+            // Don't claim we're "waiting for the first live event" when the
+            // truth is that nothing can reach the service — that reads as a
+            // quiet rule rather than as a problem worth telling someone about.
+            <span style={{ fontSize: '0.78rem', color: 'var(--danger)', marginLeft: 4 }}>
+              · {loadError} Retrying automatically.
+            </span>
+          ) : (
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: 4 }}>· waiting for the first live event…</span>
+          )}
         </div>
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
           {Array.from({ length: 6 }).map((_, i) => (
