@@ -4,7 +4,7 @@
 # Regenerates /usr/share/nginx/html/env-config.js from real container
 # environment variables at container start, then execs nginx. This is what
 # makes the image pick up config from the Gitea-managed ConfigMap/Secret
-# (see resources/configmap-release.txt) instead of whatever is baked into
+# (see resources/Gitea files.txt) instead of whatever is baked into
 # the checked-in public/env-config.js (that file is a local-dev fallback
 # only — see its own header comment).
 #

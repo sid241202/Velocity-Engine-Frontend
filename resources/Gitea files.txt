@@ -1,0 +1,275 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: velocity-frontend-config
+  namespace: strot-applications
+data:
+  REACT_APP_WSO2_AUTHORITY: "https://sso.uidai.net.in/oauth2"
+  REACT_APP_CLIENT_ID: "f97jdeoYe5CEyMrcZFaG4Ey428ga"
+  REACT_APP_REDIRECT_URI: "https://velocity.uidai.net.in/callback"
+  REACT_APP_POST_LOGOUT_REDIRECT_URI: "https://velocity.uidai.net.in"
+  REACT_APP_SILENT_REDIRECT_URI: "https://velocity.uidai.net.in/silent-renew"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: velocity-wso2-credentials
+  namespace: strot-applications
+type: Opaque
+stringData:
+  client-secret: "HrXAf_LljKDXGAR7HHsh1OvVhcga"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    server_tokens off;
+    client_max_body_size 1m;
+
+    include /etc/nginx/conf.d/resolver.generated.conf;
+
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self'; connect-src 'self' ws: wss: https://sso.uidai.net.in; frame-ancestors 'none';" always;
+
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml;
+    gzip_min_length 256;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location = /env-config.js {
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self'; connect-src 'self' ws: wss: https://sso.uidai.net.in; frame-ancestors 'none';" always;
+    }
+
+    location = /crossdomain.xml {
+        return 404;
+    }
+
+    location /assets/ {
+        try_files $uri =404;
+    }
+
+    location /api/ {
+        rewrite ^/api/(.*)$ /$1 break;
+        proxy_pass http://velocity-backend-svc:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 900s;
+        proxy_send_timeout 900s;
+        proxy_connect_timeout 10s;
+        proxy_hide_header X-Frame-Options;
+        proxy_hide_header X-Content-Type-Options;
+        proxy_hide_header Referrer-Policy;
+        proxy_hide_header Content-Security-Policy;
+        proxy_hide_header Access-Control-Allow-Origin;
+        proxy_hide_header Access-Control-Allow-Credentials;
+    }
+
+    location /api/ws/ {
+        rewrite ^/api/ws/(.*)$ /ws/$1 break;
+        proxy_pass http://velocity-backend-svc:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_hide_header X-Frame-Options;
+        proxy_hide_header X-Content-Type-Options;
+        proxy_hide_header Referrer-Policy;
+        proxy_hide_header Content-Security-Policy;
+        proxy_hide_header Access-Control-Allow-Origin;
+        proxy_hide_header Access-Control-Allow-Credentials;
+    }
+
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self'; connect-src 'self' ws: wss: https://sso.uidai.net.in; frame-ancestors 'none';" always;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: velocity-frontend
+  namespace: strot-applications
+  labels:
+    app: velocity-engine
+    component: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: velocity-engine
+      component: frontend
+  template:
+    metadata:
+      labels:
+        app: velocity-engine
+        component: frontend
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: NotIn
+                values:
+                - dc1cpbuk8won235
+                - dc1cpbuk8won236
+                - dc1cpbuk8won237
+      containers:
+      - name: frontend
+        image: mndc-harbor-registry-prod.uidai.net.in/data-platform/velocity-engine-ui:1.0.12-RELEASE
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+          name: http
+        envFrom:
+          - configMapRef:
+              name: velocity-frontend-config
+        env:
+        - name: REACT_APP_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: velocity-wso2-credentials
+              key: client-secret
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 2Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+        volumeMounts:
+          - name: nginx-conf-volume
+            mountPath: /etc/nginx/conf.d/default.conf
+            subPath: default.conf
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 30
+      volumes:
+        - name: nginx-conf-volume
+          configMap:
+            name: conf-file
+
+
+
+
+
+
+
+
+
+
+
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+generatorOptions:
+  disableNameSuffixHash: true
+
+resources:
+- service.yaml
+- configmap.yaml
+- deployment.yaml
+
+configMapGenerator:
+- files:
+  - default.conf
+  name: conf-file
+
+namespace: strot-applications
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: velocity-frontend-svc
+  namespace: strot-applications
+  labels:
+    app: velocity-engine
+    component: frontend
+spec:
+  loadBalancerIP: 10.10.114.45
+  selector:
+    app: velocity-engine
+    component: frontend
+
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    protocol: TCP
+    nodePort: 30796
+  type: LoadBalancer
